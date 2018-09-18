@@ -1,0 +1,19 @@
+Outline for Jens Sept 2018
+--------------------------
+Need: main project + 2-3 subprojects (give current status report)
+  Main Project
+    Development of a BEEF style functional - optimized for catalysis
+    Metrics for success:
+      improvement of chemisorption energies (chemical accuracy)
+      improved transferability (look at residuals compared to mBEEF)
+    Path to success
+      Analytical constraints + BEEF coefficient fitting
+      sg15 pseudopotentials for well-behaved transition metals
+      Lattice optimization, Surface relaxation, Bulk modulus, Reaction energies, Chemisorption energies
+    Incremental Progress
+      Understand at higher level - incremental progress towards better functionals
+      Improve chemisorption accuracy without chemisorption data: mBEEF style + SCAN constraints
+Related-Subprojects
+  Parameterized BEEF coefficients from system analysis (ML)
+  Personalized functionals, optimized over materials and output domains
+  Density error reduction for surfaces
