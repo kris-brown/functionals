@@ -4,6 +4,7 @@ import matplotlib               # type: ignore
 import numpy as np              # type: ignore
 import matplotlib.pyplot as plt # type: ignore
 
+################################################################################
 
 # Manage fonts
 #-------------

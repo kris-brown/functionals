@@ -1,8 +1,9 @@
-import numpy as np
+import numpy as np # type: ignore
 import csv
 from ast import literal_eval
 
-def readcsv(fi):
+################################################################################
+def readcsv(fi:str)->tuple:
     names = []
     target = []
     nonxc = [] #everything in total energy but xc (Hartree, electron-ion); not fitted
