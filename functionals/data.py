@@ -1,15 +1,16 @@
 # External modules
-from typing import List, Tuple, Dict, Callable as C
+from typing      import List, Tuple, Dict, Callable as C
 from ast         import literal_eval
 from math        import sqrt
 from csv         import DictReader
 from collections import defaultdict
 import numpy as np        # type: ignore
 from numpy import array   # type: ignore
+
 # internal
 from functionals.functional import beefcoeff
-from functionals.utilities import corner
-######################################################
+from functionals.utilities  import corner
+################################################################################
 class Data(object):
     """
     A target which should be minimized in a fitting problem
@@ -18,13 +19,6 @@ class Data(object):
         (r,c),(nt,) = x.shape,target.shape
         assert r==nt, '%d rows in X, %d elements in target'%(r,nt)
         self.n = nt; self.x = x; self.target = target
-
-    @staticmethod
-    def merge(ds:List['Data'])->'Data':
-        """vertically stack a bunch of Data into one X,y"""
-        x = np.vstack([d.x for d in ds])
-        t = np.concatenate([d.target for d in ds])
-        return Data(x,t)
 
     def A(self,n:int)->array:
         """Get subset of columns in the A matrix (from Ax=b) if our basis set
@@ -77,25 +71,71 @@ class Data(object):
         d(FjFj)/d(Rk)d(Rm) = 2 * [A]jk * d(Fj)/d(Rm) =  2 * [A]jk * [A]jm
         """
         def f(x:array)->array:
+            sqrtx = int(len(x)**0.5)
+            return np.zeros(len(x))#.reshape(sqrtx,sqrtx)
             A = self.A(len(x))
             h = 2 * A.T @ A
             return h
         return f
 
-def CohesiveData(pth:str)->Data:
+    def linreg(self,n_:int)->Tuple[array,float]:
+        """Solve Ax=b without constraints"""
+        # Solve
+        #-----
+        n = n_**2
+
+        a = np.linalg.lstsq(self.A(n),self.target,rcond=None)[0]
+        resid = self.A(n) @ a - self.target
+        return a, resid@resid
+
+
+    @staticmethod
+    def merge(ds:List['Data'])->'Data':
+        """vertically stack a bunch of Data into one X,y"""
+        x = np.vstack([d.x for d in ds])
+        t = np.concatenate([d.target for d in ds])
+        return Data(x,t)
+
+class CohesiveData(Data):
     """
     Constructor for a Data object by pointing to CSV file with the columns:
         'Element','N_unit','keldAE','AtomE','BulkE','xAtom','xBulk'
 
     Could easily be made into a subclass of its own, if it were to need its own
     methods:
-
-    def __init__(self,pth:str)->None:
-        x,t = self.parseCSV(pth)
-        super().__init__(x,t)
     """
 
-    def parseCSV(pth:str)->Tuple[array,array]:
+    def __init__(self,pth:str)->None:
+        self.elems,self.natoms,self.cohesive_eng_expt,self.eng_atom,\
+            self.eng_bulk_unnorm,self.x_bulk_unnorm,self.xatom,\
+            self.xfunc = self.parseCSV(pth)
+
+        # Normalize bulk variables by # of atoms
+        #---------------------------------------
+        self.xbulk = self.x_bulk_unnorm / self.natoms[:,None] # divide rowwise
+        self.eng_bulk    = self.eng_bulk_unnorm / self.natoms
+
+
+        # Get coefficients for fitting
+        #------------------------------
+        x = self.xbulk - self.xatom # Difference in exchange contributions (bulk-atom)
+
+        # Get real target
+        #----------------
+
+        self.x_eng_atom  = array([a@b for a,b in zip(self.xatom,self.xfunc)])
+        self.x_eng_bulk  = array([a@b for a,b in zip(self.xbulk,self.xfunc)])
+
+        dE = (self.eng_bulk - self.x_eng_bulk) \
+             - (self.eng_atom - self.x_eng_atom)  # Non exchange contribution of cohesive energy
+                                                  # (calculated by DFT, assumed valid)
+
+        target = self.cohesive_eng_expt - dE   # 'True' difference E_x (bulk - atom)
+
+        super().__init__(x,target)
+
+    @staticmethod
+    def parseCSV(pth:str)->Tuple[array,array,array,array,array,array,array,array]:
         """
         Parsing Outputs
             N x 64 matrices:
@@ -110,11 +150,15 @@ def CohesiveData(pth:str)->Data:
             Exatom - exchange contributions to energies from optimized isolated atoms per element
         """
         # Initialize lists/arrays + constants
+        #------------------------------------
         simpleCols = ['Element','N_unit','keldAE','AtomE','BulkE']
-        simple = defaultdict(list) # type: Dict[str,list]
-        XAtom,XBulk = [np.empty((0,8**2))]*2
+        coefCols   = ['xAtom','xBulk','xFunctional']
+        simple     = defaultdict(list) # type: Dict[str,list]
+        empty      = [np.empty((0, 8 ** 2))]
+        coef       = dict(zip(coefCols,empty * 3))
 
         # Parse
+        #-------
         with open(pth, 'r') as f:
             reader = DictReader(f, delimiter=',', quotechar='"')
             for row in reader:
@@ -123,14 +167,13 @@ def CohesiveData(pth:str)->Data:
                 for c in simpleCols:
                     simple[c].append(row[c])
 
-                # 'flatten' the mxm matrices into vectors, then 'append'
-                xAtom,xBulk = [array(literal_eval(row[y])).reshape((1,8**2))
-                                    for y in ['xAtom','xBulk']]
-
-                XAtom = np.vstack((XAtom,xAtom))
-                XBulk = np.vstack((XBulk,xBulk))
+                # 'flatten' the 8 x 8 matrices into vectors, then 'append'
+                for name,vec in coef.items():
+                    new = array(literal_eval(row[name])).reshape(64,)
+                    coef[name] = np.vstack((coef[name],new))
 
         # Postprocess the resulting lists
+        #--------------------------------
         element,n_unit,target,Eatom,Ebulk = simple.values()
 
         elems   = element
@@ -138,18 +181,5 @@ def CohesiveData(pth:str)->Data:
         Ece     = array(target).astype(float)
         Eatom   = array(Eatom).astype(float)
         Ebulk   = array(Ebulk).astype(float)
-        Xbulk   = XBulk
-        Xatom   = XAtom
 
-        # Get real target
-        #----------------
-        Xbulk_norm = Xbulk / natoms[:,None]
-        Ebulk_norm = Ebulk / natoms
-        Exatom     = Xatom @ beefcoeff
-        Exbulk     = Xbulk_norm @ beefcoeff
-        dE         = (Ebulk_norm - Exbulk) - (Eatom - Exatom) # Non exchange contribution of cohesive energy (calculated by DFT, assumed valid)
-        target     = Ece - dE                                 # 'True' difference E_x (bulk - atom)
-        return Xbulk_norm,target
-
-    x,t = parseCSV(pth)
-    return Data(x,t)
+        return elems,natoms,Ece,Eatom,Ebulk,coef['xBulk'],coef['xAtom'],coef['xFunctional']

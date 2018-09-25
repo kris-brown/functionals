@@ -27,25 +27,25 @@ true = const(True)
 ################
 # Main classes #
 ################
-class Constraint(object,metaclass=ABCMeta):
+
+class Constraint(metaclass=ABCMeta):
     """
     kind = {'lt','eq','gt','ltgt'}
     """
-    @property
-    @abstractmethod
-    def is_linear(self)->bool: pass
 
     @abstractmethod
-    def make(self,n:int)->Any:
+    def make(self,n:int)->List[LinearConstraint]:
         raise NotImplementedError
 
-
-    def __init__(self, name : str, desc : str, kind : str = 'eq') -> None:
-        assert kind in ['lt','gt','eq','ltgt']
+    def __init__(self,
+                 name : str, desc : str,
+                 kind : str = 'eq')->None:
+        assert kind in ['lt','gt','eq']
         self.kind = kind; self.name = name; self.desc = desc
 
-    def bounds(self)->Tuple[float,float]:
-        v = getattr(self,'val')
+    def bounds(self,v:float)->Tuple[float,float]:
+        """ >, <, and = are all expressed using upper and lower bounds """
+
         if self.kind == 'eq':
             return v, v
         elif self.kind == 'lt':
@@ -55,139 +55,97 @@ class Constraint(object,metaclass=ABCMeta):
         else:
             raise ValueError
 
-class LinConstraint(Constraint):
-    """Force the functional to take a value at a particular s,alpha point"""
-    @property
-    def is_linear(self)->bool: return True
 
+class MergedConstraint(Constraint):
+    def __init__(self,cs:List['Constraint'])->None:
+        self.cs = cs
+        name = '_'.join(c.name for c in cs)
+        desc = '\n\n'.join(c.desc for c in cs)
+        super().__init__(name,desc,'eq')
+
+    def make(self,n:int)->List[LinearConstraint]:
+        """Prepare constraints for non-linear solver"""
+        n2 = n**2
+        lb,A,ub = np.empty((0,)),np.empty((0,n2)),np.empty((0,));
+        for cons in flatten([c.make(n) for c in self.cs]):
+            lb = np.concatenate((lb,cons.lb))
+            A = np.vstack((A,array(cons.A)))
+            ub = np.concatenate((ub,cons.ub))
+        return LinearConstraint(A,lb,ub,keep_feasible=False)
+
+    def linprog_matrices(self,n:int)->Tuple[array,array,array,array]:
+        """Prepare constraints for linear programming solver"""
+        n2    = n**2
+        s1,s2 = (0,),((0,n2))
+        A_eq,b_eq,A_ub,b_ub = np.empty(s2),np.empty(s1),np.empty(s2),np.empty(s1)
+
+        for cons in flatten([c.make(n) for c in self.cs]):
+            if cons.lb == cons.ub:
+                A_eq = np.vstack((A_eq,array(cons.A)))
+                b_eq = np.concatenate((b_eq,cons.ub))
+            else:
+                if cons.lb != -np.inf:
+                    A_ub = np.vstack((A_ub, -1 * array(cons.A)))
+                    b_ub = np.concatenate((b_ub, -1 * array(cons.lb)))
+                if cons.ub != np.inf:
+                    A_ub = np.vstack((A_ub, array(cons.A)))
+                    b_ub = np.concatenate((b_ub, cons.ub))
+        return A_eq,b_eq,A_ub,b_ub
+
+class PointConstraint(Constraint):
+    '''Express a constraint of Fx at some (s,⍺)'''
     def __init__(self,
                  name : str, desc : str,
-                 s : float, alpha : float, val : float,
+                 s : float, alpha : float,val : float,
                  kind : str = 'eq')->None:
+        self.s=s; self.alpha=alpha; self.val = val
         super().__init__(name,desc,kind)
-        self.s = s;self.a = alpha; self.val = val
 
     def make(self,n:int)->LinearConstraint:
-        coefs = [[LegendreProduct(self.s,self.a,i,j) for j in range(n)] for i in range(n)]
-        lo,hi = self.bounds()
-        return LinearConstraint([flatten(coefs)],[lo],[hi])
+        coefs = [[LegendreProduct(self.s,self.alpha,i,j) for j in range(n)] for i in range(n)]
+        lo,hi = self.bounds(self.val)
+        return [LinearConstraint([flatten(coefs)],[lo],[hi],keep_feasible=False)]
 
-class ExplicitConstraint(Constraint):
-    def __init__(self,name:str,desc:str,vec:C[[int],array],lb:float,ub:float)->None:
-        super().__init__(name,desc,'ltgt')
-        self.vec = vec; self.lb =lb ; self.ub= ub
-    @property
-    def is_linear(self)->bool: return True
+class FxConstraint(Constraint):
+    """
+    Express a constraint of the Fx(s,⍺) value (binary function) over some domain
+    """
+    def __init__(self,
+                 name : str, desc : str,
+                 ss : List[float], aa : List[float],f : Binary,
+                 kind : str = 'eq')->None:
+        self.ss=ss;self.aa=aa;self.f=f
+        super().__init__(name,desc,kind)
+
     def make(self,n:int)->LinearConstraint:
-        return LinearConstraint([self.vec(n)],[self.lb],[self.ub])
+        cons = []
+        for s in self.ss:
+            for a in self.aa:
+                cons.append(PointConstraint('','',s,a,self.f(s,a),self.kind).make(n)[0])
+        return cons
 
-cLDA    = LinConstraint('LDA','LDA limit',1,0,1)
-#Fx(s,a) < 1.804
-cLiebOx = ExplicitConstraint('LiebOx','''
-The Lieb Oxford bound
 
-This can be expressed as ∀s,⍺ ∈ ℝ+: Fx(s,⍺) < 1.8
 
-We replace Fx(s,⍺) with: Σx_ij*Bi(s'(s))*Bj(⍺'(⍺))
-where "'" represents the transformed quantities (domain [-1,1], rather than ℝ+)
+# Particular  Constraints
+#-----------------------
+cLDA = PointConstraint('LDA','LDA limit',s = 0, alpha = 1, val = 1, kind='eq')
 
-What we want is an expression f(x_ij) < 1.8, but the quantification over all
-possible s,⍺ inputs makes this challenging.
+default = [0.,0.1,0.5,1.,2.,3.,100.]
+cLiebOx = FxConstraint('LiebOx','''The Lieb Oxford bound''',
+    ss=default,aa=default,f=const(1.804),kind='lt')
 
-However, we observe that for *any*  Legendre polynomial Bi: MAX(Bi(z)) = 1.
-Moreover, this maximum occurs at the same input value (+1.0) for every Legendre
-Polynomial, so we can say: ∀i,j ∈ ℝ+, y,z ∈ [-1,1]: MAX(Bi(y)Bj(z)) = 1
 
-To express a LT over all possible inputs s,⍺ is more simply expressed as a LT
-for the MAX value over all those inputs. Thus:
-    MAX(∀s,⍺ ∈ ℝ+: Σx_ij*Bi(s'(s))*Bj(⍺'(⍺))) = MAX(Σx_ij)
+cSCAN11 = FxConstraint('Scan11','''
+Tighter L.O. bound (1.174) when ⍺=0 (Equation 11 in SCAN paper)''',
+    ss=default,aa=[0],f=const(1.174),kind='lt')
 
-We recover a linear constraint, saying the sum of the matrix elements cannot
-exceed 1.8
 
-''',vec = lambda n: np.ones(n**2), lb = -np.inf,ub=1.814)
-
-# Fx(s,0) < 1.174
-
-def scan11vec(n:int)->array:
-    """
-    Given an n x n matrix we want to construct the flattened array corresponding
-    to:
-    [1 -1 1 -1 ...
-     1 -1 1 -1 ...
-     ...           ]
-    """
-    row = [1,-1]*(n//2) + ([1] if n%2 else [])
-    return row * n
-
-cSCAN11 = ExplicitConstraint('Scan11','''
-Tighter L.O. bound (1.174) when ⍺=0 (Equation 11 in SCAN paper)
-
-This can be expressed as ∀s ∈ ℝ+: Fx(s,0) < 1.17
-
-We replace Fx(s,⍺) with: Σx_ij*Bi(s'(s))*Bj(⍺'(0))
-
-Luckily, ⍺'(0)= -1 lets us simplify: Bj(⍺'(0)) = (-1)^j
-
-To find the worst case scenarios, we really want to constrain the coefficients
-so that the MAX of the function (yielded by those coefs) is LT 1.17
-
-MAX(Σx_ij*Bi(s')(-1)^j) < 1.17. The two worst cases are when Bi(s') is ±1, and
-the signs of X coefficients cancel out any negative values.
-
-We could express this as a nonlinear constraint now (knowing that s' is
-constrained to one of two values), but we can get away with a linear
-constraint.
-
--1.17 < [1,-1,1,-1,...] • x < 1.17
-
-Where the 1's and -1's should change sign whenever the corresponding ⍺ Legendre
-polynomial index changes (special considerations needed for n x n matrices where
-n is odd)
-''',
-        vec = scan11vec,lb=-1.174,ub=1.174)
+cPos = FxConstraint('Positive','''Make Fx never negative''',
+    ss=default,aa=default,f=const(0),kind='gt')
 
 #######################
 # NOT YET IMPLEMENTED #
 #######################
-#
-# class NonLinConstraint(Constraint):
-#     """
-#     Set Fx(s,a) equal/lt/gt to some constant (but not only at a particular point)
-#     If the relation holds over some subset of the full domain, specify with a
-#     (ℝ+,ℝ+)->Bool function.
-#     """
-#     @property
-#     def is_linear(self)->bool: return False
-#
-#     def __init__(self,
-#                  name   : str, desc : str, val : float,
-#                  kind   : str       = 'eq',
-#                  dom    : O[Binary] = None
-#                 ) ->None:
-#         super().__init__(name,desc,kind)
-#         self.dom = dom or true; self.val = val
-#
-#     def make(self,n:int)->NonlinearConstraint:
-#
-#         def f(x:array)->float:
-#             assert len(x) == n**2
-#             raise NotImplementedError
-#
-#         def jac(x:array)->array:
-#             """Method of computing the Jacobian matrix (an 1-by-n matrix, where
-#             element (1, j) is the partial derivative of f with respect to
-#             x[j]).  A callable must have the following signature:
-#             jac(x) -> {ndarray, sparse matrix}, shape (m, n). """
-#
-#             raise NotImplementedError
-#
-#         def hess(x:array)->array:
-#             raise NotImplementedError
-#
-#         lo,hi = self.bounds()
-#
-#         return NonlinearConstraint(f, lo, hi, jac=jac, hess=hess)
 
 # (at large s, say s=20): Fx(2s,0)/Fx(s,0) = 0.707
 # but, at large s: s'(2s)==s'(s)

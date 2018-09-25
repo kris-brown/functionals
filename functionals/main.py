@@ -1,60 +1,96 @@
 # External
-from typing      import List
+from typing      import List,Tuple
 from sys         import argv
 from os.path     import exists
+#import matplotlib # type: ignore
+#matplotlib.use('Qt5Agg')
 from matplotlib  import pyplot as plt  # type: ignore
 import numpy as np                     # type: ignore
 
 # Internal Modules
-from functionals.constraint import Constraint,cLiebOx,cLDA
+from functionals.constraint import Constraint,FxConstraint,cLiebOx,cLDA,cSCAN11,cPos
 from functionals.data       import CohesiveData,Data
-from functionals.fit        import Fit
-from functionals.functional import PBE, RPBE, SCAN, MS2, BEEF
+from functionals.fit        import LinFit,NonLinFit
+from functionals.functional import RPBE, SCAN, MS2, BEEF
 ###############################################################################
 # Config
 #--------
 plt.rcParams.update({"pgf.texsystem": "pdflatex"})
 np.set_printoptions(precision=2, linewidth=120, floatmode='fixed', suppress=True)
-
-##############################################################################
-def main(pth: str, m: int = 8, verbose: bool  = False) -> None:
+ax = plt.gca()
+################################################################################
+def main(pth        : str,
+         basis      : int                = 8,
+         nonlin     : bool               = True,
+         norm       : float              = 0.1,
+         initfit    : bool               = True,
+         bound      : float              = 0.1,
+         verbose    : bool               = False,
+         maxiter    : int                = 1000,
+         constgrid  : Tuple[int,int,int] = (0,4,10)
+         ) -> None:
     """
     Inputs:
-    pth    - filepath to CSV file containing cols with elements and xc contribs
-    m      - number of Legendre basis functions (for both s and alpha)
+    pth    - filepath to CSV file containing cohesive energy data
+    basis  - number of Legendre basis functions (for both s and alpha)
+    nonlin - use nonlinear fitting
+    norm   - regularization term (only used if nonlin)
+    initfit- how to initialize nonlinear fitting (only used if nonlin)
+    bound  - for all non-constant terms of fitted coefs, bound the magnitude
     """
-    data = [CohesiveData(pth)] # type: List[Data]
-    constraints = [cLiebOx,cLDA] # type: List[Constraint] ### [cLiebOx,cLDA]
-    fit = Fit(m,data,constraints).functional()
+    data        = CohesiveData(pth)
+    constraints = [cLiebOx,cLDA,cSCAN11,cPos] # type: List[Constraint]
 
+    for c in constraints:
+        if isinstance(c,FxConstraint):
+            c.ss = np.linspace(*constgrid);
+
+    fitter = NonLinFit if nonlin else LinFit
+    args   = {'norm':norm,'initfit':initfit} if nonlin else {}
+    fit    = fitter(basis,[data],constraints,bound=bound,**args).functional(maxiter=maxiter,verbose=verbose)
 
     # Make plots
     #-----------
-    ax = plt.gca()
-    PBE.plot(ax,'g')
-    RPBE.plot(ax,'r')
-    SCAN.plot(ax,'k')
-    MS2.plot(ax,'purple')
-    BEEF.plot(ax,'orange')
-    fit.plot(ax,'blue')
+    colors = ['r', 'k', 'purple', 'g', 'blue']
+    fxs    = [RPBE, SCAN, MS2, BEEF, fit]
+
+    for fx,col in zip(fxs, colors):
+        fx.plot(ax, col)
+
+    loss = fit.resid(data)[0] - BEEF.resid(data)[0]
+
+
     # Manager overall plot settings
     #------------------------------
+    xmin, xmax, ymin, ymax = ax.axis()
+
     plt.xlabel('Reduced density gradient')
     plt.ylabel('Exchange enhancement')
-    plt.legend(loc='best')
+    plt.text(xmin,ymax,'"Loss" rel. to BEEF of %f'%loss,verticalalignment='top')
+    plt.title('Basis %d,%slin%s,bound=%s '%(basis,'non' if nonlin else '',',norm %s, ifit %s'%(norm,initfit) if nonlin else '',bound))
+    plt.legend(loc = 'best')
     plt.show()
-    plt.savefig('spaghetti.pdf',bbox_inches='tight')
+    plt.savefig('spaghetti.pdf',bbox_inches = 'tight')
 
 if __name__=='__main__':
 
     # Validate inputs
     #----------------
+    assert len(argv)==2, 'Need to provide path to CSV file as only CLI argument'
     assert exists(argv[1]), "%s doesn't point to a CSV file "%argv[1]
 
     # Parameters
     #-----------
-    verbose  = True
-
+    verbose   = True
+    nonlin    = True
+    norm      = 0.01
+    initfit   = True
+    basis     = 4
+    constgrid = (0,3,20)
+    bound     = 0.1 # max |value| of any element in the fitted matrix, except for 1st element (the offset)
+    maxiter   = 1000
     # Main
     #-----
-    main(argv[1],m = 3,verbose=verbose)
+    main(pth = argv[1],basis = basis, nonlin = nonlin, constgrid=constgrid,
+         norm = norm, bound = bound, initfit = initfit, maxiter = maxiter,
+         verbose = verbose)
