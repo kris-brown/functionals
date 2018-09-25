@@ -1,6 +1,6 @@
 # External Modules
-from typing import Callable,Optional as O
-from abc import ABCMeta,abstractmethod
+from typing import Callable, Optional as O
+from abc import ABCMeta, abstractmethod
 from json import load
 from numpy import exp,array,multiply,heaviside,arange # type: ignore
 from matplotlib.axes import Axes        # type: ignore
@@ -23,6 +23,7 @@ class Functional(object,metaclass=ABCMeta):
     @property
     @abstractmethod
     def name(self)->str: pass
+
     @property
     @abstractmethod
     def mgga(self)->bool: pass
@@ -42,12 +43,15 @@ class Functional(object,metaclass=ABCMeta):
             lab = self.name + r' ($\alpha$=%d)'%alpha if self.mgga else self.name
             ax.plot(ss,ys,color=color,linestyle=style,label=lab,alpha=1 if self.mgga else 0.3)
 
+# Different ways of creating a functional
 class FromFunc(Functional):
+    """ Directly specify the enhancement factor formula """
     def __init__(self,name:str,f:Callable[[float,float],float],mgga:bool=True)->None:
         self._name=name; self.f = f; self._mgga = mgga
 
     @property
     def name(self)->str: return self._name
+
     @property
     def mgga(self)->bool: return self._mgga
 
@@ -55,6 +59,10 @@ class FromFunc(Functional):
         return self.f(s,a)
 
 class FromMatrix(Functional):
+    """
+    Implicitly define Fx formula in terms of a 2D matrix corresponding to
+    coefficients for Legendre Polynomials
+    """
     def __init__(self,A:array,name:O[str]=None)->None:
         self.A = A
         self.N,self.M = A.shape
@@ -62,6 +70,7 @@ class FromMatrix(Functional):
 
     @property
     def name(self)->str: return self._name
+
     @property
     def mgga(self)->bool: return True
 

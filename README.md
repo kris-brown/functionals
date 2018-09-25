@@ -7,4 +7,4 @@ Functional Development
 3. Install required packages `pip install -r requirements.txt`
 
 ## Usage
-`python functionals/fit.py data/atoms.csv`
+`python functionals/main.py data/atoms.csv`
