@@ -47,27 +47,33 @@ def main(pth        : str,
 
     fitter = NonLinFit if nonlin else LinFit
     args   = {'norm':norm,'initfit':initfit} if nonlin else {}
-    fit    = fitter(basis,[data],constraints,bound=bound,**args).functional(maxiter=maxiter,verbose=verbose)
+    fit    = fitter(basis,[data],constraints,bound=bound,**args)
+    fx     = fit.functional(maxiter=maxiter,verbose=verbose)
 
     # Make plots
     #-----------
     colors = ['r', 'k', 'purple', 'g', 'blue']
-    fxs    = [RPBE, SCAN, MS2, BEEF, fit]
+    fxs    = [RPBE, SCAN, MS2, BEEF, fx]
 
     for fx,col in zip(fxs, colors):
         fx.plot(ax, col)
 
-    loss = fit.resid(data)[0] - BEEF.resid(data)[0]
+    loss = fx.resid(data)[0] - BEEF.resid(data)[0]
 
 
     # Manager overall plot settings
     #------------------------------
     xmin, xmax, ymin, ymax = ax.axis()
 
+
+    fmtargs = [basis,'non' if nonlin else '',
+               ',norm %s, ifit %s'%(norm,initfit) if nonlin else '',
+               bound,fit.runtime]
+
     plt.xlabel('Reduced density gradient')
     plt.ylabel('Exchange enhancement')
-    plt.text(xmin,ymax,'"Loss" rel. to BEEF of %f'%loss,verticalalignment='top')
-    plt.title('Basis %d,%slin%s,bound=%s '%(basis,'non' if nonlin else '',',norm %s, ifit %s'%(norm,initfit) if nonlin else '',bound))
+    plt.text(xmin,ymax,'"Loss" rel. to BEEF of %d'%int(loss),verticalalignment='top')
+    plt.title('Basis {},{}lin{},bound={},time={} '.format(*fmtargs))
     plt.legend(loc = 'best')
     plt.show()
     plt.savefig('spaghetti.pdf',bbox_inches = 'tight')
@@ -81,14 +87,14 @@ if __name__=='__main__':
 
     # Parameters
     #-----------
-    verbose   = True
+    verbose   = False
     nonlin    = True
-    norm      = 0.01
-    initfit   = True
-    basis     = 4
-    constgrid = (0,3,20)
+    norm      = 0.001
+    initfit   = False
+    basis     = 8
+    constgrid = (0,5,10)
     bound     = 0.1 # max |value| of any element in the fitted matrix, except for 1st element (the offset)
-    maxiter   = 1000
+    maxiter   = 2000
     # Main
     #-----
     main(pth = argv[1],basis = basis, nonlin = nonlin, constgrid=constgrid,

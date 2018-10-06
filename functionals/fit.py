@@ -1,13 +1,14 @@
 # External
 from typing import Tuple, Dict, List, Callable, Any, Optional as O
 from abc import ABCMeta,abstractmethod
+from time import time
 import numpy as np # type: ignore
 from scipy.optimize import minimize,Bounds,BFGS,LinearConstraint,NonlinearConstraint,linprog # type: ignore
 # Internal Modules
 from functionals.functional import FromMatrix,beefcoeff
 from functionals.constraint import Constraint,MergedConstraint
 from functionals.data       import Data
-from functionals.utilities  import corner,flatten,lst_sq_linprog
+from functionals.utilities  import corner,flatten,lst_sq_linprog,lst_sq_pulp
 
 ################################################################################
 class Fit(metaclass=ABCMeta):
@@ -26,8 +27,9 @@ class Fit(metaclass=ABCMeta):
         self.constraint = MergedConstraint(constraints)
 
         # Will get computed only once and stored here
-        self._res   = None  # type: O[np.array]
+        self._res    = None # type: O[np.array]
         self.weights = None # type: O[np.array]
+        self.runtime = 0.0
 
     def trivial(self)->List[LinearConstraint]:
         """Make a trivial constraint (Solver fails if there are NO constriants)"""
@@ -60,6 +62,7 @@ class LinFit(Fit):
     def solve(self,maxiter:int=1000,verbose:bool=True)->Tuple[np.array,float]: # type: ignore
         """"""
         if self._res == None:
+            start = time()
             # Solve
             #-----
             n2 = self.n**2
@@ -74,9 +77,8 @@ class LinFit(Fit):
                                        maxiter=maxiter)
 
             self.weights = self._res.x # type: np.array
+            self.runtime = int(time()-start)
 
-            import pdb;pdb.set_trace()
-            print('weights',self.weights.reshape(self.n,self.n))
         return self.weights # type: ignore
 
 class NonLinFit(Fit):
@@ -98,7 +100,7 @@ class NonLinFit(Fit):
                   solution
         """
         if self._res == None:
-
+            start = time()
             # General solver inputs
             #----------------------
             if self.initfit:
@@ -142,4 +144,5 @@ class NonLinFit(Fit):
                                  bounds = bounds, options = options)
 
             self.weights = self._res.x
+            self.runtime = int(time()-start)
         return self.weights
