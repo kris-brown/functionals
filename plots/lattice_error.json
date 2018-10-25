@@ -1,0 +1,10 @@
+{
+ "type" : "bar",
+ "query": "SELECT S.nickname,S.symmetry as structure,SDE.value AS expt, C.xc AS xc FROM expt E JOIN species S ON E.expt__species=S.species_id JOIN species_dataset_element SDE ON SDE.species_dataset_element__species=S.species_id JOIN calc C ON C.calc_id = E.expt__calc WHERE SDE.property='lattice constant' AND SDE.value IS NOT NULL and E.eform IS NOT NULL",
+ "xcols": "structure a expt",
+ "gcols": "nickname",
+ "glfunc": "lambda x: x[:x.find('_')] if x else None",
+ "spcols": "xc",
+ "title": "Cohesive energy errors",
+ "xlab" : "Species"
+}

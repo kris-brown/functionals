@@ -1,6 +1,7 @@
-
+from typing import Optional as O
 from ase.atoms import Atoms, string2symbols   # type: ignore
 from ase.units import kB, kJ, kcal, mol   # type: ignore
+from ase.io import write    # type: ignore
 import numpy as np   # type: ignore
 
 # Sol57LC
@@ -228,13 +229,14 @@ surf_data = {
     'solid': 'Au_fcc',
     'facet': '111',
     'E_surf': [1.506, 1.500]},
-}
+} # type: dict
+
 #Surface energy functions
-def in_surf_data(name):
+def in_surf_data(name:str)->None:
     if name not in surf_data:
         raise KeyError('System %s not in database.' % name)
 
-def get_esurf_bulk_data(name):
+def get_esurf_bulk_data(name:str)->tuple:
     in_surf_data(name)
     solid = surf_data[name]['solid']
     lp = get_solid_lattice_parameter(solid)
@@ -249,10 +251,10 @@ def get_esurf_bulk_data(name):
     elif facet is '0001':
         assert struct is 'hcp'
     else:
-        stop
+        raise ValueError()
     return solid, symb, facet, struct, lp, mm
 
-def get_surface_area(facet, lp):
+def get_surface_area(facet:str, lp:float)->float:
     if facet is '111':
         A = lp**2. * np.sqrt(3.)/4.
     elif facet is '110':
@@ -261,18 +263,18 @@ def get_surface_area(facet, lp):
         A = lp**2. * np.sqrt(3.)/2.
     return A
 
-def convert_to_Jm2(A, e):
+def convert_to_Jm2(A:float, e:float)->float:
     A *= 1.e-20 # m**2
     J = kJ/1000.
     e /= (J*A)
     return e
 
-def get_exp_surface_energy(name):
+def get_exp_surface_energy(name:str)->tuple:
     in_surf_data(name)
     e = surf_data[name]['E_surf']
     return e, np.mean(e)
 
-def getarg(sys, systems):
+def getarg(sys:str, systems:str)->str:
     k = np.where(systems==sys)[0]
     if len(k) < 1:
         raise KeyError('%s not in keylist' % sys)
@@ -281,7 +283,7 @@ def getarg(sys, systems):
     assert len(k) == 1
     return k[0]
 
-def get_dft_latpar(solid, xc):
+def get_dft_latpar(solid:str, xc:str)->float:
     in_bulk_data(solid)
     from data_handler_045 import Data_Handler   # type: ignore
     data = Data_Handler()
@@ -1163,17 +1165,17 @@ bulk_data = {
     'latex name': "Mg",
     'structure':'hcp',
     'magmom': None},
-}
+} # type: dict
 # bulk solid functions
-def in_bulk_data(name):
+def in_bulk_data(name:str)->None:
     if name not in bulk_data:
         raise KeyError('System %s not in database.' % name)
 
-def get_solid_lattice_parameter(name):
+def get_solid_lattice_parameter(name:str)->float:
     in_bulk_data(name)
     return bulk_data[name]['lattice parameter']
 
-def get_hcp_covera(name):
+def get_hcp_covera(name:str)->float:
     in_bulk_data(name)
     if name in hcp_solids_10:
         a = bulk_data[name]['lattice parameter']
@@ -1182,14 +1184,14 @@ def get_hcp_covera(name):
     else:
         return 0.
 
-def get_solid_pbe_lp(name):
+def get_solid_pbe_lp(name:str)->O[float]:
     in_bulk_data(name)
     if name in sol58_lp:
         return bulk_data[name]['pbe_lp']
     else:
         return None
 
-def get_solid_cohesive_energy(name):
+def get_solid_cohesive_energy(name:str)->float:
     #in_bulk_data(name)
     #assert name in sol58_lp
     d = bulk_data[name]
@@ -1204,7 +1206,7 @@ def get_solid_cohesive_energy(name):
         elif unit == 'kcal/mol':
             e *= kcal/mol
         else:
-            stop
+            raise ValueError()
         corrected = d['Ecoh is phonon-corrected']
         if corrected == False:
             theta = d['debye temperature']
@@ -1212,29 +1214,29 @@ def get_solid_cohesive_energy(name):
             e += (9./8.)*kB*theta
         return e
 
-def get_solid_bulk_modulus(name):
+def get_solid_bulk_modulus(name:str)->O[float]:
     in_bulk_data(name)
     if name in bm32:
         return bulk_data[name]['bulk modulus']
     else:
         return None
 
-def get_solid_magmom(name):
+def get_solid_magmom(name:str)->float:
     in_bulk_data(name)
     return bulk_data[name]['magmom']
 
-def get_solid_crystal_structure(name):
+def get_solid_crystal_structure(name:str)->str:
     in_bulk_data(name)
     struct = bulk_data[name]['structure']
     assert struct in ['fcc', 'bcc', 'diamond', 'hcp',
                       'rocksalt', 'cesiumchloride', 'zincblende']
     return struct
 
-def get_solid_symbols(name):
+def get_solid_symbols(name:str)->str:
     in_bulk_data(name)
     return bulk_data[name]['symbols']
 
-def get_solids_latex_name(name):
+def get_solids_latex_name(name:str)->str:
     in_bulk_data(name)
     d = bulk_data[name]
     struct = d['structure']
@@ -1242,11 +1244,11 @@ def get_solids_latex_name(name):
         struct = 'dia'
     return d['latex name'] + ' ('+struct+')'
 
-def get_solids_common_name(name):
+def get_solids_common_name(name:str)->str:
     return get_solids_latex_name(name)
 
-def setup_bulk(solid, offset=0., set_lp=True):
-    from ase.lattice import bulk   # type: ignore
+def setup_bulk(solid:str, offset:float=0., set_lp:bool=False)->Atoms:
+    from ase.build import bulk   # type: ignore
     in_bulk_data(solid)
     symbol = get_solid_symbols(solid)
     s = get_solid_crystal_structure(solid)
@@ -1259,7 +1261,7 @@ def setup_bulk(solid, offset=0., set_lp=True):
         cov = get_hcp_covera(solid)
         atoms = bulk(symbol, s, a=lp, covera=cov)
     else:
-        atoms = bulk(symbol, s, a=lp)
+        atoms = bulk(symbol, s, a=lp,orthorhombic = True )
     atoms.set_pbc(True)
     if m != None:
         mm = np.zeros(len(atoms))
@@ -1267,7 +1269,12 @@ def setup_bulk(solid, offset=0., set_lp=True):
         atoms.set_initial_magnetic_moments(mm)
     return atoms
 
-def setup_atom(symbol, vac=3.0, t=0.0, odd=0.0):
+def write_bulks()->None:
+    for k,v in bulk_data.items():
+        a = setup_bulk(k)
+        write('structures/'+k+'.traj',a)
+
+def setup_atom(symbol:str, vac:float=3.0, t:float=0.0, odd:float=0.0)->Atoms:
     from ase import Atoms   # type: ignore
     from ase.data import chemical_symbols, atomic_numbers, ground_state_magnetic_moments   # type: ignore
     assert symbol in chemical_symbols

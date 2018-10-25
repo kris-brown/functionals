@@ -2,3 +2,10 @@ numpy
 matplotlib
 scipy
 ase
+pyqt5
+tqdm
+networkx
+infix
+mysqlclient
+pathos
+pymatgen

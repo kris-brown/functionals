@@ -1,6 +1,9 @@
+from typing import Optional as O
+
 from ase.atoms import Atoms, string2symbols   # type: ignore
-from ase.units import kB, kJ   # type: ignore
-import numpy as np   # type: ignore
+from ase.io import write                      # type: ignore
+from ase.units import kB, kJ                  # type: ignore
+import numpy as np                            # type: ignore
 
 qubic_solids_26 = ['Li_bcc','Na_bcc','K_bcc','Rb_bcc',
                    'Ca_fcc','Sr_fcc','Ba_bcc',
@@ -1247,17 +1250,17 @@ data = {
     'latex name': "PtN",
     'structure':'rocksalt',
     'magmom': None},
-}
+} # type: dict
 
-def in_data(name):
+def in_data(name:str)->None:
     if name not in data:
         raise KeyError('System %s not in database.' % name)
 
-def get_solid_lattice_parameter(name):
+def get_solid_lattice_parameter(name:str)->float:
     in_data(name)
     return data[name]['lattice parameter']
 
-def get_hcp_covera(name):
+def get_hcp_covera(name:str)->float:
     in_data(name)
     if name in hcp_solids_10:
         a = data[name]['lattice parameter']
@@ -1266,60 +1269,62 @@ def get_hcp_covera(name):
     else:
         return 0.
 
-def get_solid_pbe_lp(name):
+def get_solid_pbe_lp(name:str)->O[float]:
     in_data(name)
     if name in solids_1:
         return data[name]['pbe_lp']
     else:
         return None
 
-def get_solid_revtpss_lp(name):
+def get_solid_revtpss_lp(name:str)->O[float]:
     in_data(name)
     if name in solids_2:
         return data[name]['revtpss_lp']
     else:
         return None
 
-def lattice_parameter(name):
+def lattice_parameter(name:str)->float:
     in_data(name)
     assert name in solids_0, name
     if name in solids_1:
         return get_solid_lattice_parameter(name)
     elif name in solids_2:
-        return get_solid_revtpss_lp(name) - 0.043 #KRIS: WHY????
+        x = get_solid_revtpss_lp(name)
+        assert x
+        return x - 0.043 #KRIS: WHY????
     else:
-        kdkdkd
+        raise ValueError()
 
-def get_solid_cohesive_energy(name, ZPVE_corr=True):
+def get_solid_cohesive_energy(name:str, ZPVE_corr:bool=True)->float:
     in_data(name)
     e = data[name]['cohesive energy']
     if ZPVE_corr == True and name in qubic_solids_27:
         e += (9./8.)*kB*data[name]['debye temperature']
     return e
 
-def get_solid_bulk_modulus(name):
+def get_solid_bulk_modulus(name:str)->O[float]:
     in_data(name)
     if name in solids_1:
         return data[name]['bulk modulus']
     else:
         return None
 
-def get_solid_magmom(name):
+def get_solid_magmom(name:str)->float:
     in_data(name)
     return data[name]['magmom']
 
-def get_solid_crystal_structure(name):
+def get_solid_crystal_structure(name:str)->str:
     in_data(name)
     struct = data[name]['structure']
     assert struct in ['fcc', 'bcc', 'diamond', 'hcp',
                       'rocksalt', 'cesiumchloride', 'zincblende']
     return struct
 
-def get_solid_symbols(name):
+def get_solid_symbols(name:str)->str:
     in_data(name)
     return data[name]['symbols']
 
-def get_solids_latex_name(name):
+def get_solids_latex_name(name:str)->str:
     in_data(name)
     d = data[name]
     struct = d['structure']
@@ -1327,11 +1332,11 @@ def get_solids_latex_name(name):
         struct = 'dia'
     return d['latex name'] + ' ('+struct+')'
 
-def get_solids_common_name(name):
+def get_solids_common_name(name:str)->str:
     in_data(name)
     return get_solids_latex_name(name)
 
-def get_solid_bulk_gpaw_convergence(name, xc=None):
+def get_solid_bulk_gpaw_convergence(name:str, xc:O[str]=None)->list:
     in_data(name)
     d = data[name]
     std = [1.e-6, 1.e-7, 1.e-6] # energy, eigenstates, density
@@ -1344,6 +1349,35 @@ def get_solid_bulk_gpaw_convergence(name, xc=None):
         return std
     else:
         return d['gpaw_conv']
+
+
+def setup_bulk(solid:str, offset:float=0., set_lp:bool=False)->Atoms:
+    from ase.build import bulk   # type: ignore
+    in_data(solid)
+    symbol = get_solid_symbols(solid)
+    s = get_solid_crystal_structure(solid)
+    if set_lp:
+        lp = offset
+    else:
+        lp = get_solid_lattice_parameter(solid) + offset
+    m = get_solid_magmom(solid)
+    if s == 'hcp':
+        cov = get_hcp_covera(solid)
+        atoms = bulk(symbol, s, a=lp, covera=cov)
+    else:
+        atoms = bulk(symbol, s, a=lp,orthorhombic = True )
+    atoms.set_pbc(True)
+    if m != None:
+        mm = np.zeros(len(atoms))
+        mm[:] = m
+        atoms.set_initial_magnetic_moments(mm)
+    return atoms
+
+def write_bulks()->None:
+    for k,v in data.items():
+        a = setup_bulk(k)
+        write('structures/'+k+'.traj',a)
+
 
 # atomic constituents
 atoms_ = np.array([])
