@@ -1,14 +1,9 @@
 # External Modules
-from typing import Any,Type,TYPE_CHECKING
 from os     import environ
 
-# Internal Modules
-from dbgen.support.model          import Model,new_model
 from dbgen.core.parsing           import parser
 from dbgen.support.misc           import ConnectInfo
-from functionals.model.objects    import add_objects
-from functionals.model.generators import add_generators
-
+from functionals.model            import make_model
 """
 Work in progress
 
@@ -18,11 +13,7 @@ development
 """
 ################################################################################
 
-def make_model()->Type[Model]:
-    m = new_model('johannes') # type: Type['Model']
-    add_objects(m)
-    add_generators(m)
-    return m
+
 
 def main()->None:
     """

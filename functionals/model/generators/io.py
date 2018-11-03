@@ -32,7 +32,8 @@ def readfile(pth:str)->str:
 
 
 beefpath = '/Users/ksb/functionals/data/beef.json'
-coefpath = lambda x: join(x,'coefs.json') # type: C[[str], str]
+coefpath = lambda x: join(x,'BEEFoftheDay.txt') # type: C[[str], str]
+xcpath   = lambda x: join(x,'xccontribs.txt')  # type: C[[str], str]
 getcoef  = lambda stor, bf: (readfile(coefpath(stor))
                             if exists(coefpath(stor))
                             else readfile(beefpath)) \
@@ -44,6 +45,19 @@ calc_plan =  SimpleFunc(parse_pw_gpaw, ['log'],['pw'])                          
            + SimpleFunc(getcoef,['stordir','beef'],['coefs'])                   \
            + SimpleFunc(lambda x: int('beef' in x.lower()),['xc'],['beef'])
 
+elemcols = ['symbol', 'name', 'atomic_weight','atomic_radius'
+          , 'phase','evaporation_heat', 'pointgroup','spacegroup'
+          , 'melting_point', 'metallic_radius', 'vdw_radius'
+          , 'density', 'en_allen' , 'is_radioactive'
+          , 'lattice_struct' , 'fusion_heat'
+          , 'econf', 'period', 'covalent_radius_bragg'
+          , 'geochemical_class', 'abundance_crust', 'heat_of_formation'
+          , 'electron_affinity', 'atomic_volume',  'boiling_point'
+          , 'proton_affinity', 'covalent_radius_slater'
+          , 'lattice_constant', 'dipole_polarizability'
+          , 'en_ghosh', 'thermal_conductivity', 'group_id', 'en_pauling'
+          , 'gas_basicity'
+          ,'abundance_sea']
 #################################################################################
 def io(mod:Type['Model'])->None:
 
@@ -81,15 +95,15 @@ def io(mod:Type['Model'])->None:
                     /CONSTS/ {'path' : psppth}
                     /DESC/   'Populate Setup table from a path containing setups')
         ########################################################################
-        elemcols = ['symbol','atomic_weight','lattice_struct','econf']
 
         elemzinfo =                                                             \
             (Element.select(elemcols) ==
                  GET /INPUT/ Element.atomic_number
                      /DESC/   '''Read a JSON file containing element reference data
                                  Requires providing path to this file as a constant'''
-                     /FUNC/   PyBlock(parse_mendeleev,
-                                      args = noIndex(['atomic_number','pth']))
+                     /FUNC/   SimpleFunc(parse_mendeleev,
+                                          inputs  = ['atomic_number','pth'],
+                                          outputs = elemcols)
                      /CONSTS/ {'pth':elempath})
 
 
@@ -115,3 +129,8 @@ def io(mod:Type['Model'])->None:
                     /BASIS/  Job
                     /FUNC/   calc_plan
                     /DESC/   'Populate calc table + F.K. from Relax_job')
+        ########################################################################
+        contribs =                                                              \
+            (Job.contribs == GET /INPUT/ Job.stordir
+                             /FUNC/ (lambda x: readfile(xcpath(x)))
+                             /CONST/ (Calc.xc == 'mBEEF'))

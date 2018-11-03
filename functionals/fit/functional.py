@@ -1,9 +1,8 @@
 # External Modules
-from typing import Callable, TYPE_CHECKING,Tuple,Optional as O
+from typing import Callable, Any, TYPE_CHECKING,Tuple,Optional as O
 from abc import ABCMeta, abstractmethod
 from json import load
 import numpy as np               # type: ignore
-from matplotlib.axes import Axes # type: ignore
 
 # Internal
 if TYPE_CHECKING:
@@ -19,23 +18,23 @@ mu       = 10./81
 ################################################################################
 # Functional classes
 #-------------------
-class Functional(object,metaclass=ABCMeta):
+class Functional(object, metaclass = ABCMeta):
     """
     A mGGA: something that implements a function (s,⍺)->Fx :: (ℝ+,ℝ+)->ℝ+
     """
     @property
     @abstractmethod
-    def name(self)->str: pass
+    def name(self) -> str: pass
 
     @property
     @abstractmethod
-    def mgga(self)->bool: pass
+    def mgga(self) -> bool: pass
 
     @abstractmethod
-    def apply(self,s:float,a:float)->float:
+    def apply(self, s : float, a : float) -> float:
         raise NotImplementedError
 
-    def plot(self,ax : Axes,color  : str = 'k') -> None:
+    def plot(self, ax : Any, color : str = 'k') -> None:
         ss     = np.arange(0.,3.5,0.05)
         alphas = np.array([0,1]) if self.mgga else [1]
         styles = ['-',':','--','-.']
@@ -53,12 +52,12 @@ class FromFunc(Functional):
         self._name=name; self.f = f; self._mgga = mgga
 
     @property
-    def name(self)->str: return self._name
+    def name(self) -> str: return self._name
 
     @property
-    def mgga(self)->bool: return self._mgga
+    def mgga(self) -> bool: return self._mgga
 
-    def apply(self,s:float,a:float)->float:
+    def apply(self, s:float, a:float)->float:
         return self.f(s,a)
 
 class FromMatrix(Functional):
@@ -74,12 +73,12 @@ class FromMatrix(Functional):
         self._name = name or '<no name>'
 
     @property
-    def name(self)->str: return self._name
+    def name(self) -> str: return self._name
 
     @property
-    def mgga(self)->bool: return True
+    def mgga(self) -> bool: return True
 
-    def apply(self,s:float,a:float)->float:
+    def apply(self, s:float, a:float)->float:
         """
         A - an MxN matrix with rows corresponding to s basis functions coefficients
             and columns corresponding to alpha basis function coefficients

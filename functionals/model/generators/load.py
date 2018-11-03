@@ -59,11 +59,11 @@ def eng(s:str)->float:
 def load(mod:Type['Model'])->None:
     # Extract tables
     tabs = ['job','atom','element','struct','calc','cell','pure_struct',
-            'species','expt','bulk_job','reference','setup','setup_family',
+            'species','bulk_job','reference','setup','setup_family',
             'job_setup','species_comp','species_dataset',
             'species_dataset_element']
 
-    Job, Atom, Element, Struct, Calc, Cell, Pure_struct, Species, Expt, Bulk_job,\
+    Job, Atom, Element, Struct, Calc, Cell, Pure_struct, Species, Bulk_job,\
     Reference, Setup, Setup_family, Job_setup, Species_comp, Species_dataset,         \
     Species_dataset_element = map(mod.get, tabs) # type: ignore
 
@@ -182,14 +182,14 @@ def load(mod:Type['Model'])->None:
                              Struct.n_elems]
                     /DESC/ 'Populate species from Struct and Purestruct tables')
         ########################################################################
-        bulkexpt =                                                              \
-            ((Bulk_job.Expt, Expt) ==
-                GET /BASIS/ Bulk_job
-                    /INPUT/ [*[e(Job.Calc)   for e in Calc.select(Calc._inits)],
-                             *[e(Job.Struct) for e in Species.select(Species._inits)]]
-                    /DESC/ 'All pairs of (bulk) species + calc. '\
-                           'Links the bulk_job table to Expt table, too')
-
+        def sum_values(x:str)->int:
+            return sum(dict(literal_eval(x)).values())
+            
+        species_natoms =                                                        \
+            (Species.n_atoms ==
+                GET /INPUT/ Species.composition
+                    /FUNC/ sum_values
+                    /DESC/ 'Total number of atoms in the most reduced stoichiometric ratios')
         ########################################################################
         refr =                                                                   \
             ((Reference, Reference.Calc, Reference.Element, Reference.energy) ==
@@ -211,7 +211,11 @@ def load(mod:Type['Model'])->None:
         ########################################################################
         spin     = lambda x: int('Spin-polarized calculation' in x)
 
-        spinpol = Job.spinpol == GET /INPUT/ Job.log /FUNC/ spin /DESC/ 'Populates Job.spinpol'
+        spinpol =                                                               \
+            (Job.spinpol ==
+                GET /INPUT/ Job.log
+                    /FUNC/ spin
+                    /DESC/ 'Populates Job.spinpol')
         ########################################################################
         compcols = Struct.select('n_atoms','n_elems','composition',
                          'composition_norm','metal_comp','str_symbols',

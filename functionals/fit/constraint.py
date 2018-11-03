@@ -94,8 +94,8 @@ class MergedConstraint(Constraint):
 class PointConstraint(Constraint):
     '''Express a constraint of Fx at some (s,⍺)'''
     def __init__(self,
-                 name : str, desc : str,
-                 s : float, alpha : float,val : float,
+                 name : str,   desc : str,
+                 s    : float, alpha : float, val : float,
                  kind : str = 'eq')->None:
         self.s=s; self.alpha=alpha; self.val = val
         super().__init__(name,desc,kind)
@@ -111,7 +111,7 @@ class FxConstraint(Constraint):
     """
     def __init__(self,
                  name : str, desc : str,
-                 ss : List[float], aa : List[float],f : Binary,
+                 ss   : List[float], aa : List[float],f : Binary,
                  kind : str = 'eq')->None:
         self.ss=ss;self.aa=aa;self.f=f
         super().__init__(name,desc,kind)

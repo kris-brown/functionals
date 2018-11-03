@@ -1,9 +1,9 @@
-from typing   import List,Tuple
-from ase.data import chemical_symbols # type: ignore
-from imp      import load_source
-from re       import findall
-from os       import environ
-from os.path  import join
+from typing     import List,Tuple
+from ase.data   import chemical_symbols # type: ignore
+from imp        import load_source
+from re         import findall
+from os         import environ
+from os.path    import join
 from subprocess import check_output
 from json       import load
 ################################################################################
@@ -50,7 +50,7 @@ def parse_keld(pth:str) -> Tuple[str,Strs,Strs,Ints,int,Strs,Strs,str]:
         elemstr,crystal = k.split('-')                  # 'LiH','b1'
         sym     = struct_dict[crystal]             # 'b1' -> 'AB_1_a_b_225'
         elems_ = findall('[A-Z][^A-Z]*', elemstr)        # ['Li','H']
-        elems  = [chemical_symbols.index(x) for x in elems_]
+        elems  = list(sorted([chemical_symbols.index(x) for x in elems_]))
 
         compstr     = str({e:1 for e in elems})
         composition = [(compstr,sym,num,len(elems)) for num in elems]

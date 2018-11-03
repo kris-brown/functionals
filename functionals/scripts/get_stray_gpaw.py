@@ -11,7 +11,7 @@ def get_stray_gpaw(rootpath : str)-> List[str]:
     # Initialize Variables
     #---------------------
     logfiles  = []
-    badext     = ["sh","traj","json","gpw","py","err","xyz"]
+    badext     = ["sh", "traj", "json", "gpw", "py", "err", "xyz"]
     badextstr  = " ".join(['-not -name "*.%s"'%x for x in badext])
 
     ##############
@@ -26,7 +26,7 @@ def get_stray_gpaw(rootpath : str)-> List[str]:
                 fi
         done""".format(rootpath,badextstr)
     exit,gpawcheck = getstatusoutput(cmd)
-    assert exit==0,'Failure in get_gpaw_logfile bash execution: '+gpawcheck
+    assert exit == 0,'Failure in get_gpaw_logfile bash execution: '+gpawcheck
     for logfile in gpawcheck.split('\n'):
         if logfile:
             dir = logfile[:logfile.rfind('/')]

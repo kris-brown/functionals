@@ -16,9 +16,9 @@ def parse_mendeleev(i:int,
     ############################
     # Constants
     #----------
-    cols = ['symbol','atomic_weight','lattice_structure','econf'] # etc
+    #cols = ['symbol','atomic_weight','lattice_structure','econf'] # etc
 
-    allcols = ['atomic_number', 'symbol', 'name', 'atomic_weight','atomic_radius'
+    allcols = [ 'symbol', 'name', 'atomic_weight','atomic_radius'
               , 'phase','evaporation_heat', 'pointgroup','spacegroup'
               , 'melting_point', 'metallic_radius', 'vdw_radius'
               , 'density', 'en_allen' , 'is_radioactive'
@@ -35,7 +35,7 @@ def parse_mendeleev(i:int,
     # Initialize Variables
     #----------------------
     output = []
-    for k in cols:
+    for k in allcols:
         v = data.get(k)
         if isinstance(v,float):
             output.append(round(v,3))

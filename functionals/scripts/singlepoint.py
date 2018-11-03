@@ -29,17 +29,16 @@ common_calc_params = {{
     'mode'        : PW({Calc.pw}),
     'kpts'        : {Calc.kpts},
     'maxiter'     : 1000,
-    'mixer'       : Mixer(0.005,  5,  100),
+    'mixer'       : Mixer(0.01,  5,  100),
     'eigensolver' : Davidson({Calc.david}),
     'nbands'      : {Calc.nbands},
     'occupations' : FermiDirac({Calc.sigma},fixmagmom = {Calc.hund}),
     'convergence' : {{'energy': {Calc.econv}, 'density':{Calc.dconv}, 'eigenstates':1e80}},
 }}
 
-xcs = ['LDA','PBE','mBEEF']
+xcs = ['PBE','mBEEF']
 
-for i in range(3):
-    xc  = xcs[i]
+for xc in xcs:
     atoms.calc = GPAW(xc  = xc,
                       txt = xc+'.txt',
                       **common_calc_params)

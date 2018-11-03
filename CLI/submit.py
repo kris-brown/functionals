@@ -4,13 +4,11 @@ from abc         import ABCMeta, abstractmethod
 from os.path     import join,exists
 from os          import chdir,system,mkdir,listdir,environ
 from os          import mkdir
+from argparse    import ArgumentParser
 
 from ase        import Atoms            # type: ignore
 from ase.io     import write,read       # type: ignore
 from ase.data   import chemical_symbols # type: ignore
-
-# Internal modules
-from functionals.jobs.parse import parser
 
 """
 A CLI interface designed to submit atomic and bulk calculations en masse
@@ -28,8 +26,9 @@ def get_script(s:str)->str:
         return f.read()
 
 def safeMkdir(pth:str)->None:
-    if not exists(pth):
-        mkdir(pth)
+    if not exists(pth): mkdir(pth)
+
+allelems = list(range(1,57)) + list(range(72,83))
 
 class Calc(object):
     def __init__(self,
@@ -38,7 +37,7 @@ class Calc(object):
                  david  : int   = 15,
                  sigma  : float = 0.01,
                  econv  : float = 5e-3,
-                 dconv  : float = 1e-3,
+                 dconv  : float = 1e-2,
                  nbands : int   = -8,
                  setups : str   = 'paw',
                  kpts   : Union[int,float,tuple,list] = (1,1,1)
@@ -60,8 +59,8 @@ class Calc(object):
         with open(join(pth,'gpawrun.py'),'w') as g:
             g.write(singlepoint.format(Calc=self))
 
-class Job(metaclass=ABCMeta):
-    def __init__(self,calc:Calc,time:int=1)->None:
+class Job(metaclass = ABCMeta):
+    def __init__(self, calc : Calc, time : int = 1) -> None:
         assert time > 0
         self.calc = calc
         self.time = time
@@ -69,7 +68,7 @@ class Job(metaclass=ABCMeta):
     def __repr__(self)->str:
         return str(self)
 
-    def _submit(self,pth:str)->None:
+    def _submit(self, pth : str) -> None:
         self.calc.singlepoint(pth)
         bash = join(pth,'subGPAW.sh')
         sub  = get_script('subGPAW.sh')
@@ -101,17 +100,19 @@ class Atomic(Job):
 
     def __str__(self)->str:
         return 'Atoms<%d>'%(chemical_symbols[self.elem])
-    def submit(self, pth_ : str) -> None:
+
+    def submit(self, pth_ : str, retry : bool = False) -> None:
         pth = join(pth_,chemical_symbols[self.elem])
         safeMkdir(pth)
+        if retry or not exists(join(pth,'xccontribs.txt')):
 
-        atoms = Atoms(numbers    = [self.elem],
-                      cell        = [[10.1,0.2,0.1],
-                                     [0.2,10.2,0.01],
-                                     [0.5,0.1,10.3]],
-                      positions    = [[0.01,0.02,0.03]])
-        write(join(pth,'init.traj'),atoms)
-        self._submit(pth)
+            atoms = Atoms(numbers    = [self.elem],
+                          cell        = [[10.1,0.2,0.1],
+                                         [0.2,10.2,0.01],
+                                         [0.5,0.1,10.3]],
+                          positions    = [[0.01,0.02,0.03]])
+            write(join(pth,'init.traj'),atoms)
+            self._submit(pth)
 
     @staticmethod
     def enmasse(elems  : List[int], submitpth : str,
@@ -166,17 +167,60 @@ class Bulk(Job):
                 sigma  : float = 0.01,
                 econv  : float = 1e-3,
                 dconv  : float = 1e-3,
-                strains: list  = list(range(-10,11))
+                strains: list  = list(range(-10,11)),
+                retry  : bool  = False
                 ) -> None:
         """ Create a bunch of bulks from a directory containing .traj files"""
         bulks = [Bulk(join(pth,p),time,sigma,econv,dconv,strains)
                     for p in listdir(pth) if p[-5:]=='.traj']
         for b in bulks:
-            b.submit(submitpth)
+            b.submit(submitpth, retry)
 
 
 #########################################
 def main()->None:
+    parser = ArgumentParser(description  = 'Submit some jobs',
+                            allow_abbrev = True)
+
+    parser.add_argument('--time',
+                        default = 5,
+                        type    = int,
+                        help    = 'Walltime for batch jobs')
+
+    parser.add_argument('--sigma',
+                        default = 0.01,
+                        type    = float,
+                        help    = 'Walltime for batch jobs')
+
+    parser.add_argument('--econv',
+                        default = 0.001,
+                        type    = float,
+                        help    = 'Walltime for batch jobs')
+
+    parser.add_argument('--dconv',
+                        default = 0.001,
+                        type    = float,
+                        help    = 'Walltime for batch jobs')
+
+    parser.add_argument('--src',
+                        default = '',
+                        type    = str,
+                        help    = 'Path to bulk .traj files')
+
+    parser.add_argument('--target',
+                        default = '',
+                        type    = str,
+                        help    = 'Path to where jobs will be submitted from')
+
+    def parse_elems(x:str)->List[int]:
+        if x == 'all': return allelems
+        else:          return list(map(int, x.split()))
+
+    parser.add_argument('--elems',
+                        default = '',
+                        type    = parse_elems,
+                        help    = 'Either "all" or space separated list of positive integers')
+
     args = parser.parse_args()
     assert bool(args.src) ^ bool(args.elems), "Must be submiting Bulk or Atomic jobs"
     assert args.target,                       "Need a target location to submit jobs"

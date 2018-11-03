@@ -1,8 +1,6 @@
 import os
 from ase.io import read,write  # type: ignore
 from ase.eos  import EquationOfState # type: ignore
-import matplotlib # type: ignore
-matplotlib.use('Qt4Agg')
 from pymatgen.io.ase 			import AseAtomsAdaptor 	  # type: ignore
 from pymatgen.symmetry.analyzer import SpacegroupAnalyzer # type: ignore
 

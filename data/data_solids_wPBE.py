@@ -1353,24 +1353,33 @@ def get_solid_bulk_gpaw_convergence(name:str, xc:O[str]=None)->list:
 
 def setup_bulk(solid:str, offset:float=0., set_lp:bool=False)->Atoms:
     from ase.build import bulk   # type: ignore
+
     in_data(solid)
+
     symbol = get_solid_symbols(solid)
+
     s = get_solid_crystal_structure(solid)
+
     if set_lp:
         lp = offset
     else:
         lp = get_solid_lattice_parameter(solid) + offset
+
     m = get_solid_magmom(solid)
+
     if s == 'hcp':
         cov = get_hcp_covera(solid)
         atoms = bulk(symbol, s, a=lp, covera=cov)
     else:
-        atoms = bulk(symbol, s, a=lp,orthorhombic = True )
+        atoms = bulk(symbol, s, a=lp, cubic=True )
+
     atoms.set_pbc(True)
+
     if m != None:
         mm = np.zeros(len(atoms))
         mm[:] = m
         atoms.set_initial_magnetic_moments(mm)
+
     return atoms
 
 def write_bulks()->None:
