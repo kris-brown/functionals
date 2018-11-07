@@ -2,17 +2,14 @@
 from typing import Any, Type, TYPE_CHECKING
 
 # Internal Modules
-if TYPE_CHECKING:
-    from dbgen.support.model     import Model
-
-from dbgen.support.get      import (CONST, DESC, INPUT, FUNC, GET, TAGS,
-                                     BASIS, LINKS, AGG, AGGCONST)
-from dbgen.support.expr     import (Expr, IN, AS, AND, GROUP_CONCAT, SUM, COUNT,
-                                     Literal, NOT, NULL, CONCAT, ABS, MIN)
-from dbgen.support.funclike import SimpleFunc, Unpack, SimplePipe
+from dbgen import (Model,CONST, DESC, INPUT, FUNC, GET, TAGS,
+                 BASIS, LINKS, AGG, AGGCONST,
+                 Expr, IN, AS, AND, GROUP_CONCAT, SUM, COUNT,
+                 Literal, NOT, NULL, CONCAT, ABS, MIN,
+                 SimpleFunc, Unpack, SimplePipe)
 
 from functionals.scripts.get_kptden             import get_kptden
-from functionals.scripts.get_kpts_gpaw          import  get_kpts_gpaw
+from functionals.scripts.get_kpts_gpaw          import get_kpts_gpaw
 from functionals.scripts.eos_func               import eos_func
 from functionals.scripts.conventional_lattice   import conventional_lattice
 
@@ -46,6 +43,7 @@ def analysis(mod:Type['Model']) -> None:
                                     / SUM(Species_comp.num))
                               |AS| 'eform')
                     /BASIS/ Expt
+                    /CONST/ NOT(NULL(Job.contribs(Reference.Job))) #Edge case - what if job has an energy but x_contribs failed?
                     /AGG/   Expt
                     /AGGCONST/ (COUNT(Literal(1))==Species.n_elems)
                     /LINKS/ [Species_comp.Species,
@@ -155,12 +153,3 @@ def analysis(mod:Type['Model']) -> None:
                     /CONST/ (Bulk_job.gap == Expt.min_gap)
                     /DESC/  'Populates FK using the data populated by generators '
                             '"gap" and "mingap"')
-
-        ########################################################################
-        # This takes time and really isn't used for anything? nice to have later when not nuking so frequently
-        # sg =                                                                    \
-        #     (Struct.sg ==
-        #         GET /INPUT/ Struct.raw
-        #             /FUNC/  SimplePipe([json_to_traj, get_spacegroup],['raw'],['sg'])
-        #             /CONST/ (Struct.system_type |IN| ["bulk","surface"])
-        #             /DESC/  'Computes spacegroup of a bulk')

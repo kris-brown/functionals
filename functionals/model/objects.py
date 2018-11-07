@@ -2,11 +2,7 @@
 from typing import Any, Type, TYPE_CHECKING
 
 # Internal Modules
-if TYPE_CHECKING:
-    from dbgen.support.model import Model
-
-from dbgen.support.sqltypes  import Int, Varchar, Text, Decimal, Date
-from dbgen.support.object    import DEFAULT, DESC
+from dbgen import Model, Int, Varchar, Text, Decimal, Date, DEFAULT
 
 ################################################################################
 # Add objects and relations
@@ -25,24 +21,24 @@ def add_objects(mod:Type['Model'])->None:
         """
         # Subset of Mendeleev data
         #-------------------------
-        atomic_number           = Int()
-        symbol                  = Varchar()
-        atomic_weight           = Decimal()
+        atomic_number           = Int()      # Number of protons
+        symbol                  = Varchar()  # E.g. He, K, Li
+        atomic_weight           = Decimal()  # Atomic units
         name                    = Varchar()
-        atomic_radius           = Int(),     DESC("Angstrom")
+        atomic_radius           = Int(),     # Angstrom
         phase                   = Varchar()
-        group_id                = Int(),     DESC("Column in periodic table")
-        period                  = Int(),     DESC("Row in periodic table")
-        evaporation_heat        = Decimal(), DESC('kJ/mol')
-        fusion_heat             = Decimal(), DESC('kJ/mol')
-        melting_point           = Decimal(), DESC('K')
-        is_radioactive          = Int(),     DESC('eV')
-        lattice_struct          = Varchar(), DESC("e.g. HEX, SC")
-        econf                   = Varchar(), DESC('electron configuration')
-        heat_of_formation       = Decimal(), DESC('kJ/mol')
-        electron_affinity       = Decimal(), DESC('eV')
-        boiling_point           = Decimal(), DESC('K')
-        proton_affinity         = Decimal(), DESC('kJ/mol')
+        group_id                = Int(),     # Column in periodic table
+        period                  = Int(),     # Row in periodic table
+        evaporation_heat        = Decimal(), # kJ/mol
+        fusion_heat             = Decimal(), # kJ/mol
+        melting_point           = Decimal(), # K
+        is_radioactive          = Int(),     # eV
+        lattice_struct          = Varchar(), # e.g. HEX, SC
+        econf                   = Varchar(), # electron configuration
+        heat_of_formation       = Decimal(), # kJ/mol
+        electron_affinity       = Decimal(), # eV
+        boiling_point           = Decimal(), # K
+        proton_affinity         = Decimal(), # kJ/mol
         en_pauling              = Decimal(),
         pointgroup              = Varchar()
         spacegroup              = Int()
@@ -67,27 +63,30 @@ def add_objects(mod:Type['Model'])->None:
     class Setup_family(model):
         '''Class of Setups that are the same 'type' '''
         name = Varchar()
-        kind = Varchar(),
-        xc   = Varchar(), DESC("XC Functional used to generate")
+        kind = Varchar()
+        xc   = Varchar() #XC Functional used to generate
 
     class Setup(model):
         """
         Pseudopotential
         """
-        checksum = Varchar(), DESC("MD5 hash of fiwle")
-        val = Int(), DESC("number of valence electrons")
+        checksum = Varchar() # MD5 hash of file
+        val      = Int()     # number of valence electrons
 
         _init       = checksum
         _components = Element, Setup_family
 
     class Calc(model):
-        beef    = Int('tiny'), DESC('Whether or not functional is BEEF-style '
-                                    '(i.e. whether or not the coefs attr is meaningful)')
-        coefs   = Text(),      DESC('JSON dumped 8x8 matrix of exchange coefficients '
-                                    ' which defines a functional as a sum of bases')
-        xc      = Varchar(),   DESC("Name of functional")
-        pw      = Int(),       DESC("Planewave cutoff, eV")
-        econv   = Decimal(),   DESC('Energy convergance criterion')
+        ''' Calculator details '''
+        beef    = Int('tiny') # Whether or not functional is BEEF-style
+                              #  (i.e. whether or not the coefs attr is meaningful)
+
+        coefs   = Text()      # JSON dumped 8x8 matrix of exchange coefficients
+                              #  which defines a functional as a sum of bases
+
+        xc      = Varchar()   # Name of functional
+        pw      = Int()       # Planewave cutoff, eV
+        econv   = Decimal()   # Energy convergance criterion
 
         _init = beef, coefs, xc, pw, econv # kx,ky,kz need to change w/ cell size, atomic calculations are spinpol while the bulk jobs we want to compare to are not
 
@@ -113,25 +112,25 @@ def add_objects(mod:Type['Model'])->None:
 
         Composition is a python dictionary mapping atomic number to NORMALIZED stoich
         """
-        composition = Varchar(), DESC('Stringified python dict (ordered, normalized)')
-        symmetry    = Varchar(), DESC('For molecules, pointgroup; '
-                                      'for bulks, Prototype name;'
-                                      'for surfaces, underlying prototype+facet')
-        nickname    = Varchar(), DESC('Human-readable name, ought (but need not) be unique')
-        n_elems     = Int(),     DESC("# of distinct chemical elements in species")
-        n_atoms     = Int(),     DESC("Total # of atoms in normalized stoich")
+        composition = Varchar() # Stringified python dict (ordered, normalized)
+        symmetry    = Varchar() # For molecules, pointgroup;
+                                 # for bulks, Prototype name;
+                                 # for surfaces, underlying prototype+facet
+        nickname    = Varchar() #Human-readable name, ought (but need not) be unique
+        n_elems     = Int() ## of distinct chemical elements in species
+        n_atoms     = Int() #Total # of atoms in normalized stoich
 
         _init = composition, symmetry
 
     class Species_dataset(model):
         """
-
+        Datasets that contain information about chemical species
         """
         dataset_name = Varchar()
 
     class Species_dataset_element(model):
         """
-
+        Datum about a particular species
         """
         property = Varchar()
         value    = Text()
@@ -144,7 +143,7 @@ def add_objects(mod:Type['Model'])->None:
         """
         Mapping table between species and element to show composition
         """
-        num = Int(), DESC('Number of this element in lowest integer terms')
+        num = Int() # Number of this element in lowest integer terms
 
         _parents = Species, Element
 
@@ -154,7 +153,7 @@ def add_objects(mod:Type['Model'])->None:
         """
         prototype  = Varchar()
         spacegroup = Int()
-        free       = Int(),    DESC('Number of free parameters')
+        free       = Int() #Number of free parameters
         nickname   = Varchar()
 
         _init = prototype
@@ -163,9 +162,9 @@ def add_objects(mod:Type['Model'])->None:
         """
         Chemical structure defined in periodic cell
         """
-        raw              = Text(),      DESC('JSON encoding of ASE atoms object')
-        system_type      = Varchar(),   DESC('One of: bulk, molecule, surface')
-        sg               = Int(),       DESC("spacegroup")
+        raw              = Text() #JSON encoding of ASE atoms object
+        system_type      = Varchar() #One of: bulk, molecule, surface
+        sg               = Int() #spacegroup
         composition_norm = Text()
         n_atoms          = Int()
         n_elems          = Int()
@@ -177,21 +176,19 @@ def add_objects(mod:Type['Model'])->None:
         _init       = raw
         _components = Cell, Species, Pure_struct
 
-
     class Job(model):
-        logfile    = Varchar(),    DESC("Path to primary log file")
+        logfile    = Varchar()      # Path to primary log file
         stordir    = Varchar()
-        log        = Text('long'), DESC('Content of primary log file')
-        timestamp  = Date(),       DESC('Unix timestamp on log file')
+        log        = Text('long')   # Content of primary log file
+        timestamp  = Date()         # Unix timestamp on log file
         user       = Varchar()
-        kx         = Int(), DESC('Kpoints in x direction')
-        ky         = Int(), DESC('Kpoints in y direction')
-        kz         = Int(), DESC('Kpoints in z direction')
+        kx,ky,kz   = Int(),Int(),Int() # K-points
         kptden_x   = Decimal()
         kptden_y   = Decimal()
         kptden_z   = Decimal()
-        spinpol    = Int('tiny'), DESC('Whether calculation was spin polarized')
-        contribs   = Text(),      DESC('output exchange contribs, if beef calculation')
+        spinpol    = Int('tiny')   # Whether calculation was spin polarized
+        has_contribs = Int('tiny') # Whether xc_contribs.txt exists
+        contribs   = Text()        # output exchange contribs, if beef calculation
         energy     = Decimal()
 
         _init       = logfile
@@ -205,12 +202,12 @@ def add_objects(mod:Type['Model'])->None:
         """
         An atom, considered within a specific chemical structure
         """
-        ind          = Int(), DESC('ASE atom index')
-        number       = Int(), DESC('Atomic number')
-        x,y,z        = Decimal(), Decimal(), Decimal()
-        constrained  = Int(),     DESC('Whether or not there was a FixAtoms constraint')
-        magmom       = Decimal(), DESC('Units: Bohr')
-        tag          = Int(),     DESC('ASE atom tag')
+        ind          = Int() # ASE atom index
+        number       = Int() # Atomic number
+        x,y,z        = Decimal(), Decimal(), Decimal() # position
+        constrained  = Int()     # Whether or not there was a FixAtoms constraint
+        magmom       = Decimal()  # Units: Bohr
+        tag          = Int()      # ASE atom tag
 
         _init       = ind
         _parents    = Struct,
@@ -222,24 +219,25 @@ def add_objects(mod:Type['Model'])->None:
 
         This should be a bulk calculation
         """
-        n_atoms    = Int(),        DESC("Value for all jobs in this experiment")
-        energy_pa  = Decimal(),    DESC("Per atom, eV")
-        bulkmod    = Decimal(),    DESC("Bulk modulus, GPa")
-        volume_pa  = Decimal(),    DESC("Per atom, A^3")
-        img        = Text('long'), DESC('base64 encoded image of EOS fit')
-        eform      = Decimal(),    DESC("Per atom, eV")
-        lattice    = Decimal(),    DESC("Conventional unit cell lattice (optimized)")
-        n_data     = Int(),        DESC('number of aggregated data points')
-        min_gap    = Decimal(),    DESC('Absolute difference between best singlepoint '
-                                        'volume_pa and the fitted optimum')
-        _init    = n_atoms # want to distinguish fits with different scales b/c DFT isn't perfect
+        n_atoms    = Int()        # Value for all jobs in this experiment
+        energy_pa  = Decimal()    # Per atom, eV
+        bulkmod    = Decimal()    # Bulk modulus, GPa
+        volume_pa  = Decimal()    # Per atom, A^3
+        img        = Text('long') # base64 encoded image of EOS fit
+        eform      = Decimal()    # Per atom, eV
+        lattice    = Decimal()    # Conventional unit cell lattice (optimized)
+        n_data     = Int()        # Number of aggregated data points
+        min_gap    = Decimal()    # Absolute difference between best singlepoint
+                                   # volume_pa and the fitted optimum
+
+        _init    = n_atoms       # distinguish fits with different scales b/c DFT isn't perfect
         _parents = Species, Calc
 
     class Bulk_job(model):
         """
         A subset of jobs which have a many-one relationship linking jobs to an experiment
         """
-        gap = Decimal(), DESC("Absolute difference in volume from 'minimum'")
+        gap = Decimal() # Absolute difference in volume from 'minimum'
 
         _init       = ()
         _components = Expt
@@ -259,15 +257,15 @@ def add_objects(mod:Type['Model'])->None:
         """
         Data that are relevant to fitting BEEF coefs using cohesive energy
         """
-        name            = Varchar(),    DESC("Species nickname")
-        coefs           = Text('long'), DESC('Calc Coefs')
-        composition     = Varchar(),    DESC("Species composition")
-        atomic_contribs = Text('long'), DESC("Serialized dict of relevant reference info")
-        atomic_energies = Text(),       DESC("Serialized dict of relevant reference info")
-        bulk_contribs   = Text('long'), DESC("Best job xc contribs")
-        bulk_energy     = Decimal(),    DESC("Best job energy")
-        target          = Decimal(),    DESC("Experimental cohesive energy")
-        bulk_ratio      = Int(),        DESC("Ratio of bulk system to size of normalized species")
+        name            = Varchar()     # Species nickname
+        coefs           = Text('long')  # Calc Coefs
+        composition     = Varchar()     # Species composition
+        atomic_contribs = Text('long')  # Serialized dict of relevant reference info
+        atomic_energies = Text()        # Serialized dict of relevant reference info
+        bulk_contribs   = Text('long')  # Best job xc contribs
+        bulk_energy     = Decimal()     # Best job energy
+        target          = Decimal()     # Experimental cohesive energy
+        bulk_ratio      = Int()         # Ratio of bulk system to size of normalized species
 
         _init       = ()
         _parents    = Expt
@@ -277,30 +275,38 @@ def add_objects(mod:Type['Model'])->None:
         """
         A fit to some subset of cohesive data + lattice data
         """
+        # Input params
         name      = Varchar()
-        timestamp = Date(),     DESC("Timestamp of fitting")
-        runtime   = Decimal(),  DESC("Duration of fitting, s")
-        result    = Text()
-        basis     = Int(),       DESC('Size of fitted functional')
-        norm      = Decimal(),   DESC('Regularization term')
-        initfit   = Int('tiny'), DESC('If true: initialize with lstsq fit w/o '
-                                        'constraints (else with 0)')
-        bound     = Decimal(),  DESC('Range over which to search for coefficients')
-        maxiter   = Int(),      DESC('Stop nonlinear fitting after this step')
-        constden  = Int(),      DESC("Number of s or alpha points linearly  "
-                                     "constrained between logscale(-2,2) ")
-
-        resid      = Decimal(), DESC('Final value of cost function')
-
+        constconst= Text()      # SQL const on what linear constraints should be included
+        dataconst = Text()      # SQL const on what data should be included
+        basis     = Int()       # Size of fitted functional
+        norm      = Decimal()   # Regularization term
+        initfit   = Int('tiny') # If true: initialize with lstsq fit w/o
+                                # constraints (else with 0)
+        bound     = Decimal()   # Range over which to search for coefficients
+        maxiter   = Int()       # Stop nonlinear fitting after this step
+        constden  = Int()       # Number of s or alpha points linearly
+                                # constrained between logscale(-2,2)
+        # Intermediate computation
+        raw_data  = Text('long')
+        raw_const = Text('long')
+        # Result params
+        timestamp = Date()       # Timestamp of fitting
+        runtime   = Decimal()    # Duration of fitting, s
+        resid     = Decimal()    # Final value of cost function
+        c_viol    = Decimal()    # Final value of constraint violation
+        result    = Text()       # Flattened NxN fitted coefficients
+        log       = Text('long') # output from fitting
+        err       = Text()       # Error during scipy.minimize()
         _init = name
 
     class Fit_step(model):
         '''
         A single iteration in a fitting process
         '''
-        niter  = Int(),     DESC("Iteration number")
-        cost   = Decimal(), DESC("Objective function cost")
-        c_viol = Decimal(), DESC("Constraint cost")
+        niter  = Int()     # Iteration number
+        cost   = Decimal() # Objective function cost
+        c_viol = Decimal() # Constraint cost
 
         _init    = niter
         _parents = Fit
@@ -315,12 +321,12 @@ def add_objects(mod:Type['Model'])->None:
         '''
         Put a linear constraint (LT/GT/EQ) to Fx(s,a)
         '''
-        const_name  = Varchar(), DESC('Name of constraint')
-        description = Text(),    DESC("Description of constraint ")
-        val         = Decimal(), DESC('Value of Fx(s,alpha)')
-        kind        = Varchar(), DESC("GT/LT/EQ")
-        s           = Decimal(), DESC("If valid only for particular s, else None")
-        alpha       = Decimal(), DESC("If valid only for particular alpha, else None")
+        const_name  = Varchar() # Name of constraint
+        description = Text()    # Description of constraint
+        val         = Decimal() # Value of Fx(s,alpha)
+        kind        = Varchar() # GT/LT/EQ
+        s           = Decimal() # If valid only for particular s, else None
+        alpha       = Decimal() # If valid only for particular alpha, else None
 
         _init = const_name
 

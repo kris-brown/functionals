@@ -1,6 +1,6 @@
 from typing      import List,Tuple
-from os          import environ,listdir
-from os.path     import join,getmtime
+from os          import environ,listdir,mkdir
+from os.path     import join,getmtime,exists
 from json        import load,dumps
 from datetime    import datetime # type: ignore
 #############################################################################
@@ -38,9 +38,14 @@ def parse_fits()->Tuple[List[int],List[int],List[float]]:
 
         return name,resid,runtime,dumps(x),time,base,norm,ifit,bound,maxiter,cden
 
-    output = map(process,listdir(root))
-    names,resids,runtimes,xs,times,bases,norms,ifits,bounds,maxiters,cdens,\
-        niter,obj,cviol = map(list,zip(*output))
+    # MAIN #
+    ########
+    if not exists(root):
+        mkdir(root)
+    else:
+        output = map(process,listdir(root))
+        names,resids,runtimes,xs,times,bases,norms,ifits,bounds,maxiters,cdens,\
+             = map(list,zip(*output))
 
     return names,resids,runtimes,xs,times,bases,norms,ifits,bounds,maxiters,cdens # type: ignore
 

@@ -1,20 +1,14 @@
 # External Modules
-from typing     import Any, Type, Tuple, List, TYPE_CHECKING, Callable as C
+from typing     import Any, Type, Tuple, List, Callable as C
 from re         import search
 from ase.data   import chemical_symbols # type: ignore
 from ast        import literal_eval
 
 # Internal Modules
-if TYPE_CHECKING:
-    from dbgen.support.model     import Model
-
-from dbgen.support.get      import (CONST, DESC, INPUT, FUNC, CONSTS,
-                                    GET, TAGS, BASIS, LINKS, IO, OPTION, AGG,
-                                    AGGCONST)
-from dbgen.support.funclike import (SimpleFunc, PyBlock, noIndex,
-                                    Unpack, SimplePipe)
-
-from dbgen.support.expr import AS,AND
+from dbgen import (Model, CONST, DESC, INPUT, FUNC, CONSTS,
+                    GET, TAGS, BASIS, LINKS, IO, OPTION, AGG,
+                    AGGCONST, SimpleFunc, PyBlock, noIndex,
+                    Unpack, SimplePipe, AS,AND)
 
 from functionals.scripts.find_setups       import find_setups
 from functionals.scripts.anytraj           import  anytraj
@@ -51,7 +45,7 @@ def species_nick(comp:str, sym:str)->str:
 
 def eng(s:str)->float:
     '''Parse the result free energy from a GPAW logfile'''
-    pat = r'Free energy:\s+(-?\d+\.\d+)'
+    pat = r'Free energy:\s+([-+]?\d+\.\d+)'
     match = search(pat, s); assert match
     return float(match.groups()[0])
 ##############################################################################
@@ -85,14 +79,19 @@ def load(mod:Type['Model'])->None:
                     /FUNC/  (lambda x: nick_dict.get(x))
                     /TAGS/  ['species']
                     /DESC/  'Use a dict to map nicknames to some Pure structs')
+
         ########################################################################
+
         struct =                                                               \
             ((Job.Struct, Struct) ==
                 GET /INPUT/ Job.stordir
                     /FUNC/  anytraj
                     /DESC/  '''Assumes there's only one traj in the directory''')
+
         ########################################################################
+
         jobeng = Job.energy == GET /INPUT/ Job.log /FUNC/ eng
+
         jobmetadata =                                                           \
             ((Job.user, Job.timestamp) ==
                 GET /INPUT/ Job.stordir
@@ -100,6 +99,7 @@ def load(mod:Type['Model'])->None:
                     /DESC/ 'Scrape metadata about job')
 
         ########################################################################
+
         atomdetails = ['number','x','y','z','constrained','magmom','tag']
         atom =                                                                  \
             ((Atom, Atom.Element, Atom.select(atomdetails)) ==
@@ -110,6 +110,7 @@ def load(mod:Type['Model'])->None:
                     /DESC/  'Initializes atoms from knowing n_atoms')
 
         ########################################################################
+
         elems =                                                                 \
             (Element ==
                 GET /FUNC/ (lambda:list(range(1,100)))
@@ -117,6 +118,7 @@ def load(mod:Type['Model'])->None:
 
 
         ########################################################################
+
         cell =                                                                  \
             ((Cell, Struct.Cell)
                 == GET /INPUT/ Struct.raw
@@ -184,7 +186,7 @@ def load(mod:Type['Model'])->None:
         ########################################################################
         def sum_values(x:str)->int:
             return sum(dict(literal_eval(x)).values())
-            
+
         species_natoms =                                                        \
             (Species.n_atoms ==
                 GET /INPUT/ Species.composition

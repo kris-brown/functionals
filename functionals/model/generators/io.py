@@ -4,14 +4,10 @@ from os         import environ
 from os.path    import exists, join
 
 # Internal Modules
-if TYPE_CHECKING:
-    from dbgen.support.model     import Model
-
-from dbgen.support.get      import (CONST, DESC, INPUT, FUNC, CONSTS,
-                                    GET, TAGS, BASIS, LINKS, IO, OPTION, AGG,
-                                    AGGCONST)
-from dbgen.support.funclike import (SimpleFunc, PyBlock, noIndex,
-                                    Unpack, SimplePipe)
+from dbgen import (Model, CONST, DESC, INPUT, FUNC, CONSTS,
+                    GET, TAGS, BASIS, LINKS, IO, OPTION, AGG,
+                    AGGCONST, AND, SimpleFunc, PyBlock, noIndex,
+                    Unpack, SimplePipe)
 
 from functionals.scripts.parse_setup       import parse_setup
 from functionals.scripts.get_stray_gpaw    import  get_stray_gpaw
@@ -130,7 +126,13 @@ def io(mod:Type['Model'])->None:
                     /FUNC/   calc_plan
                     /DESC/   'Populate calc table + F.K. from Relax_job')
         ########################################################################
+        has_contribs =                                                          \
+            (Job.has_contribs ==
+                GET /INPUT/ Job.stordir
+                    /FUNC/ (lambda x: exists(xcpath(x)))
+                    /CONST/ (Calc.xc == 'mBEEF'))
+
         contribs =                                                              \
             (Job.contribs == GET /INPUT/ Job.stordir
                              /FUNC/ (lambda x: readfile(xcpath(x)))
-                             /CONST/ (Calc.xc == 'mBEEF'))
+                             /CONST/ Job.has_contribs)
