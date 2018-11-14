@@ -1,33 +1,27 @@
-# External Modules
-from os     import environ
-
-from dbgen.core.parsing           import parser
-from dbgen.support.misc           import ConnectInfo
-from functionals.model            import make_model
+# Internal Modules
+from dbgen              import parser, ConnectInfo
+from functionals.model  import make_model
 """
-Work in progress
-
-Preliminary sketches for a DB to be used in association with functional
-development
-
+Run the model defined in /functionals/model
 """
 ################################################################################
 
+root = '/Users/ksb/Documents/JSON/'
 
-
-def main()->None:
+def main(args:dict)->None:
     """
     Run the model with no extensions from command line.
     """
-    args = parser.parse_args()
+
     m    = make_model()
-    db   = ConnectInfo.from_file('/Users/ksb/Documents/JSON/functionals.json')
-    mdb  = ConnectInfo.from_file('/Users/ksb/Documents/JSON/functionals_log.json')
+    db   = ConnectInfo.from_file(root+'functionals.json')
+    mdb  = ConnectInfo.from_file(root+'functionals_log.json')
 
-    only,xclude = [set(x.split()) for x in [args.only,args.xclude]]
+    for x in ['only','xclude']:
+        args[x] = set(args[x].split())
 
-    m._run(db, mdb, nuke=args.nuke, add=args.add, retry=args.retry, only=only,
-          xclude=xclude, start=args.start, until=args.until)
+    m._run(db, mdb, **args)
 
 if __name__=='__main__':
-    main()
+    args = parser.parse_args()
+    main(vars(args))

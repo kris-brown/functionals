@@ -1,5 +1,5 @@
 # External modules
-from typing import List,Tuple,TypeVar,Callable as C, Optional as O
+from typing import List as L,Dict,Any,Tuple as T,TypeVar,Callable as C, Optional as O
 from numpy import zeros,array                        # type: ignore
 from numpy.polynomial.legendre import Legendre # type: ignore
 import numpy as np  # type: ignore
@@ -84,35 +84,33 @@ def coefFunc(x:array)->Binary:
     return enhancement
 
 ########################
-def corner(n:int)->List[int]:
+def corner(n:int)->L[int]:
     """
     List of indices in a flattened 8x8 matrix ([00,01,02,...07,10,11,...77])
     that correspond to the upper right corner of size n
     """
     return [x for x in range(8**2) if  x % 8 < n and x < 8*n]
 
-def not_corner(n:int)->List[int]:
+def not_corner(n:int)->L[int]:
     """Opposite of corner"""
     return [i for i in range(8**2) if i not in corner(n)]
 
 ###################
-def flatten(lol: List[List[A]])->List[A]:
+def flatten(lol: L[L[A]])->L[A]:
     """Convert list of lists to a single list via concatenation"""
     return [item for sublist in lol for item in sublist]
 
-
-
 def lst_sq_pulp(A      : np.array,
-                   b      : np.array,
-                   bounds : List[Tuple[float,float]],
-                   A_eq   : O[np.array] = None,
-                   b_eq   : O[np.array] = None,
-                   A_ub   : O[np.array] = None,
-                   b_ub   : O[np.array] = None,
-                   maxiter: int   = 1000,
-                   tol    : float = .01,
-                   verbose: bool  = True
-                   ) -> np.array:
+               b      : np.array,
+               bounds : L[T[float,float]],
+               A_eq   : O[np.array] = None,
+               b_eq   : O[np.array] = None,
+               A_ub   : O[np.array] = None,
+               b_ub   : O[np.array] = None,
+               maxiter: int   = 1000,
+               tol    : float = .01,
+               verbose: bool  = True
+               ) -> np.array:
     from pulp import LpVariable,LpProblem,LpMinimize,LpSolverDefault,lpDot,value # type: ignore
 
     n,m  = A.shape
@@ -153,7 +151,7 @@ def lst_sq_pulp(A      : np.array,
 ##################
 def lst_sq_linprog(A      : np.array,
                    b      : np.array,
-                   bounds : List[Tuple[float,float]],
+                   bounds : L[T[float,float]],
                    A_eq   : O[np.array] = None,
                    b_eq   : O[np.array] = None,
                    A_ub   : O[np.array] = None,
@@ -224,8 +222,6 @@ def lst_sq_linprog(A      : np.array,
             options['tol']*=2
             print('tol = %f'%options['tol'])
             pass
-
-
     ans.x = ans.x[:-1] # discard the dummy value
     return ans
-#########
+#################################################################################

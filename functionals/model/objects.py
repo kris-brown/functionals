@@ -14,6 +14,13 @@ def add_objects(mod:Type['Model'])->None:
     ###############
     # Job related #
     ###############
+    class Globals(model):
+        '''Properties of entire database. There will be just one row'''
+        all_data            = Text('long') # All cohesive data
+        all_constraints     = Text('long') # All linear constraints
+        all_nlconstraints   = Text('long') # All nonlinear constraints
+
+        _init = ()
 
     class Element(model):
         """
@@ -162,9 +169,8 @@ def add_objects(mod:Type['Model'])->None:
         """
         Chemical structure defined in periodic cell
         """
-        raw              = Text() #JSON encoding of ASE atoms object
-        system_type      = Varchar() #One of: bulk, molecule, surface
-        sg               = Int() #spacegroup
+        raw              = Text()    # JSON encoding of ASE atoms object
+        system_type      = Varchar() # One of: bulk, molecule, surface
         composition_norm = Text()
         n_atoms          = Int()
         n_elems          = Int()
@@ -206,8 +212,8 @@ def add_objects(mod:Type['Model'])->None:
         number       = Int() # Atomic number
         x,y,z        = Decimal(), Decimal(), Decimal() # position
         constrained  = Int()     # Whether or not there was a FixAtoms constraint
-        magmom       = Decimal()  # Units: Bohr
-        tag          = Int()      # ASE atom tag
+        magmom       = Decimal() # Units: Bohr
+        tag          = Int()     # ASE atom tag
 
         _init       = ind
         _parents    = Struct,
@@ -223,6 +229,10 @@ def add_objects(mod:Type['Model'])->None:
         energy_pa  = Decimal()    # Per atom, eV
         bulkmod    = Decimal()    # Bulk modulus, GPa
         volume_pa  = Decimal()    # Per atom, A^3
+        all_vols   = Text('long') # every volume of the related bulk jobs
+        volumes    = Text('long') # volumes of the 5 most optimal jobs
+        energies   = Text('long') # energies of the 5 most optimal jobs
+        contribs   = Text('long') # exchange contribs of the 5 most optimal jobs
         img        = Text('long') # base64 encoded image of EOS fit
         eform      = Decimal()    # Per atom, eV
         lattice    = Decimal()    # Conventional unit cell lattice (optimized)
@@ -237,7 +247,9 @@ def add_objects(mod:Type['Model'])->None:
         """
         A subset of jobs which have a many-one relationship linking jobs to an experiment
         """
-        gap = Decimal() # Absolute difference in volume from 'minimum'
+        dv  = Decimal() # Difference in volume from 'minimum'
+        gap = Decimal() # Abs(dv)
+        near_min = Int('tiny') # Whether or not job is in the bottom 5 data points
 
         _init       = ()
         _components = Expt
@@ -253,19 +265,24 @@ def add_objects(mod:Type['Model'])->None:
         _parents    = Job
         _components = Calc, Element
 
-    class Cohesive_data(model):
+    class Dft_data(model):
         """
         Data that are relevant to fitting BEEF coefs using cohesive energy
         """
-        name            = Varchar()     # Species nickname
-        coefs           = Text('long')  # Calc Coefs
-        composition     = Varchar()     # Species composition
-        atomic_contribs = Text('long')  # Serialized dict of relevant reference info
-        atomic_energies = Text()        # Serialized dict of relevant reference info
-        bulk_contribs   = Text('long')  # Best job xc contribs
-        bulk_energy     = Decimal()     # Best job energy
-        target          = Decimal()     # Experimental cohesive energy
-        bulk_ratio      = Int()         # Ratio of bulk system to size of normalized species
+        name                 = Varchar()     # Species nickname
+        coefs                = Text('long')  # Calc Coefs
+        composition          = Varchar()     # Species composition
+        atomic_contribs      = Text('long')  # Serialized dict of relevant reference info
+        atomic_energies      = Text()        # Serialized dict of relevant reference info
+        bulk_contribs        = Text('long')  # Best job xc contribs
+        bulk_energy          = Decimal()     # Best job energy
+        expt_cohesive_energy = Decimal()     # Experimental cohesive energy
+        expt_bm              = Decimal()     # Experimental bulk modulus
+        expt_volume          = Decimal()     # Experimental volume of reference stoichiometry
+        energy_vector        = Text('long')  # JSON'd vector of 5 energies
+        volume_vector        = Text('long')  # JSON'd vector of 5 volumes
+        contrib_vector       = Text('long')  # JSON'd 5x64 matrix with exchange contributions
+        bulk_ratio           = Int()         # Ratio of bulk system to size of normalized species
 
         _init       = ()
         _parents    = Expt
@@ -276,28 +293,40 @@ def add_objects(mod:Type['Model'])->None:
         A fit to some subset of cohesive data + lattice data
         """
         # Input params
-        name      = Varchar()
-        constconst= Text()      # SQL const on what linear constraints should be included
-        dataconst = Text()      # SQL const on what data should be included
-        basis     = Int()       # Size of fitted functional
-        norm      = Decimal()   # Regularization term
-        initfit   = Int('tiny') # If true: initialize with lstsq fit w/o
-                                # constraints (else with 0)
+        name         = Varchar()
+        bm_weight    = Decimal()   # Relative weight of bulk-modulus data to cohesive energy
+        lat_weight   = Decimal()   # Relative weight of lattice data to cohesive energy
+        constconst   = Text()      # SQL const on what linear constraints should be included
+        nlconstconst = Text()      # SQL const on what linear constraints should be included
+        dataconst    = Text()      # SQL const on what data should be included
+        basis        = Int()       # Size of fitted functional
+        initfit      = Int('tiny') # If true: initialize with lstsq fit w/o
+                                    # constraints (else with 0)
         bound     = Decimal()   # Range over which to search for coefficients
         maxiter   = Int()       # Stop nonlinear fitting after this step
         constden  = Int()       # Number of s or alpha points linearly
                                 # constrained between logscale(-2,2)
         # Intermediate computation
-        raw_data  = Text('long')
-        raw_const = Text('long')
+        raw_data    = Text('long') # Data to be fed to fitting script
+        raw_const   = Text('long') # Data to be fed to fitting script
+        raw_nlconst = Text('long') # Data to be fed to fitting script
+        n_const     = Int(),DEFAULT(0)  # Number of constraints
+        n_data      = Int(),DEFAULT(0)  # Number of data points
+        n_nlconst   = Int(),DEFAULT(0)  # Number of nonlinear constraints
+
         # Result params
         timestamp = Date()       # Timestamp of fitting
         runtime   = Decimal()    # Duration of fitting, s
-        resid     = Decimal()    # Final value of cost function
-        c_viol    = Decimal()    # Final value of constraint violation
+        r2_ce     = Decimal()    # R2 fit of cohesive energies
+        r2_bm     = Decimal()    # R2 fit of bulk moduli
+        r2_lat    = Decimal()    # R2 fit of lattice constants
+        c_viol    = Decimal()
+        score     = Decimal()    # Arbitrary combination of R2's and c_viol
         result    = Text()       # Flattened NxN fitted coefficients
-        log       = Text('long') # output from fitting
+        log       = Text('long') # Output from fitting
         err       = Text()       # Error during scipy.minimize()
+        beefdist  = Decimal()    # Score for cartesian distance btw output and BEEF
+
         _init = name
 
     class Fit_step(model):
@@ -315,7 +344,7 @@ def add_objects(mod:Type['Model'])->None:
         '''
         Mapping table specifying which Cohesive_data was used in a given fit
         '''
-        _parents = Fit, Cohesive_data
+        _parents = Fit, Dft_data
 
     class Const(model):
         '''
@@ -335,3 +364,26 @@ def add_objects(mod:Type['Model'])->None:
         Mapping table to denote which constraints were used in a given fit
         '''
         _parents = Fit, Const
+
+    class Nonlin_const(model):
+        '''
+        Nonlinear constraints
+        '''
+        nlconst_name = Varchar() # Name of nonlinear constraint
+        description  = Text()    # Description of nonlinear constraint
+        f            = Text()    # Source code for nonlin function to be minimized
+                                  # expecting an 'x' input vector
+        df           = Text()    # Source code for derivative of f
+                                  # expecting an 'x' input vector
+        hess         = Text()    # Source code for hessian of  f
+                                  # expecting an 'x' input vector
+        lb           = Decimal() # Lower bound
+        ub           = Decimal() # Upper bound
+
+        _init = nlconst_name
+
+    class Fit_nonlin_const(model):
+        '''
+        Mapping table to denote which constraints were used in a given fit
+        '''
+        _parents = Fit, Nonlin_const

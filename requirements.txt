@@ -9,3 +9,4 @@ mysqlclient
 pathos
 pymatgen
 plotly
+sklearn

@@ -1,148 +1,227 @@
 # External
-from typing import Tuple, Dict, List, Callable, Any, Optional as O
-from abc import ABCMeta,abstractmethod
-from time import time
-import numpy as np # type: ignore
-from scipy.optimize import minimize,Bounds,BFGS,LinearConstraint,NonlinearConstraint,linprog # type: ignore
-# Internal Modules
-from functionals.fit.functional import FromMatrix,beefcoeff
-from functionals.fit.constraint import Constraint,MergedConstraint
-from functionals.fit.data       import Data
-from functionals.fit.utilities  import corner,flatten,lst_sq_linprog,lst_sq_pulp
+from typing    import Dict as D, List as L, Tuple as T, Any, Optional as O
+from ast        import literal_eval
+from time       import time
+from json       import dumps
+from io         import StringIO
+from contextlib import redirect_stdout
+from traceback  import format_exc
+from contextlib import contextmanager
 
+import sys
+
+from scipy.optimize import minimize,Bounds,LinearConstraint,NonlinearConstraint # type: ignore
+from numpy          import array,logspace,inf,vstack,zeros  # type: ignore
+from numpy.linalg   import lstsq                            # type: ignore
+import warnings; warnings.filterwarnings("ignore")
+from sklearn.linear_model import LinearRegression           # type: ignore
+
+# Internal
+from functionals.fit.utilities import LegendreProduct
+from dbgen import flatten
+from functionals.fit.data import process_data,weight
+
+'''
+
+Try "keep_feasible" = True???
+'''
 ################################################################################
-class Fit(metaclass=ABCMeta):
+
+
+
+class Fit(object):
     """
     Fit a <n x n> matrix of coefficients corresponding to Legendre polynomial
     basis functions to DFT data + constraints
     """
 
-    @abstractmethod
-    def solve(self,*args:Any,**kwargs:Any)->np.array:
-        raise NotImplementedError
+    def __init__(self,
+                 data           : str,
+                 constraints    : str,
+                 nlconstraints  : str,
+                 maxit          : int,
+                 n              : int,
+                 bound          : float,
+                 ifit           : bool,
+                 gridden        : int,
+                 bm_weight      : float,
+                 lat_weight     : float
+                 ) -> None:
 
-    def __init__(self,n:int,data:List[Data],constraints:List[Constraint],bound:float=0.1)->None:
-        self.n = n; self.constraints = constraints; self.bound = bound
-        self.data       = Data.merge(data);
-        self.constraint = MergedConstraint(constraints)
+        self.data = data; self.constraints = constraints;
+        self.nlconstraints = nlconstraints; self.maxit = maxit; self.n = n;
+        self.bound = bound; self.ifit = ifit;
+        self.gridden = gridden;
 
-        # Will get computed only once and stored here
-        self._res    = None # type: O[np.array]
-        self.weights = None # type: O[np.array]
-        self.runtime = 0.0
+        self.options = dict( verbose                  = 3,
+                             disp                     = True,
+                             maxiter                  = maxit,
+                             xtol                     = 1e-10,
+                             barrier_tol              = 1e-10,
+                             gtol                     = 1e-10,
+                             initial_tr_radius        = 1.0,
+                             initial_constr_penalty   = 1.0,
+                             initial_barrier_parameter= 0.1)
 
-    def trivial(self)->List[LinearConstraint]:
-        """Make a trivial constraint (Solver fails if there are NO constriants)"""
-        return [LinearConstraint([0] * self.n ** 2,[0],[0])]
+        self.c_A,self.c_lb,self.c_ub =                                          \
+            self.process_constraints(self.constraints,n,gridden)
+        self.nl   = self.process_nlconstraints(self.nlconstraints)
+        self.zero = zeros(self.n**2)
+        self.X0,self.X1,self.X2,self.Y0,self.Y1,self.Y2 = \
+            process_data(self.eval_sql_dict(self.data),n)
+        self.X, self.Y = weight(bm_weight,lat_weight,
+                                (self.X0,self.X1,self.X2,self.Y0,self.Y1,self.Y2))
 
-    def spaghetti(self)->np.array:
-        #Effective number of degrees of freedom gives a scale of the ensemble
-        #temperature T something to play with, controls the Spaghetti spread
-        #----------------------------------------------------------------------
-        Ndeg = 2.5                          # Equation 8 (for actual formula)
-        min_cost = 0.5 * np.sum(self.functional().resid(self.data)[0]**2)     # Equation 9
-        T   = 2. * min_cost / Ndeg          # Equation 11b
-        A   = np.dot(self.data.x.T,self.data.x) / T
-        l,U = np.linalg.eigh(A)
-        L   = np.diag(1./np.sqrt(l))
-        M   = np.dot(U,L)  # ensemble information
-        return M
+    @classmethod
+    def process_constraints(cls, cons : str, n : int = 8, gridden : int = 5
+                            ) -> T[array,array,array]:
+        '''
+        Convert linear constraints into a coef matrix + upper/lower bound arrays
+        '''
+        constraints = cls.eval_sql_dict(cons)
+        keys = ['s','alpha','val','kind']
+        grid = logspace(-2,2,gridden).tolist()
+        coefs,lo,hi = [],[],[] # type: T[list,list,list]
 
-    def functional(self,name:str='Fit',maxiter:int=1000,verbose:bool=True)->FromMatrix:
-        x = self.solve(maxiter=maxiter,verbose=verbose).reshape((self.n,self.n))
-        print('fitted coeffs = ',x)
-        return FromMatrix(x,name=name)
+        for s_,a_,val_,kind in [map(c.get,keys) for c in constraints]:
+            val    = float(val_) # type: ignore
+            srange = [float(s_)] if s_ else grid
+            arange = [float(a_)] if a_ else grid
+            if   kind == 'eq': lo_,hi_ = val, val
+            elif kind == 'lt': lo_,hi_ = -inf, val
+            elif kind == 'gt': lo_,hi_ = val, inf
+            else: raise ValueError
 
-class LinFit(Fit):
-    """
-    Use linear programming (no regularization possible)
-    See "Example: 1-norm approximation" in the cvxopt user guide
+            for s in srange:
+                for a in arange:
+                    lo.append(lo_); hi.append(hi_)
+                    coefs.append(flatten([[LegendreProduct(s,a,i,j)
+                                            for j in range(n)]
+                                                for i in range(n)]))
+        c_A, c_lb, c_ub =  map(array,[coefs, lo, hi])
+        return c_A,c_lb,c_ub
 
-    """
-    def solve(self,maxiter:int=1000,verbose:bool=True)->Tuple[np.array,float]: # type: ignore
-        """"""
-        if self._res == None:
-            start = time()
-            # Solve
-            #-----
-            n2 = self.n**2
+    @classmethod
+    def process_nlconstraints(cls, nlconstraints : str) -> list:
+        nonlinconsts = []
+        for d in cls.eval_sql_dict(nlconstraints):
+            kwargs = dict(fun  = lambda x: eval(d['f']),
+                          lb   = d['lb'],
+                          ub   = d['ub'],
+                          jac  = lambda x: eval(d['df']),
+                          hess = lambda x,y: eval(d['hess']))
+            nonlinconsts.append(NonlinearConstraint(**kwargs))
+        return nonlinconsts
 
-            A = self.data.A(n2)
-            b = self.data.target
-            bounds    = [(0.,2.)]+[(-self.bound,self.bound)]*(n2-1)
-            A_eq,b_eq,A_ub,b_ub = self.constraint.linprog_matrices(self.n)
+    def fit_result(self)->T[O[str],float,O[int],O[str],str]:
 
-            self._res = lst_sq_linprog(A=A,b=b,bounds=bounds,A_eq=A_eq,b_eq=b_eq,
-                                       A_ub=A_ub,b_ub=b_ub,verbose=verbose,
-                                       maxiter=maxiter)
+        #--------------------
+        redir = StringIO()
+        t     = time()
 
-            self.weights = self._res.x # type: np.array
-            self.runtime = int(time()-start)
+        # Generate initial guess
+        #------------------------
+        x0 = lstsq(self.X,self.Y,rcond=None)[0] if self.ifit else self.zero
 
-        return self.weights # type: ignore
+        try:
+            with redirect_stdout(redir):
+                res = self.fit(x0)
+            dt = int(res.execution_time); x = dumps(res.x.tolist())
+            return (redir.getvalue(), t, dt, x, '')
 
-class NonLinFit(Fit):
-    """
-    Data + constraints, sufficient info to solve fitting problem
-    """
-    def __init__(self, n : int, data : List[Data],
-                 constraints : List[Constraint],
-                 bound: float = .1, norm : float = 0.1,
-                 initfit : bool = True) -> None:
-        self.norm = norm ; self.initfit = initfit
-        super().__init__(n,data,constraints,bound)
+        except:
+            return None,t,None,None,format_exc()
 
-    def solve(self, maxiter:int=1000,verbose : bool = True) -> np.array: # type: ignore
-        """
-        Find optimal (constrained) coefficients and store in the _res field
+    def fit(self, guess : array) -> Any:
+        '''
+        Fit a functional
+        '''
 
-        initfit - If true, make initial guess the result of the least squares
-                  solution
-        """
-        if self._res == None:
-            start = time()
-            # General solver inputs
-            #----------------------
-            if self.initfit:
-                x0 = self.data.linreg(self.n)[0] # least square fit, ignore constraints
-            else:
-                x0 = np.zeros(self.n**2)
+        n2m1   = self.n**2 - 1
+        bounds = Bounds([0.] + [-self.bound] * n2m1, [2.] + [self.bound] * n2m1)
+        cons   = [LinearConstraint(self.c_A, self.c_lb, self.c_ub, keep_feasible = False)] \
+                        if len(self.c_lb) else []
 
-            n2m1 = self.n ** 2 - 1
+        return minimize(self.f, guess, method = 'trust-constr', jac = self.df,
+                        constraints = cons + self.nl, hess = self.hess,
+                        bounds = bounds, options = self.options)
 
-            bounds    = Bounds([0.]+[-self.bound] * n2m1, [2.]+[self.bound] * n2m1)
+    def constr_violation(self,x:array)->float:
+        class DummyFile(object):
+            def write(self, x:str)->None: pass
 
-            if self.constraints:
-                cons = MergedConstraint(self.constraints).make(self.n) #flatten([c.make(self.n) for c in self.constraints])
-            else:
-                cons = self.trivial()
+        @contextmanager # type: ignore
+        def nostdout()->None:
+            save_stdout = sys.stdout
+            sys.stdout = DummyFile() #type: ignore
+            yield
+            sys.stdout = save_stdout
+        with nostdout():
+            res = self.fit(x)
+        return res.constr_violation
 
-            options   = {'verbose'                  : 3 if verbose else 0,
-                         'disp'                     : verbose,
-                         'maxiter'                  : maxiter,
-                         'xtol'                     : 1e-10,
-                         'barrier_tol'              : 1e-10,
-                         'gtol'                     : 1e-10,
-                         'initial_tr_radius'        : 1.0,
-                         'initial_constr_penalty'   : 1.0,
-                         'initial_barrier_parameter': 0.1}
+    def resid(self,x:array,kind:str)->array:
+        '''Return Residual'''
+        assert kind in ['ce','bm','lat']
+        d = dict(ce=(self.X0,self.Y0),bm=(self.X1,self.Y1),lat=(self.X2,self.Y2))
+        X,Y = d[kind]
+        return X@x - Y
 
-            # unpack objective function and derivatives from Data
-            f, df, hess = self.data.obj(), self.data.jac(), self.data.hes()
-            # functions for normalization
-            def norm(x:np.array)->float: return x @ x
-            def norm_grad(x:np.array)->np.array:
-                """ d(XiXi)/d(Xj) = 2 Xi d(Xi)/d(Xj) = 2 Xj"""
-                return 2 * x
-            def norm_hess(x:np.array,_:np.array)->np.array:
-                return np.zeros(len(x))
-            norm = NonlinearConstraint(norm,[0],[self.norm],jac=norm_grad,hess=norm_hess)
+    def r2(self,x:array,kind:str)->float:
+        '''Return Residual'''
+        assert kind in ['ce','bm','lat']
+        d = dict(ce=(self.X0,self.Y0),bm=(self.X1,self.Y1),lat=(self.X2,self.Y2))
+        X,Y =  d[kind]
+        a,b = (X@x).reshape((-1,1)),Y.reshape((-1,1))
 
-            # Calculate
-            self._res = minimize(f, x0, method = 'trust-constr', jac = df,
-                                 constraints = [cons,norm], hess = hess,
-                                 bounds = bounds, options = options)
+        reg = LinearRegression().fit(a, b)
+        return reg.score(a, b)
 
-            self.weights = self._res.x
-            self.runtime = int(time()-start)
-        return self.weights
+    # Objective function and its derivatives
+    #---------------------------------------
+    def f(self, x : array) -> float:
+        """Objective function for optimization: sum of squares of residual"""
+        resid = self.X @ x - self.Y
+        return resid @ resid
+
+    def df(self, x:array)->array:
+        """Jacobian of objective function (derived below in Einstein notation)"""
+        residual = self.X @ x - self.Y
+        return 2 * self.X.T @ residual
+
+    def hess(self,_:array) -> array: return self.zero # hessian is a constant
+
+    @staticmethod
+    def eval_sql_dict(x:str)->list:
+        def invert_dict(x:D[str,L]) -> L[D[str,Any]]:
+            '''A dict of lists turned into a list of dicts'''
+            tup_to_dict = lambda tup: dict(zip(x.keys(),tup))
+            tuples      = zip(*x.values())
+            return list(map(tup_to_dict,tuples))
+        return invert_dict(literal_eval(x.replace('\n',''))) if x else []
+
+"""
+BONUS
+-----
+
+Derivation of Jacobian in Einstein notation:
+
+        Capital letters = vectors, matrices in [brackets]
+
+        Fi  = residual                                                      --- (DIM: m x 1)
+        Aij = basis function coefficients (cols) for each data point (row)  --- (DIM: m x n)
+        Rj  = vector of weights corresponding to basis functions            --- (DIM: n x 1)
+        Yi  = vector of targets for dot product of rows in Aij and Rj       --- (DIM: m x 1)
+        δij = Kroenecker delta
+
+        let: Fj = [A]ji * Ri - Yj
+        d(Fj)/d(Rk) = [A]ji * d(Ri)/d(Rk) = [A]ji * δik = [A]jk
+
+        d(FjFj)/d(Rk) = 2 * d(Fj)/d(Rk) * Fj
+                      = 2 * [A]jk * Fj
+
+Derivation of constant hessian:
+        To see this, take derivative of jac result w/r/t some Rm:
+
+        d(FjFj)/d(Rk)d(Rm) = 2 * [A]jk * d(Fj)/d(Rm) =  2 * [A]jk * [A]jm
+"""

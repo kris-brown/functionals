@@ -1,0 +1,11 @@
+{
+  "type"   : "line",
+  "query"  : "SELECT beefdist,score,basis FROM fit WHERE score IS NOT NULL",
+  "xcols"  : "beefdist",
+  "ycols"  : "score",
+  "gcols"  : "basis",
+  "title"  : "Beefdist vs score",
+  "xlab"   : "Beefdist",
+  "ylab"   : "Score",
+  "scatter": "True"
+}

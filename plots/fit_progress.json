@@ -1,0 +1,11 @@
+{
+  "type"   : "line",
+  "query"  : "SELECT fit.name,fit_step.niter,fit_step.cost FROM fit JOIN fit_step ON fit_step__fit=fit_id",
+  "xcols"  : "niter",
+  "ycols"  : "cost",
+  "gcols"  : "name",
+  "title"  : "Trivial scatterplot",
+  "xlab"   : "Step",
+  "ylab"   : "Constraint violation",
+  "scatter": "False"
+}

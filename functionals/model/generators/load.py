@@ -10,19 +10,17 @@ from dbgen import (Model, CONST, DESC, INPUT, FUNC, CONSTS,
                     AGGCONST, SimpleFunc, PyBlock, noIndex,
                     Unpack, SimplePipe, AS,AND)
 
-from functionals.scripts.find_setups       import find_setups
-from functionals.scripts.anytraj           import  anytraj
-from functionals.scripts.metadata          import  metadata
-from functionals.scripts.get_atoms         import  get_atoms
-from functionals.scripts.get_cell          import  get_cell
-from functionals.scripts.get_system_type   import get_system_type
-from functionals.scripts.get_pointgroup    import get_pointgroup
-from functionals.scripts.get_spacegroup    import get_spacegroup
-from functionals.scripts.json_to_traj      import json_to_traj
-from functionals.scripts.get_bulk          import get_bulk
-from functionals.scripts.get_pure_struct   import get_pure_struct
-from functionals.scripts.cell_info         import cell_info
-from functionals.scripts.countatm          import countatm
+from functionals.scripts.io.anytraj             import  anytraj
+from functionals.scripts.load.find_setups       import find_setups
+from functionals.scripts.io.metadata            import  metadata
+from functionals.scripts.atoms.get_atoms        import  get_atoms
+from functionals.scripts.atoms.get_cell         import  get_cell
+from functionals.scripts.atoms.get_system_type  import get_system_type
+from functionals.scripts.atoms.json_to_traj     import json_to_traj
+from functionals.scripts.atoms.get_bulk         import get_bulk
+from functionals.scripts.atoms.get_pure_struct  import get_pure_struct
+from functionals.scripts.atoms.cell_info        import cell_info
+from functionals.scripts.atoms.countatm         import countatm
 
 ##############################################################################
 nick_dict = {'AB_1_a_b_225'       : 'rocksalt',

@@ -9,13 +9,13 @@ from dbgen import (Model, CONST, DESC, INPUT, FUNC, CONSTS,
                     AGGCONST, AND, SimpleFunc, PyBlock, noIndex,
                     Unpack, SimplePipe)
 
-from functionals.scripts.parse_setup       import parse_setup
-from functionals.scripts.get_stray_gpaw    import  get_stray_gpaw
-from functionals.scripts.parse_mendeleev   import  parse_mendeleev
-from functionals.scripts.parse_keld        import parse_keld
-from functionals.scripts.parse_pw_gpaw     import  parse_pw_gpaw
-from functionals.scripts.parse_xc_gpaw     import  parse_xc_gpaw
-from functionals.scripts.get_econv_gpaw    import  get_econv_gpaw
+from functionals.scripts.io.parse_setup       import parse_setup
+from functionals.scripts.io.get_stray_gpaw    import get_stray_gpaw
+from functionals.scripts.io.parse_mendeleev   import parse_mendeleev
+from functionals.scripts.io.parse_keld        import parse_keld
+from functionals.scripts.load.parse_pw_gpaw   import parse_pw_gpaw
+from functionals.scripts.load.parse_xc_gpaw   import parse_xc_gpaw
+from functionals.scripts.load.get_econv_gpaw  import get_econv_gpaw
 
 ##############################################################################
 elempath = environ['ELEMPATH']
