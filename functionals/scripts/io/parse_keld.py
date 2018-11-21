@@ -1,10 +1,6 @@
 from typing     import List,Tuple
 from ase.data   import chemical_symbols # type: ignore
-from imp        import load_source
 from re         import findall
-from os         import environ
-from os.path    import join
-from subprocess import check_output
 from json       import load
 ################################################################################
 Strs = List[str]

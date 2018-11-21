@@ -1,14 +1,13 @@
 # External Modules
-from typing     import Any, Type, Tuple, List, Callable as C
+from typing     import Type, Tuple, List
 from re         import search
 from ase.data   import chemical_symbols # type: ignore
 from ast        import literal_eval
 
 # Internal Modules
-from dbgen import (Model, CONST, DESC, INPUT, FUNC, CONSTS,
-                    GET, TAGS, BASIS, LINKS, IO, OPTION, AGG,
-                    AGGCONST, SimpleFunc, PyBlock, noIndex,
-                    Unpack, SimplePipe, AS,AND)
+from dbgen import (Model, CONST, DESC, INPUT, FUNC,
+                    GET, TAGS, BASIS, LINKS, SimpleFunc,
+                    SimplePipe, AS,AND)
 
 from functionals.scripts.io.anytraj             import  anytraj
 from functionals.scripts.load.find_setups       import find_setups
@@ -21,7 +20,8 @@ from functionals.scripts.atoms.get_bulk         import get_bulk
 from functionals.scripts.atoms.get_pure_struct  import get_pure_struct
 from functionals.scripts.atoms.cell_info        import cell_info
 from functionals.scripts.atoms.countatm         import countatm
-
+##############################################################################
+##############################################################################
 ##############################################################################
 nick_dict = {'AB_1_a_b_225'       : 'rocksalt',
              'AB_1_a_c_216'       : 'zincblende',
@@ -46,9 +46,12 @@ def eng(s:str)->float:
     pat = r'Free energy:\s+([-+]?\d+\.\d+)'
     match = search(pat, s); assert match
     return float(match.groups()[0])
+
+##############################################################################
+##############################################################################
 ##############################################################################
 
-def load(mod:Type['Model'])->None:
+def load(mod:Type[Model])->None:
     # Extract tables
     tabs = ['job','atom','element','struct','calc','cell','pure_struct',
             'species','bulk_job','reference','setup','setup_family',

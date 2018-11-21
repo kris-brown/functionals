@@ -1,22 +1,22 @@
 # External Modules
-from typing import Any, Type, Tuple as T, List as L
+from typing import Type, Tuple as T, List as L
 from csv    import DictReader
 from math   import log10
 from os     import environ
-from json   import loads, dumps
+from json   import loads
 from numpy  import array,logspace # type: ignore
+
 # Internal Modules
 from dbgen import (Model, CONST, DESC, INPUT, FUNC, GET, IO, AGG, CONSTS, TAGS,
-                    LINKS, OPTION, AFTER, BASIS, Expr, Literal,
+                    LINKS, OPTION, BASIS, Expr, Literal, REGEXP, BINARY,
                     GROUP_CONCAT as GC, CONCAT as C, AS, COALESCE, COUNT,
                     SimpleFunc,flatten)
 
 from functionals.fit import FromMatrix,Functional,BEEF
+
 from functionals.scripts.load.parse_fitstep   import  parse_fitstep
-from functionals.scripts.fit.query_fitconst   import  query_fitconst
-from functionals.scripts.fit.query_nlfitconst import  query_nlfitconst
-from functionals.scripts.fit.query_fitdata    import  query_fitdata
 from functionals.scripts.fit.fitting          import  fitting
+from functionals.scripts.fit.h_norm_const     import  h_norm_const
 
 ################################################################################
 ################################################################################
@@ -24,14 +24,17 @@ from functionals.scripts.fit.fitting          import  fitting
 
 functionals_db = '/Users/ksb/Documents/JSON/functionals.json'
 ################################################################################
+h_norm_vec,h_norm_val = h_norm_const()
 
-# Description, s, alpha, val, kind
+# Description, s, alpha, val, kind, vec
 def_consts = dict(
-    lda    = ('LDA limit', 0, 1, 1, 'eq'),
-    liebox = ('The Lieb Oxford bound', None, None, 1.804, 'lt'),
+    lda    = ('LDA limit', 0, 1, 1, 'eq', None),
+    liebox = ('The Lieb Oxford bound', None, None, 1.804, 'lt',None),
     scan11 = ('Tighter L.O. bound (1.174) when ⍺=0 (Equation 11 in SCAN paper)',
-              None, 0, 1.174, 'lt'),
-    pos    = ('Make Fx never negative', None, None, 0, 'gt')
+              None, 0, 1.174, 'lt',None),
+    pos    = ('Make Fx never negative', None, None, 0, 'gt',None),
+    hnorm  = ('Integral satisfies known H solution',
+              None,None,h_norm_val,'eq',h_norm_vec)
 )
 
 def_nlconsts = dict(
@@ -39,10 +42,10 @@ def_nlconsts = dict(
 )
 ################################################################################
 
-def const()->T[L[str],L[str],L[float],L[float],L[float],L[str]]:
+def const()->T[L[str],L[str],L[float],L[float],L[float],L[str],L[str]]:
     names = list(def_consts.keys())
-    descs,ss,alphs,vals,kinds = map(list,zip(*def_consts.values()))
-    return names,descs,ss,alphs,vals,kinds # type: ignore
+    descs,ss,alphs,vals,kinds,vecs = map(list,zip(*def_consts.values()))
+    return names,descs,ss,alphs,vals,kinds,vecs # type: ignore
 
 def nlconst()->T[L[str],L[str],L[str],L[str],L[float],L[float]]:
     names = list(def_nlconsts.keys())
@@ -66,20 +69,22 @@ def sqldict(d:dict)->Expr:
     '''Turn a Python dict into a SQL (serialized) dict'''
     args = [[',',' "%s" : ['%k,GC(v),']'] for k,v in d.items()]
     return C('{',*flatten(args)[1:],'}')
+
 ################################################################################
 ################################################################################
 ################################################################################
-def fit(mod:Type['Model']) -> None:
+
+def fit(mod:Type[Model]) -> None:
     # Extract tables
     tabs = ['fit','const','fit_step','fit_const','fit_data','dft_data',
-            'nonlin_const','fit_nonlin_const','globals']
+            'nonlin_const','fit_nonlin_const','globals','expt','species']
 
-    Fit, Const, Fit_step, Fit_const, Fit_data, D, Nonlin_const,Fit_nonlin_const,\
-    Globals = map(mod.get, tabs) # type: ignore
+    Fit, Const, Fit_step, Fit_const, Fit_data, D, Nl_const,Fit_nl_const,\
+    Globals,Expt,Species = map(mod.get, tabs) # type: ignore
 
     with mod:
         ########################################################################
-        constcols = ['const_name','description','s','alpha','val','kind']
+        constcols = ['const_name','description','s','alpha','val','kind','vec']
         pop_constraint =                                                        \
             ((Const,*Const.select(constcols[1:])) ==
                 GET /FUNC/ SimpleFunc(const, outputs = constcols)
@@ -89,7 +94,7 @@ def fit(mod:Type['Model']) -> None:
         ########################################################################
         nlconstcols = ['nlconst_name','description','f','df','hess','lb','ub']
         pop_nlconstraint =                                                        \
-            ((Nonlin_const,*Nonlin_const.select(nlconstcols[1:])) ==
+            ((Nl_const,*Nl_const.select(nlconstcols[1:])) ==
                 GET /FUNC/ SimpleFunc(nlconst, outputs = nlconstcols)
                     /DESC/ 'populate nonlinear constraints'
                    /TAGS/  'fit')
@@ -107,25 +112,23 @@ def fit(mod:Type['Model']) -> None:
                 GET /FUNC/ SimpleFunc(parse_fits,outputs=fitcols)
                     /DESC/ 'Looks in FITPATH for fitting specifications'
                     /IO/   True
-                    /AFTER/ 'dft_data' # hack
+                #    /AFTER/ 'dft_data' # hack
                     /TAGS/ 'fit')
         ########################################################################
-        outs = ['composition','symmetry', 'beef', 'coefs', 'xc', 'pw', 'econv','n_atoms']
 
-        queries = [(Fit_const,       'constconst',  query_fitconst,  ['const_name']),
-                   (Fit_nonlin_const,'nlconstconst',query_nlfitconst,['nlconst_name']),
-                   (Fit_data,        'dataconst',   query_fitdata,   outs)]
+                 # Pop'd Table # FK to here # Regexp on this col # Regex pattern
+        queries = [(Fit_const,    Const,    Const.const_name,      'constconst'),
+                   (Fit_nl_const, Nl_const, Nl_const.nlconst_name, 'nlconstconst'),
+                   (Fit_data,     D,        Species.nickname,      'dataconst')]
 
         pop_fitconst,pop_fitnlconst,pop_fitdata =   [
-            (x0 ==
-                GET /INPUT/  Fit._get(x1)
-                    /FUNC/   SimpleFunc(x2,
-                                        inputs=['pth',x1],
-                                        outputs=x3)
-                    /CONSTS/ {'pth':functionals_db}
+            (tab1 ==
+                GET /BASIS/  [Fit,tab2]
+                    /CONST/  REGEXP(regcol,BINARY(Fit._get(pat)))
                     /DESC/   'Applies a fit-specified query to the DB'
                     /TAGS/ 'fit')
-            for x0,x1,x2,x3 in queries]
+            for tab1,tab2,regcol,pat in queries]
+
         ########################################################################
         pop_fitstep =                                                               \
             ((Fit_step, Fit_step.cost, Fit_step.c_viol) ==
@@ -172,17 +175,17 @@ def fit(mod:Type['Model']) -> None:
                                   /OPTION/ [Const.s,Const.alpha]
                                   /TAGS/   'fit')
         ########################################################################
-        nlcdict = dict(name = C('"',Nonlin_const.nlconst_name,'"'),
-                       f    = C('"',Nonlin_const.f,'"'),
-                       df   = C('"',Nonlin_const.df,'"'),
-                       hess = C('"',Nonlin_const.hess,'"'),
-                       ub   = Nonlin_const.ub,
-                       lb   = Nonlin_const.lb)
+        nlcdict = dict(name = C('"',Nl_const.nlconst_name,'"'),
+                       f    = C('"',Nl_const.f,'"'),
+                       df   = C('"',Nl_const.df,'"'),
+                       hess = C('"',Nl_const.hess,'"'),
+                       ub   = Nl_const.ub,
+                       lb   = Nl_const.lb)
 
         raw_nlconst =                                                           \
             (Fit.raw_nlconst ==
                 GET /INPUT/  (sqldict(nlcdict) |AS| 'raw_nlconst')
-                    /LINKS/  Fit_nonlin_const.Fit
+                    /LINKS/  Fit_nl_const.Fit
                     /AGG/    Fit
                     /TAGS/   'fit')
 
@@ -205,7 +208,7 @@ def fit(mod:Type['Model']) -> None:
         ########################################################################
 
         countdict = {Fit.n_const   : Fit_const,
-                     Fit.n_nlconst : Fit_nonlin_const,
+                     Fit.n_nlconst : Fit_nl_const,
                      Fit.n_data    : Fit_data}
 
         nconst,nnlconst,ndata =  [                                                            \
@@ -222,7 +225,7 @@ def fit(mod:Type['Model']) -> None:
         globals =                                                               \
             ((Globals,Globals.select(gcols)) ==
                 GET /INPUT/ [Fit._get(x)|AS|y for x,y in zipped]
-                    /CONST/ (Fit.name == 'all')
+                    /CONST/ (Fit.name == 'default')
                     /TAGS/  'fit')
 
         ########################################################################

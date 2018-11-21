@@ -1,8 +1,7 @@
 from typing import Tuple
-import json
 import ase # type: ignore
 
-
+########################################################
 def get_kptden(kx : int
               ,ky : int
               ,kz : int

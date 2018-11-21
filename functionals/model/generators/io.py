@@ -1,13 +1,11 @@
 # External Modules
-from typing     import Any, Type, Tuple, List, TYPE_CHECKING, Callable as C
+from typing     import Type, Callable as C
 from os         import environ
 from os.path    import exists, join
 
 # Internal Modules
 from dbgen import (Model, CONST, DESC, INPUT, FUNC, CONSTS,
-                    GET, TAGS, BASIS, LINKS, IO, OPTION, AGG,
-                    AGGCONST, AND, SimpleFunc, PyBlock, noIndex,
-                    Unpack, SimplePipe)
+                    GET, BASIS, SimpleFunc)
 
 from functionals.scripts.io.parse_setup       import parse_setup
 from functionals.scripts.io.get_stray_gpaw    import get_stray_gpaw
@@ -17,6 +15,7 @@ from functionals.scripts.load.parse_pw_gpaw   import parse_pw_gpaw
 from functionals.scripts.load.parse_xc_gpaw   import parse_xc_gpaw
 from functionals.scripts.load.get_econv_gpaw  import get_econv_gpaw
 
+StrFunc = C[[str], str]
 ##############################################################################
 elempath = environ['ELEMPATH']
 keldpath = environ['KELDPATH']
@@ -28,8 +27,8 @@ def readfile(pth:str)->str:
 
 
 beefpath = '/Users/ksb/functionals/data/beef.json'
-coefpath = lambda x: join(x,'BEEFoftheDay.txt') # type: C[[str], str]
-xcpath   = lambda x: join(x,'xccontribs.txt')  # type: C[[str], str]
+coefpath = lambda x: join(x,'BEEFoftheDay.txt') # type: StrFunc
+xcpath   = lambda x: join(x,'xccontribs.txt')  # type: StrFunc
 getcoef  = lambda stor, bf: (readfile(coefpath(stor))
                             if exists(coefpath(stor))
                             else readfile(beefpath)) \
@@ -55,7 +54,7 @@ elemcols = ['symbol', 'name', 'atomic_weight','atomic_radius'
           , 'gas_basicity'
           ,'abundance_sea']
 #################################################################################
-def io(mod:Type['Model'])->None:
+def io(mod:Type[Model])->None:
 
     # Extract tables
     tabs = ['job','atom','element','struct','calc','cell','pure_struct',

@@ -1,9 +1,5 @@
-from typing import TYPE_CHECKING
-
-if TYPE_CHECKING:
-    from ase import Atoms # type: ignore
-
-from ase.io import write,read # type: ignore
+from ase import Atoms # type: ignore
+from ase.io import write # type: ignore
 
 try:
     from bulk_enumerator.bulk import BULK # type: ignore
@@ -15,9 +11,7 @@ from os.path import join
 from random  import choices
 from string  import ascii_lowercase
 ################################################################################
-def get_bulk(atoms : 'Atoms'
-            ,tol   : float  = 0.05
-            ) -> 'BULK':
+def get_bulk(atoms : Atoms, tol   : float  = 0.05) -> 'BULK':
     """
     Create a BULK object from Ankit's library
     """

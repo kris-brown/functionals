@@ -1,8 +1,7 @@
 # External Modules
-from typing import Callable as C, Any, Optional as O, List as L, Tuple as T
+from typing import Callable as C, Optional as O, List as L, Tuple as T
 from abc    import ABCMeta, abstractmethod
 from json   import load
-import sys
 from numpy  import array,sum,multiply,heaviside,exp,arange # type: ignore
 from plotly.graph_objs import Figure,Layout,Scatter         # type: ignore
 from plotly.offline    import plot # type: ignore

@@ -1,11 +1,10 @@
 from sys import version_info
 if version_info[0] == 3:
     from typing import Any
-import sys
-from json          import dump
-from gpaw          import GPAW, PW, FermiDirac, restart, Davidson, Mixer, MixerSum, MixerDif # type: ignore
+
+from json        import dump
+from gpaw        import GPAW, PW, FermiDirac, restart, Davidson, Mixer # type: ignore ##, MixerSum, MixerDif
 from gpaw.xc.bee import BEEFEnsemble # type: ignore
-from ase          import Atoms        # type: ignore
 from ase.io      import read         # type: ignore
 
 """

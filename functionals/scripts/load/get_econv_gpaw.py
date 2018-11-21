@@ -1,6 +1,6 @@
-from typing import Dict,Optional
+from typing import Optional
 from dbgen.core.parsing import parse_line
-
+######################################################
 def get_econv_gpaw(log : str) -> Optional[float]:
     """
     Electronic energy convergence

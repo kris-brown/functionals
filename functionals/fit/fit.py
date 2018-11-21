@@ -2,7 +2,7 @@
 from typing    import Dict as D, List as L, Tuple as T, Any, Optional as O
 from ast        import literal_eval
 from time       import time
-from json       import dumps
+from json       import dumps, loads
 from io         import StringIO
 from contextlib import redirect_stdout
 from traceback  import format_exc
@@ -11,7 +11,7 @@ from contextlib import contextmanager
 import sys
 
 from scipy.optimize import minimize,Bounds,LinearConstraint,NonlinearConstraint # type: ignore
-from numpy          import array,logspace,inf,vstack,zeros  # type: ignore
+from numpy          import array,logspace,inf,zeros         # type: ignore
 from numpy.linalg   import lstsq                            # type: ignore
 import warnings; warnings.filterwarnings("ignore")
 from sklearn.linear_model import LinearRegression           # type: ignore
@@ -79,25 +79,32 @@ class Fit(object):
         Convert linear constraints into a coef matrix + upper/lower bound arrays
         '''
         constraints = cls.eval_sql_dict(cons)
-        keys = ['s','alpha','val','kind']
+        keys = ['s','alpha','val','kind','vec']
         grid = logspace(-2,2,gridden).tolist()
         coefs,lo,hi = [],[],[] # type: T[list,list,list]
 
-        for s_,a_,val_,kind in [map(c.get,keys) for c in constraints]:
+        for s_,a_,val_,kind,vec in [map(c.get,keys) for c in constraints]:
             val    = float(val_) # type: ignore
-            srange = [float(s_)] if s_ else grid
-            arange = [float(a_)] if a_ else grid
             if   kind == 'eq': lo_,hi_ = val, val
             elif kind == 'lt': lo_,hi_ = -inf, val
             elif kind == 'gt': lo_,hi_ = val, inf
             else: raise ValueError
 
-            for s in srange:
-                for a in arange:
-                    lo.append(lo_); hi.append(hi_)
-                    coefs.append(flatten([[LegendreProduct(s,a,i,j)
-                                            for j in range(n)]
-                                                for i in range(n)]))
+            if vec:
+                loaded = loads(vec)
+                lo.append(lo_); hi.append(hi_)
+                inds = [x for x in range(8**2) if  x % 8 < n and x < 8*n]
+                coefs.append([loaded[i] for i in inds])
+            else:
+                srange = [float(s_)] if s_ else grid
+                arange = [float(a_)] if a_ else grid
+
+                for s in srange:
+                    for a in arange:
+                        lo.append(lo_); hi.append(hi_)
+                        coefs.append(flatten([[LegendreProduct(s,a,i,j)
+                                                for j in range(n)]
+                                                    for i in range(n)]))
         c_A, c_lb, c_ub =  map(array,[coefs, lo, hi])
         return c_A,c_lb,c_ub
 
@@ -146,29 +153,34 @@ class Fit(object):
                         constraints = cons + self.nl, hess = self.hess,
                         bounds = bounds, options = self.options)
 
-    def constr_violation(self,x:array)->float:
-        class DummyFile(object):
-            def write(self, x:str)->None: pass
+    def constr_violation(self, x : array) -> float:
 
         @contextmanager # type: ignore
         def nostdout()->None:
+
+            class DummyFile(object):
+                def write(self, x:str)->None: pass
+                def flush(self)->None: pass
+
             save_stdout = sys.stdout
             sys.stdout = DummyFile() #type: ignore
             yield
             sys.stdout = save_stdout
+
         with nostdout():
             res = self.fit(x)
+
         return res.constr_violation
 
-    def resid(self,x:array,kind:str)->array:
-        '''Return Residual'''
+    def resid(self, x : array, kind : str) -> array:
+        ''' Return Residual '''
         assert kind in ['ce','bm','lat']
         d = dict(ce=(self.X0,self.Y0),bm=(self.X1,self.Y1),lat=(self.X2,self.Y2))
         X,Y = d[kind]
         return X@x - Y
 
-    def r2(self,x:array,kind:str)->float:
-        '''Return Residual'''
+    def r2(self, x : array, kind : str) -> float:
+        '''Return R2'''
         assert kind in ['ce','bm','lat']
         d = dict(ce=(self.X0,self.Y0),bm=(self.X1,self.Y1),lat=(self.X2,self.Y2))
         X,Y =  d[kind]
@@ -192,7 +204,7 @@ class Fit(object):
     def hess(self,_:array) -> array: return self.zero # hessian is a constant
 
     @staticmethod
-    def eval_sql_dict(x:str)->list:
+    def eval_sql_dict(x : str) -> list:
         def invert_dict(x:D[str,L]) -> L[D[str,Any]]:
             '''A dict of lists turned into a list of dicts'''
             tup_to_dict = lambda tup: dict(zip(x.keys(),tup))

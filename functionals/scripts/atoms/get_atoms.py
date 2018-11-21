@@ -1,7 +1,6 @@
 from typing import List,Tuple
 
-import json
-from ase import Atoms # type: ignore
+from json import loads
 
 Ints = List[int]
 Floats = List[float]
@@ -12,7 +11,7 @@ def get_atoms(atomsjson : str)->AtomTuple:
     Unpacks atom data from a json'd .traj file
     """
     ns,xs,ys,zs,ms,cs,ts,inds = [],[],[],[],[],[],[],[]
-    atoms = json.loads(atomsjson)['atomdata']
+    atoms = loads(atomsjson)['atomdata']
     for a in atoms:
         ns.append(a['number']); xs.append(a['x']); ys.append(a['y'])
         zs.append(a['z']); ms.append(a['magmom']); inds.append(a['index']);

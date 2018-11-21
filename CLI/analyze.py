@@ -1,16 +1,12 @@
 # External modules
-from typing  import Tuple,Any,Optional as O
 from sys     import argv
-from os      import listdir
-from os.path import join,isdir,exists
 from sys     import argv
 from io      import BytesIO
 from base64  import decodestring
 from json    import loads
-from string  import ascii_lowercase
 from numpy   import array # type: ignore
 from plotly.offline import plot # type: ignore
-from plotly.graph_objs import Scatter, Figure, Layout # type: ignore
+from plotly.graph_objs import Scatter, Figure # type: ignore
 # Internal Modules
 from dbgen import ConnectInfo, sqlselect, hash_
 from functionals import FromMatrix,Functional,PBE,BEEF,SCAN

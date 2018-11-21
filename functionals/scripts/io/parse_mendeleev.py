@@ -1,7 +1,5 @@
 from typing     import List,Tuple
 from json       import load
-from os         import environ
-from subprocess import check_output
 
 def parse_mendeleev(i:int,
                     pth:str)->Tuple[List[str],List[float],List[str]

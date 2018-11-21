@@ -1,5 +1,4 @@
 # Internal Modules
-from dbgen        import ConnectInfo
 from dbplot.main  import main as plt, parser
 
 '''

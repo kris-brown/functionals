@@ -1,5 +1,3 @@
-from scipy.optimize import linprog # type: ignore
-from typing import List,Tuple
 import numpy as np # type: ignore
 from functionals.fit.utilities import lst_sq_linprog
 """

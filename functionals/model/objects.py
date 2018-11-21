@@ -1,5 +1,5 @@
 # External Modules
-from typing import Any, Type, TYPE_CHECKING
+from typing import Any, Type
 
 # Internal Modules
 from dbgen import Model, Int, Varchar, Text, Decimal, Date, DEFAULT
@@ -7,9 +7,9 @@ from dbgen import Model, Int, Varchar, Text, Decimal, Date, DEFAULT
 ################################################################################
 # Add objects and relations
 #-------------------------
-def add_objects(mod:Type['Model'])->None:
+def add_objects(mod:Type[Model])->None:
 
-    model = mod # type: Any                             ### WHY, MYPY, WHY ###
+    model : Any = mod # WHY, MYPY, WHY ###
 
     ###############
     # Job related #
@@ -346,6 +346,7 @@ def add_objects(mod:Type['Model'])->None:
         '''
         _parents = Fit, Dft_data
 
+
     class Const(model):
         '''
         Put a linear constraint (LT/GT/EQ) to Fx(s,a)
@@ -356,6 +357,7 @@ def add_objects(mod:Type['Model'])->None:
         kind        = Varchar() # GT/LT/EQ
         s           = Decimal() # If valid only for particular s, else None
         alpha       = Decimal() # If valid only for particular alpha, else None
+        vec         = Text()    # Raw 64-float JSON, ignore s/a if defined
 
         _init = const_name
 

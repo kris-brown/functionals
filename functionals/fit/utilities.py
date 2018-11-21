@@ -1,10 +1,9 @@
 # External modules
-from typing import List as L,Dict,Any,Tuple as T,TypeVar,Callable as C, Optional as O
+from typing import List as L,Tuple as T,TypeVar,Callable as C, Optional as O
 from numpy import zeros,array                        # type: ignore
 from numpy.polynomial.legendre import Legendre # type: ignore
 import numpy as np  # type: ignore
 from scipy.optimize import linprog # type: ignore
-from os.path import exists
 
 # Type Synonyms
 A = TypeVar('A')

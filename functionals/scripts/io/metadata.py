@@ -2,9 +2,7 @@
 from typing     import Tuple
 from os         import stat
 from pwd        import getpwuid
-from os.path    import join,getmtime
-from json       import loads,dumps
-from subprocess import getstatusoutput
+from os.path    import getmtime
 
 ################################################################################
 def metadata(stordir : str) -> Tuple[str,int]:

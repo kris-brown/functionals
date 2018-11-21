@@ -1,13 +1,13 @@
 # External Modules
-from typing import Any, Type, TYPE_CHECKING
+from typing import Type
 from json   import loads
 
 # Internal Modules
-from dbgen import (Model,CONST, DESC, INPUT, FUNC, GET, TAGS,
-                 BASIS, LINKS, AGG, AGGCONST,
-                 Expr, IN, AS, AND, GROUP_CONCAT, SUM, COUNT,
-                 Literal, NOT, NULL, CONCAT, ABS, MIN,
-                 SimpleFunc, Unpack, SimplePipe)
+from dbgen import (Model,CONST, DESC, INPUT, FUNC, GET,
+                   BASIS, LINKS, AGG, AGGCONST,
+                   Expr, AS, AND, GROUP_CONCAT, SUM, COUNT,
+                   Literal, NOT, NULL, CONCAT, ABS, MIN,
+                   SimpleFunc, Unpack)
 
 from functionals.scripts.load.get_kptden             import get_kptden
 from functionals.scripts.load.get_kpts_gpaw          import get_kpts_gpaw
@@ -49,7 +49,7 @@ def get_near_min(dv:float,all_vols:str)->int:
 ################################################################################
 ################################################################################
 
-def analysis(mod:Type['Model']) -> None:
+def analysis(mod:Type[Model]) -> None:
     # Extract tables
     #---------------
     tabs = ['job','atom','element','struct','calc','cell',
@@ -75,7 +75,8 @@ def analysis(mod:Type['Model']) -> None:
                     /INPUT/ [Struct.n_atoms,
                              *[e(Job.Calc)   for e in Calc.select(Calc._inits)],
                              *[e(Job.Struct) for e in Species.select(Species._inits)]]
-                    /DESC/ 'All pairs of (bulk) species + calc. '\
+                    /CONST/ (Calc.xc == 'mBEEF')
+                    /DESC/ 'All pairs of (bulk) species + calc., if mBEEF calc'\
                            'Links the bulk_job table to Expt table, too')
         ########################################################################
         aggs = ['contribs','energies','volumes']

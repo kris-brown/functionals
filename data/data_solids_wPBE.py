@@ -2,7 +2,7 @@ from typing import Optional as O
 
 from ase.atoms import Atoms, string2symbols   # type: ignore
 from ase.io import write                      # type: ignore
-from ase.units import kB, kJ                  # type: ignore
+from ase.units import kB                      # type: ignore
 import numpy as np                            # type: ignore
 
 qubic_solids_26 = ['Li_bcc','Na_bcc','K_bcc','Rb_bcc',

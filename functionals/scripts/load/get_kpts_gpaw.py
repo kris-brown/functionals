@@ -1,8 +1,7 @@
-from typing import Dict,Tuple
-import ast
+from typing import Tuple
 
 from dbgen.core.parsing import parse_line
-
+######################################################
 def get_kpts_gpaw(log:str) -> Tuple[int,int,int]:
     """
     docstring

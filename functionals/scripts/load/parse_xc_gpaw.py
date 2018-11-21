@@ -1,7 +1,6 @@
-from typing import Dict
 
 from dbgen.core.parsing import parse_line
-
+############################################################################
 def parse_xc_gpaw(log:str) -> str:
     """
     Finds the exchange correlation functional, bearing in mind the default

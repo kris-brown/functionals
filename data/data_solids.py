@@ -1,8 +1,4 @@
 
-from ase.atoms import Atoms, string2symbols   # type: ignore
-from ase.units import kB, kJ, kcal, mol   # type: ignore
-import numpy as np   # type: ignore
-
 # Sol57LC
 sol57_lp    = ['Li_bcc','Na_bcc','K_bcc','Rb_bcc','Ca_fcc','Sr_fcc','Ba_bcc',
                'V_bcc','Nb_bcc','Ta_bcc','Mo_bcc','W_bcc','Fe_bcc',
