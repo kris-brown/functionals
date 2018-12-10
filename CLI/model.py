@@ -20,7 +20,7 @@ def main(args:dict)->None:
     for x in ['only','xclude']:
         args[x] = set(args[x].split())
 
-    m._run(db, mdb, **args)
+    m.run(db, mdb, **args)
 
 if __name__=='__main__':
     args = parser.parse_args()

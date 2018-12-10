@@ -1,11 +1,11 @@
 # External modules
 from ase.io     import read     # type: ignore
+from ase        import Atoms    # type: ignore
 from glob       import glob
 from os.path    import getsize
 # Internal modules
-from catalysis_model.scripts.Pure.Atoms.traj_to_json import traj_to_json
 ################################################################################
-def anytraj(root : str) -> str:
+def anytraj(root : str) -> 'Atoms':
     """
     ASE IO read function - takes any traj it can find
     """
@@ -13,7 +13,7 @@ def anytraj(root : str) -> str:
     for t in trajs:
         if getsize(t) > 10:
             atoms = read(t)
-            return traj_to_json(atoms)
+            return atoms
     raise ValueError('Get Traj could not find any traj in '+root)
 
 if __name__=='__main__':

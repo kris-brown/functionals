@@ -1,12 +1,12 @@
-from typing import List
-import re
+from typing import List as L
+from re     import findall
 ############################
-def find_setups(log:str)->List[str]:
+def find_setups(log : str)->L[str]:
     '''Finds the checksum values for all setups used in a GPAW calculation'''
 
     s = r'((id: )(([a-z]|\d)+)(\s))'
 
-    groups = re.findall(s,log)
+    groups = findall(s,log)
 
     return [g[2] for g in groups]
 

@@ -1,0 +1,2 @@
+name,description,f,jac,hess,lb,ub
+norm,Regularize length of vector,x @ x,2 * x,zeros(len(x)),0,0

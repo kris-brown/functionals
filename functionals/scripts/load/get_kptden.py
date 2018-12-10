@@ -1,5 +1,5 @@
-from typing import Tuple
-import ase # type: ignore
+from typing import Tuple as T
+from ase import Atoms # type: ignore
 
 ########################################################
 def get_kptden(kx : int
@@ -14,15 +14,15 @@ def get_kptden(kx : int
               ,cx : float
               ,cy : float
               ,cz : float
-              ) -> Tuple[float,float,float]:
+              ) -> T[float,float,float]:
     """
     Returns kpt density:
         https://wiki.physics.udel.edu/phys824/About_k-point_sampling
     """
 
-    atoms = ase.Atoms(numbers   = [1] # fake Atoms object with correct cell
-                     ,positions = [[0,0,0]]
-                     ,cell      = [[ax,ay,az],[bx,by,bz],[cx,cy,cz]])
+    atoms = Atoms(numbers   = [1] # fake Atoms object with correct cell
+                 ,positions = [[0,0,0]]
+                 ,cell      = [[ax,ay,az],[bx,by,bz],[cx,cy,cz]])
 
     recipcell = atoms.get_reciprocal_cell()
 

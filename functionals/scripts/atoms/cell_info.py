@@ -1,9 +1,9 @@
-from typing import Tuple
+from typing import Tuple as T
 ######################################################################################################
 def cell_info(a0:float,a1:float,a2:float,
               b0:float,b1:float,b2:float,
               c0:float,c1:float,c2:float
-              ) -> Tuple[float,float,float,float,float]:
+              ) -> T[float,float,float,float,float]:
     """ Basic geometry (inputs are 3 <x,y,z> vectors) """
     surface_area = float((a0*b2-a2*b1) * (a1*b2 - a2*b1)
                      +(a0*b2-a2*b0) * (a0*b2 - a2*b0)

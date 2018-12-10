@@ -1,9 +1,7 @@
-from typing import Tuple
+from typing import Tuple as T
 from json import loads
 ###############################################################################
-f9 = Tuple[float,float,float,float,float,float,float,float,float]
-
-def get_cell(json_atoms : str)->f9:
+def get_cell(json_atoms : str)->T[float,float,float,float,float,float,float,float,float]:
     """
     Extracts information about a list of atoms (in json form) and prepares cell
     info for insertion into cell table

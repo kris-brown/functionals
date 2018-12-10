@@ -1,9 +1,9 @@
-from typing     import List
+from typing     import List as L
 from subprocess import getstatusoutput
 
 
 ################################################################################
-def get_stray_gpaw(rootpath : str)-> List[str]:
+def get_stray_gpaw(rootpath : str)-> L[str]:
     """
     Searches for GPAW calculation folders.
     """

@@ -1,0 +1,10 @@
+{
+  "type"   : "line",
+  "query"  : "SELECT r2_ce,c_viol FROM fit",
+  "xcols"  : "r2_ce",
+  "ycols"  : "c_viol",
+  "title"  : "R2 vs Constraint violation",
+  "xlab"   : "$R^2$",
+  "ylab"   : "Constraint violation",
+  "scatter": "True"
+}

@@ -1,4 +1,4 @@
-from typing  import Tuple,List,Any
+from typing  import Tuple as T,List as L, Any
 from gzip    import open as gopen
 from hashlib import md5
 from os      import listdir
@@ -7,8 +7,8 @@ from xml.etree.ElementTree import fromstring
 from ase.data import chemical_symbols # type: ignore
 
 ################################################################################
-def parse_setup(root:str)->Tuple[List[str],List[str],List[str],
-                                 List[str],List[int],List[int]]:
+def parse_setup(root:str)->T[L[str],L[str],L[str],
+                             L[str],L[int],L[int]]:
     '''Applies parse to a directory'''
 
     def get(tree:Any,key:str,attr:str)->str:
@@ -16,7 +16,7 @@ def parse_setup(root:str)->Tuple[List[str],List[str],List[str],
         assert e is not None
         return e.get(attr).strip()
 
-    def parse_gz(tree:Any)->Tuple[str,str,str,int,int]:
+    def parse_gz(tree:Any)->T[str,str,str,int,int]:
         """
         Reads a gzipped XML GPAW setup file
         """
@@ -27,7 +27,7 @@ def parse_setup(root:str)->Tuple[List[str],List[str],List[str],
         kind = 'GPAW setup'
         return xc,kind,name,z,val
 
-    def parse_upf(tree:Any)->Tuple[str,str,str,int,int]:
+    def parse_upf(tree:Any)->T[str,str,str,int,int]:
 
         xc    = get(tree,'PP_HEADER','functional')
         z     = chemical_symbols.index(get(tree,'PP_HEADER','element'))
@@ -40,7 +40,7 @@ def parse_setup(root:str)->Tuple[List[str],List[str],List[str],
         kind = 'sg15'
         return xc,kind,name,z,val
 
-    def parse_general(pth:str)->Tuple[str,str,str,str,int,int]:
+    def parse_general(pth:str)->T[str,str,str,str,int,int]:
         full = join(root,pth)
         gz   = pth[-3:]=='.gz'
         upf  = pth[-4:]=='.upf'

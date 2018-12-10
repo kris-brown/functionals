@@ -42,3 +42,34 @@ def h_norm_const()->T[str,float]:
     '''Returns a 64-element vector which can be dotted with a BEEF coef vector,
        the constraint being equality with -0.3125'''
     return dumps(one_time_function()),-0.3125
+
+def weighted_s()->None:
+
+    from plotly.graph_objs import Figure,Histogram as Hist # type: ignore
+    from numpy.random      import choice # type: ignore
+    from numpy import array,logspace
+    from plotly.offline    import plot # type: ignore
+
+
+    rpt = lambda x: [x() for _ in range(10000)]
+
+    rs   = logspace(-2,1,100)
+    import pdb;pdb.set_trace()
+    den  = array([r**2 * exp(-r) for r in rs])
+    pden = den / sum(den)
+    p    = array([exp(_4 * min(r,500))/(pi*6.)**(_2) for r in rs])
+    s    = p**(0.5)
+    dist = rpt(lambda:choice(a = s, p = pden)) # type: ignore
+
+    print('\ndist',dist)
+
+    data = [Hist(x        = dist,
+                 nbinsx = 10000,
+
+                 name     = 'hydrogen',
+                 histnorm = 'probability')]
+
+    plot(Figure(data=data))
+
+if __name__=='__main__':
+    weighted_s()

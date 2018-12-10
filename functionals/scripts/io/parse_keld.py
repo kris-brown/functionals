@@ -1,12 +1,10 @@
-from typing     import List,Tuple
+from typing     import List as L,Tuple as T
 from ase.data   import chemical_symbols # type: ignore
 from re         import findall
 from json       import load
 ################################################################################
-Strs = List[str]
-Ints = List[int]
 
-def parse_keld(pth:str) -> Tuple[str,Strs,Strs,Ints,int,Strs,Strs,str]:
+def parse_keld(pth:str) -> T[str,L[str],L[str],L[int],int,L[str],L[str],str]:
     """
     Extracts information of materials into triples for struct_dataset_element
     If the species doesn't exist in the database, we need to add it.
@@ -23,7 +21,7 @@ def parse_keld(pth:str) -> Tuple[str,Strs,Strs,Ints,int,Strs,Strs,str]:
 
     # Initialize Variables
     #----------------------
-    output = [] # type: List[Tuple[str,str,int,int,str,str]]
+    output = [] # type: L[T[str,str,int,int,str,str]]
 
     # Get data from public JSON file
     #--------------------------------
@@ -38,8 +36,8 @@ def parse_keld(pth:str) -> Tuple[str,Strs,Strs,Ints,int,Strs,Strs,str]:
     # Extract data
     #------------
     for _,v in keld.items():
-        dataset     = [] # type: List[Tuple[str,str]]
-        composition = [] # type: List[Tuple[str,str,int,int]]
+        dataset     = [] # type: L[T[str,str]]
+        composition = [] # type: L[T[str,str,int,int]]
 
         k = v['name']
 

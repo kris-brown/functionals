@@ -11,7 +11,7 @@ from os.path import join
 from random  import choices
 from string  import ascii_lowercase
 ################################################################################
-def get_bulk(atoms : Atoms, tol   : float  = 0.05) -> 'BULK':
+def get_bulk(atoms : 'Atoms', tol   : float  = 0.05) -> 'BULK':
     """
     Create a BULK object from Ankit's library
     """

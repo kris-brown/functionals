@@ -79,12 +79,14 @@ class Fit(object):
         Convert linear constraints into a coef matrix + upper/lower bound arrays
         '''
         constraints = cls.eval_sql_dict(cons)
-        keys = ['s','alpha','val','kind','vec']
+        keys = ['s','alpha','val','kind','vec','weight']
         grid = logspace(-2,2,gridden).tolist()
         coefs,lo,hi = [],[],[] # type: T[list,list,list]
 
-        for s_,a_,val_,kind,vec in [map(c.get,keys) for c in constraints]:
-            val    = float(val_) # type: ignore
+        for s_,a_,val_,kind,vec,weight in [map(c.get,keys) for c in constraints]:
+            w   = float(weight)
+            assert w > 0
+            val = float(val_) # type: ignore
             if   kind == 'eq': lo_,hi_ = val, val
             elif kind == 'lt': lo_,hi_ = -inf, val
             elif kind == 'gt': lo_,hi_ = val, inf
@@ -92,17 +94,19 @@ class Fit(object):
 
             if vec:
                 loaded = loads(vec)
-                lo.append(lo_); hi.append(hi_)
+                lo.append(lo_ * w); hi.append(hi_ * w)
                 inds = [x for x in range(8**2) if  x % 8 < n and x < 8*n]
-                coefs.append([loaded[i] for i in inds])
+                coefs.append([loaded[i] * w for i in inds])
             else:
                 srange = [float(s_)] if s_ else grid
                 arange = [float(a_)] if a_ else grid
-
+                card   = len(srange) * len(arange)
+                w_     = w / card # reduce weight if many data points
                 for s in srange:
                     for a in arange:
-                        lo.append(lo_); hi.append(hi_)
-                        coefs.append(flatten([[LegendreProduct(s,a,i,j)
+                        lo.append(lo_* w_)
+                        hi.append(hi_* w_)
+                        coefs.append(flatten([[LegendreProduct(s,a,i,j) * w_
                                                 for j in range(n)]
                                                     for i in range(n)]))
         c_A, c_lb, c_ub =  map(array,[coefs, lo, hi])
@@ -112,9 +116,10 @@ class Fit(object):
     def process_nlconstraints(cls, nlconstraints : str) -> list:
         nonlinconsts = []
         for d in cls.eval_sql_dict(nlconstraints):
-            kwargs = dict(fun  = lambda x: eval(d['f']),
-                          lb   = d['lb'],
-                          ub   = d['ub'],
+            w = d['weight']
+            kwargs = dict(fun  = lambda x: w * eval(d['f']),
+                          lb   = w * d['lb'],
+                          ub   = w * d['ub'],
                           jac  = lambda x: eval(d['df']),
                           hess = lambda x,y: eval(d['hess']))
             nonlinconsts.append(NonlinearConstraint(**kwargs))
@@ -146,8 +151,10 @@ class Fit(object):
 
         n2m1   = self.n**2 - 1
         bounds = Bounds([0.] + [-self.bound] * n2m1, [2.] + [self.bound] * n2m1)
+        no_cons = [LinearConstraint(zeros((1,self.n**2)), zeros(1),zeros(1))]
         cons   = [LinearConstraint(self.c_A, self.c_lb, self.c_ub, keep_feasible = False)] \
-                        if len(self.c_lb) else []
+                        if len(self.c_lb) else no_cons
+
 
         return minimize(self.f, guess, method = 'trust-constr', jac = self.df,
                         constraints = cons + self.nl, hess = self.hess,
@@ -207,7 +214,7 @@ class Fit(object):
     def eval_sql_dict(x : str) -> list:
         def invert_dict(x:D[str,L]) -> L[D[str,Any]]:
             '''A dict of lists turned into a list of dicts'''
-            tup_to_dict = lambda tup: dict(zip(x.keys(),tup))
+            tup_to_dict = lambda tup: dict(zip(x.keys(), tup))
             tuples      = zip(*x.values())
             return list(map(tup_to_dict,tuples))
         return invert_dict(literal_eval(x.replace('\n',''))) if x else []

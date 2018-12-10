@@ -1,0 +1,8 @@
+{
+ "type"  : "bar",
+ "query" : "SELECT F.lda_viol,F.consts FROM Fit as F ORDER BY lda_viol",
+ "xcols" : "lda_viol",
+ "gcols" : "consts",
+ "title" : "LDA Violation - effect of constraint",
+ "xlab"  : "Constraint"
+}

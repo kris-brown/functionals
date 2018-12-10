@@ -1,9 +1,9 @@
-from typing     import List,Tuple
+from typing     import List as L,Tuple as T
 from json       import load
 
 def parse_mendeleev(i:int,
-                    pth:str)->Tuple[List[str],List[float],List[str]
-                                 ,List[int],List[str],  List[str]]:
+                    pth:str)->T[L[str],L[float],L[str],
+                                L[int],L[str],  L[str]]:
     """
     Extracts information of elements
     """

@@ -1,8 +1,8 @@
-from typing import Tuple
+from typing import Tuple as T
 
 from dbgen.core.parsing import parse_line
 ######################################################
-def get_kpts_gpaw(log:str) -> Tuple[int,int,int]:
+def get_kpts_gpaw(log:str) -> T[int,int,int]:
     """
     docstring
     """

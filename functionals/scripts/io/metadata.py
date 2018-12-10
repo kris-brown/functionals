@@ -1,11 +1,11 @@
 # External Modules
-from typing     import Tuple
+from typing     import Tuple as T
 from os         import stat
 from pwd        import getpwuid
 from os.path    import getmtime
 
 ################################################################################
-def metadata(stordir : str) -> Tuple[str,int]:
+def metadata(stordir : str) -> T[str,int]:
     """
     Takes a path to a DFT calculation and extracts information from runtime.json
     Also keeps a record of where the information was taken from.

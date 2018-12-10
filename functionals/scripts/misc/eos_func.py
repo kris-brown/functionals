@@ -1,4 +1,4 @@
-from typing   import Tuple
+from typing   import Tuple as T
 from string   import ascii_lowercase
 from random   import choices
 from os       import environ,remove
@@ -8,7 +8,7 @@ from ase.eos  import EquationOfState # type: ignore
 from numpy   import polyfit,poly1d,mean,std,array # type: ignore
 
 #####################################################
-def eos_func(vols_:str,engs_:str,n_atoms:int)->Tuple[float,float,float,str]:
+def eos_func(vols_:str,engs_:str,n_atoms:int)->T[float,float,float,str]:
     '''
     Use fancy equation of state fitter to series of vol,eng pairs
     '''
@@ -31,7 +31,7 @@ def eos_func(vols_:str,engs_:str,n_atoms:int)->Tuple[float,float,float,str]:
     vols,engs = vol[inds],eng[inds]
 
     eos = EquationOfState(vols,engs) # type: ignore
-    bestvol,besteng,bmod = eos.fit() # type: Tuple[float,float,float]
+    bestvol,besteng,bmod = eos.fit() # type: T[float,float,float]
     eos.plot(pth)
     encoded = b64encode(open(pth, "rb").read()).decode("utf-8")
     remove(pth)

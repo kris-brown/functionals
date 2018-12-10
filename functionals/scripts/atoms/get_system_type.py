@@ -1,7 +1,7 @@
 import numpy as np  # type: ignore
-import ase          # type: ignore
+from ase import Atoms          # type: ignore
 
-def get_system_type(atoms : ase.Atoms) -> str:
+def get_system_type(atoms : 'Atoms') -> str:
     """
     Helpful docstring
     """

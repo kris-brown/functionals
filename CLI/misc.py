@@ -15,16 +15,16 @@ def product(xs:L[int])->int:
     return reduce(mul,xs,1)
 
 spec = dict(
-    basis        = [2,2,3,3,3,4,4,5,6,7,8],
-    initfit      = [0,1],
-    bound        = [0.5,1],
-    maxiter      = [1000,1500,2000],
-    constden     = [3,5,7],
-    constconst   = ['.']*8 + ['$a', "lda|pos"],       # '.' = True, '$a' = False
-    dataconst    = ['.']*8 + ['^[A-Z][a-z]?_', '$a'], # single elements
-    nlconstconst = ['.']*8 + ['$a'],                  # '.' = True, '$a' = False
-    bm_weight    = [0.1,1,10],
-    lat_weight   = [0.1,1,10]
+    basis      = [2,2,3,3,3,4,4,5,6,7,8],
+    initfit    = [0,1],
+    bound      = [0.5,1],
+    maxiter    = [1000,1500,2000],
+    constden   = [3,5,7],
+    consts     = ['{}']*8 + ['{"lda":1000}', "{'lda':100,'pos':100}",''],
+    nlconsts   = ['{}']*8 + [''],
+    dataconst  = ['.']*8 + ['^[A-Z][a-z]?_', '$a'], #'.' = True, '$a' = False, other one = single elements
+    bm_weight  = [0.1,1,10],
+    lat_weight = [0.1,1,10]
 ) # type: Dict
 
 
@@ -37,7 +37,7 @@ class Counter(object):
         return cls.val
 
 def fits(n:int=100)->None:
-    with open(environ['FITPATH'],'a') as f:
+    with open(environ['FITPATH'],'w') as f:
         w = DictWriter(f,fieldnames=['name']+list(spec.keys()))
         w.writeheader()
         randfits(w,n)
