@@ -1,10 +1,9 @@
 # Internal Modules
-from dbgen                          import Model
-from functionals.model.objects    import add_objects
+from dbgen2                        import Model
+from functionals.model.objects    import new_model
 from functionals.model.generators import add_generators
 
-def make_model()->Model:
-    m = Model('johannes')
-    add_objects(m)
+def make_model() -> Model:
+    m = new_model()
     add_generators(m)
     return m

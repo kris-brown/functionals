@@ -1,5 +1,5 @@
 # Internal Modules
-from dbgen              import parser, ConnectInfo
+from dbgen2             import parser, ConnectInfo
 from functionals.model  import make_model
 """
 Run the model defined in /functionals/model

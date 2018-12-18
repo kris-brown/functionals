@@ -1,5 +1,5 @@
 # Internal Modules
-from dbgen import Model
+from dbgen2 import Model
 
 from functionals.model.generators.io import io
 from functionals.model.generators.fit import fit

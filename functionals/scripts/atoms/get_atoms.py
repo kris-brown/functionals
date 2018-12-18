@@ -3,7 +3,7 @@ from typing import List as L, Tuple as T
 from json import loads
 
 ################################################################################
-def get_atoms(atomsjson : str)->T[L[int],L[int],L[float],L[float],L[float],L[int],L[float],L[int]]:
+def get_atoms(atomsjson : str)->T[L[int],L[int],L[float],L[float],L[float],L[int],L[float]]:
     """
     Unpacks atom data from a json'd .traj file
     """
@@ -14,4 +14,4 @@ def get_atoms(atomsjson : str)->T[L[int],L[int],L[float],L[float],L[float],L[int
         zs.append(a['z']); ms.append(a['magmom']); inds.append(a['index']);
         cs.append(a['constrained']);ts.append(a['tag'])
 
-    return ns,xs,ys,zs,cs,ms,ts,inds,ns # type: ignore
+    return ns,xs,ys,zs,cs,ms,ts,inds # type: ignore

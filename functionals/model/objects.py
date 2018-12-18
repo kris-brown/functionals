@@ -2,404 +2,292 @@
 from typing import Any, Type
 
 # Internal Modules
-from dbgen import Model, Int, Varchar, Text, Decimal, Date, DEFAULT
+from dbgen2 import Model, Obj, Attr, Rel, Int, Varchar, Text, Decimal, Date
 
 ################################################################################
 # Add objects and relations
 #-------------------------
+globals = Obj('globals',
+              desc  = 'Properties of entire database. There can be max one row',
+              attrs = [Attr('all_data',Text('long'),
+                            desc = 'All cohesive data'),
+                       Attr('all_constraints',Text('long'),
+                            desc = 'All linear constraints'),
+                        Attr('all_nlconstraints',Text('long'),
+                            desc = 'All nonlinear constraints')])
+elem = Obj('element',desc = 'chemical element',
+           attrs = [Attr('atomic_number', desc = '# of protons', id = True),
+                    Attr('symbol', Varchar(), desc = 'E.g. He, K, Li'),
+                    Attr('atomic_weight', Decimal(), desc = 'atomic_units'),
+                    Attr('name', Varchar()),
+                    Attr('atomic_radius',  desc = 'Angstrom'),
+                    Attr('phase',  Varchar(),desc = 'Phase of matter'),
+                    Attr('group_id', desc = 'column in periodic table'),
+                    Attr('period', desc = 'row in periodic table'),
+                    Attr('evaporation_heat', Decimal(), desc = 'kJ/mol'),
+                    Attr('fusion_heat', Decimal(), desc = 'kJ/mol'),
+                    Attr('melting_point', Decimal(), desc = 'K'),
+                    Attr('is_radioactive', Int('tiny')),
+                    Attr('lattice_struct', Varchar(), desc = 'e.g. HEX, SC'),
+                    Attr('econf', Varchar(),desc = 'electron configuration'),
+                    Attr('heat_of_formation', Decimal(), desc = 'kJ/mol'),
+                    Attr('electron_affinity', Decimal(), desc = 'eV'),
+                    Attr('boiling_point', Decimal(), desc = 'K'),
+                    Attr('proton_affinity', Decimal(), desc = 'kJ/mol'),
+                    Attr('en_pauling', Decimal(), desc = 'electronegativity'),
+                    Attr('pointgroup',Varchar()),
+                    Attr('spacegroup'),
+                    Attr('metallic_radius',),
+                    Attr('vdw_radius',Decimal()),
+                    Attr('density',Decimal()),
+                    Attr('en_allen',Decimal()),
+                    Attr('en_ghosh',Decimal()),
+                    Attr('covalent_radius_bragg',Decimal()),
+                    Attr('covalent_radius_slater',Decimal()),
+                    Attr('geochemical_class',Varchar()),
+                    Attr('abundance_crust',Decimal()),
+                    Attr('abundance_sea',Decimal()),
+                    Attr('atomic_volume',Decimal()),
+                    Attr('lattice_constant',Decimal()),
+                    Attr('dipole_polarizability',Decimal()),
+                    Attr('thermal_conductivity',Decimal()),
+                    Attr('gas_basicity',Decimal()),
+                    ])
+
+set_fam = Obj('setup_family',desc = "Class of Setups that are the same 'type' ",
+              attrs = [Attr('name',Varchar(),id=True),
+                      Attr('kind',Varchar(),id=True),
+                      Attr('xc',Varchar(),id=True)])
+
+setup = Obj('setup',desc='Pseudopotential',
+            attrs=[Attr('checksum',Varchar(),desc='MD5 hash of file',id=True),
+                   Attr('val',desc='Number of valence electrons')])
+
+set_rels = [Rel('element','setup'), Rel('setup_family','setup')]
+calc = Obj('calc',desc='Calculator details',
+           attrs = [Attr('beef',Int('tiny'),id=True,desc='Whether or not functional is BEEF-style, (i.e. whether or not the coefs attr is meaningful)'),
+                    Attr('coefs',Text(),id=True,desc='JSON dumped 8x8 matrix of exchange coefficients which defines a functional as a sum of bases'),
+                    Attr('xc',Varchar(),id=True,desc='Name of functional'),
+                    Attr('pw',id=True,desc='Planewave cutoff, eV'),
+                    Attr('econv',Decimal(),desc='Energy convergance criterion'),])
+
+cellinit = [Attr(x,Decimal(),id=True) for x in [a+b for a in 'abc' for b in '123']]
+noninit  = ['a','b','c','surface_area','volume']
+cell = Obj('cell', desc = 'Periodic cells defined by three vectors (all units Angstrom)',
+           attrs = cellinit +
+                   [Attr(x,Decimal()) for x in noninit])
+
+species = Obj('species',desc = """
+Abstraction of a struct which throws away position info.
+
+Like Pure_struct, but contains stoich information and special considerations
+for molecules which are defined by pointgroup rather than spacegroup
+
+Composition is a python dictionary mapping atomic number to NORMALIZED stoich
+""", attrs = [
+Attr('composition',Varchar(),id=True,desc='Stringified python dict (ordered, normalized)'),
+Attr('symmetry',Varchar(),id=True,desc='''For molecules, pointgroup;
+for bulks, Prototype name;
+for surfaces, underlying prototype+facet'''),
+Attr('nickname',Varchar(),desc='Human-readable name, ought (but need not) be unique'),
+Attr('n_elems',desc='# of distinct chemical elements in species'),
+Attr('n_atoms',desc='Total # of atoms in *normalized* stoich')])
+
+s_d = Obj('species_dataset',desc='Datasets that contain information about chemical species',
+          attrs = [Attr('dataset_name', Varchar(), id = True)])
+
+s_d_e = Obj('species_dataset_element',desc='Datum about a particular species',
+            attrs = [Attr('property',Varchar(),id=True),
+                     Attr('value',Text()),
+                     Attr('datatype',Varchar())])
+
+sde_rels = [Rel('species','species_dataset_element', id = True),
+            Rel('species_dataset','species_dataset_element', id = True)]
+
+species_comp = Obj('species_comp',desc= 'Mapping table between species and element to show composition',
+                    attrs = [Attr('num',desc='Number of this element in lowest integer terms')])
+sc_rels = [Rel('species','species_comp',id=True),
+            Rel('element','species_comp',id=True)]
+
+pure = Obj('pure_struct',desc='Structure abstraction based on AFLOW prototypes refined by Ankit Jain',
+           attrs =[Attr('prototype',Varchar(),id=True),
+                   Attr('spacegroup'),
+                   Attr('free',desc='# of free params'),
+                   Attr('nickname',Varchar())])
+
+struct = Obj('struct',desc='Chemical structure defined in periodic cell',
+             attrs =[Attr('raw',Text(),id=True,desc='JSON encoding of ASE atoms object'),
+                     Attr('system_type',Varchar(),desc='One of: bulk, molecule, surface'),
+                     Attr('composition_norm',Text()),
+                     Attr('n_atoms'),
+                     Attr('n_elems'),
+                     Attr('composition',Text()),
+                     Attr('metal_comp',Text()),
+                     Attr('str_symbols',Text()),
+                     Attr('str_constraints',Text())])
+
+struct_rels = [Rel('cell','struct'),Rel('species','struct'),Rel('pure_struct','struct')]
+
+job = Obj('job',desc='DFT calculation',
+          attrs = [Attr('logfile',Varchar(),id=True,desc='Path to primary log file'),
+                   Attr('stordir',Varchar(),desc='Contains logfile'),
+                   Attr('log',Text('long'),desc='Content of primary log file'),
+                   Attr('timestamp',Date(),desc='Unix timestamp on log file'),
+                   Attr('user',Varchar(),desc='Who owns the directory'),
+                   Attr('kx',desc='K points'),
+                   Attr('ky',desc='K points'),
+                   Attr('kz',desc='K points'),
+                   Attr('kptden_x',Decimal(),desc='K point density'),
+                   Attr('kptden_y',Decimal(),desc='K point density'),
+                   Attr('kptden_z',Decimal(),desc='K point density'),
+                   Attr('spinpol',Int('tiny'),desc='Whether calculation was spin polarized'),
+                   Attr('has_contribs',Int('tiny'),desc='Whether xc_contribs.txt exists'),
+                   Attr('contribs',Text(),desc='output exchange contribs, if beef calculation'),
+                   Attr('energy',Decimal(),desc='eV')] )
+
+job_rels = [Rel('calc','job'),Rel('struct','job')]
+
+jobset = Obj('job_setup',desc='mapping table between Setup and Job')
+jobsetrel = [Rel('job','job_setup',id=True),Rel('setup','job_setup',id=True)]
+
+atom = Obj('atom',desc='An atom, considered within a specific chemical structure',
+           attrs = [Attr('ind',id=True,desc='ASE atom index'),
+                    Attr('number',desc='Atomic number'),
+                    Attr('x',desc='position'),
+                    Attr('y',desc='position'),
+                    Attr('z',desc='position'),
+                    Attr('constrained',Int('tiny'),desc='Whether or not there was a FixAtoms constraint'),
+                    Attr('magmom',desc='Units: Bohr'),
+                    Attr('tag',desc='ASE atom tag')])
+atom_rels = [Rel('struct','atom',id=True),Rel('element','atom')]
+
+expt = Obj('expt',desc='Set of single points on a particular material (with a particular calc)',
+           attrs = [Attr('n_atoms',id=True,desc='Value for all jobs in this experiment'),
+                    Attr('energy_pa',Decimal(),desc='Per atom, eV'),
+                    Attr('bulkmod',Decimal(),desc='Bulk modulus, GPa'),
+                    Attr('volume_pa',Decimal(),desc='Per atom, A^3'),
+                    Attr('all_vols',Text('long'),desc='every volume of the related bulk jobs'),
+                    Attr('volumes',Text('long'),desc='volumes of the 5 most optimal jobs'),
+                    Attr('energies',Text('long'),desc='energies of the 5 most optimal jobs'),
+                    Attr('contribs',Text('long'),desc='exchange contribs of the 5 most optimal jobs'),
+                    Attr('img',Text('long'),desc='base64 encoded image of EOS fit'),
+                    Attr('eform',Decimal(),desc='Per atom, eV'),
+                    Attr('lattice',Decimal(),desc='Conventional unit cell lattice (optimized)'),
+                    Attr('n_data',desc='Number of aggregated data points'),
+                    Attr('min_gap',Decimal(),desc='Absolute difference between best singlepoint volume_pa and the fitted optimum')])
+
+expt_rels = [Rel('species','expt',id=True),Rel('calc','expt',id=True)]
+
+bj = Obj('bulk_job',desc='A subset of jobs which have a many-one relationship linking jobs to an experiment',
+         attrs =[Attr('dv',Decimal(),desc="Difference in volume from 'minimum' of the expt it belongs to"),
+                 Attr('gap',Decimal(),desc='Abs(dv)'),
+                 Attr('near_min',Int('tiny'),desc='Whether this job is in the bottom 5 data points')])
+bj_rels = [Rel('job','bulk_job',id=True),Rel('expt','bulk_job')]
 
 
-###############
-# Job related #
-###############
-class Globals(object):
-    '''Properties of entire database. There will be just one row'''
-    all_data            = Text('long') # All cohesive data
-    all_constraints     = Text('long') # All linear constraints
-    all_nlconstraints   = Text('long') # All nonlinear constraints
+ref = Obj('reference',desc='A single calculation that gives the energy of an isolated atom (w/ a calc)',
+          attrs=[Attr('energy',Decimal())])
+ref_rels = [Rel('job','reference',id=True),
+            Rel('calc','reference'),Rel('element','reference')]
 
-    _init = ()
+dft_data = Obj('dft_data',desc='',
+               attrs = [Attr('name',Varchar(),desc='Species nickname'),
+                        Attr('coefs',Text('long'),desc='Calc Coefs'),
+                        Attr('composition',Varchar(),desc='Species composition'),
+                        Attr('atomic_contribs',Text('long'),desc='Serialized dict of relevant reference info'),
+                        Attr('atomic_energies',Text(),desc='Serialized dict of relevant reference info'),
+                        Attr('bulk_contribs',Text('long'),desc='Best job xc contribs'),
+                        Attr('bulk_energy',Decimal(),desc='Best job energy'),
+                        Attr('expt_cohesive_energy',Decimal(),desc='Experimental cohesive energy'),
+                        Attr('expt_bm',Decimal(),desc='Experimental bulk modulus'),
+                        Attr('expt_volume',Decimal(),desc='Experimental volume of reference stoichiometry'),
+                        Attr('energy_vector',Text('long'),desc="JSON'd vector of 5 energies"),
+                        Attr('volume_vector',Text('long'),desc="JSON'd vector of 5 volumes"),
+                        Attr('contrib_vector',Text('long'),desc="JSON'd 5x64 matrix with exchange contributions"),
+                        Attr('bulk_ratio',desc='Ratio of bulk system to size of normalized species'),
 
-class Element(object):
-    """
-    Chemical element
-    """
-    # Subset of Mendeleev data
-    #-------------------------
-    atomic_number           = Int()      # Number of protons
-    symbol                  = Varchar()  # E.g. He, K, Li
-    atomic_weight           = Decimal()  # Atomic units
-    name                    = Varchar()
-    atomic_radius           = Int()      # Angstrom
-    phase                   = Varchar()
-    group_id                = Int()      # Column in periodic table
-    period                  = Int()      # Row in periodic table
-    evaporation_heat        = Decimal()  # kJ/mol
-    fusion_heat             = Decimal()  # kJ/mol
-    melting_point           = Decimal()  # K
-    is_radioactive          = Int()      # eV
-    lattice_struct          = Varchar()  # e.g. HEX, SC
-    econf                   = Varchar()  # electron configuration
-    heat_of_formation       = Decimal()  # kJ/mol
-    electron_affinity       = Decimal()  # eV
-    boiling_point           = Decimal()  # K
-    proton_affinity         = Decimal()  # kJ/mol
-    en_pauling              = Decimal()
-    pointgroup              = Varchar()
-    spacegroup              = Int()
-    metallic_radius         = Decimal()
-    vdw_radius              = Decimal()
-    density                 = Decimal()
-    en_allen                = Decimal()
-    en_ghosh                = Decimal()
-    covalent_radius_bragg   = Decimal()
-    covalent_radius_slater  = Decimal()
-    geochemical_class       = Varchar()
-    abundance_crust         = Decimal()
-    abundance_sea           = Decimal()
-    atomic_volume           = Decimal()
-    lattice_constant        = Decimal()
-    dipole_polarizability   = Decimal()
-    thermal_conductivity    = Decimal()
-    gas_basicity            = Decimal()
+                        ])
+dft_rels = [Rel('expt','dft_data',id=True),Rel('best_job','dft_data','job')]
 
-    _init = atomic_number
+fit = Obj('fit',desc = 'A constrained fit to some subset of cohesive/BM/lattice data',
+          attrs = [Attr('name',Varchar(),id=True),
+                   # input params
+                   Attr('bm_weight',Decimal(),desc='Relative weight of bulk-modulus data to cohesive energy'),
+                   Attr('lat_weight',Decimal(),desc='Relative weight of lattice data to cohesive energy'),
+                   Attr('consts',Text(),desc='SQL const on what linear constraints should be included'),
+                   Attr('nlconsts',Text(),desc='SQL const on what linear constraints should be included'),
+                   Attr('dataconst',Text(),desc='SQL const on what data should be included'),
+                   Attr('basis',desc='Size of fitted functional'),
+                   Attr('initfit',Int('tiny'),desc='If true: initialize with lstsq fit w/o constraints (else with 0)'),
+                   Attr('bound',Decimal(),desc='Range over which to search for coefficients'),
+                   Attr('maxiter',desc='Stop nonlinear fitting after this step'),
+                   Attr('constden',desc='Number of s or alpha points linearly constrained between logscale(-2,2)'),
+                   # Intermediate computation
+                   Attr('raw_data',Text('long'),desc='Data to be fed to fitting script'),
+                   Attr('raw_const',Text('long'),desc='Data to be fed to fitting script'),
+                   Attr('raw_nlconst',Text('long'),desc='Data to be fed to fitting script'),
+                   Attr('n_const',default=0,desc='number of constraints'),
+                   Attr('n_data',default=0,desc='Number of data points'),
+                   Attr('n_nlconst',default=0,desc='Number of nonlinear constraints'),
+                   # Result params
+                   Attr('timestamp',Date(),desc='Timestamp of fitting'),
+                   Attr('runtime',Decimal(),desc='Duration of fitting, s'),
+                   Attr('r2_ce',Decimal(),desc='R2 fit of cohesive energies'),
+                   Attr('r2_bm',Decimal(),desc='R2 fit of bulk moduli'),
+                   Attr('r2_lat',Decimal(),desc='R2 fit of lattice constants'),
+                   Attr('c_viol',Decimal(),desc='Constraint violation'),
+                   Attr('score',Decimal(),desc="Arbitrary combination of R2's and c_viol"),
+                   Attr('result',Text(),desc='Flattened NxN fitted coefficients'),
+                   Attr('fullresult',Text(),desc='Flattened 8x8 fitted coefficients'),
+                   Attr('log',Text('long'),desc='Output from fitting'),
+                   Attr('err',Text(),desc='Error during scipy.minimize()'),
+                   Attr('lda_viol',Decimal(),desc='Degree to which LDA Limit was violated'),
+                   Attr('beefdist',Decimal(),desc='Score for cartesian distance btw output and BEEF')])
 
-class Setup_family(object):
-    '''Class of Setups that are the same 'type' '''
-    name = Varchar()
-    kind = Varchar()
-    xc   = Varchar() #XC Functional used to generate
+fit_step = Obj('fit_step',desc='A single iteration in a fitting process',
+                attrs = [Attr('niter',id=True,desc='Iteration number'),
+                         Attr('cost',Decimal(),desc='Objective function cost'),
+                        Attr('c_viol',Decimal(),desc='Constraint cost')])
 
-class Setup(object):
-    """
-    Pseudopotential
-    """
-    checksum = Varchar() # MD5 hash of file
-    val      = Int()     # number of valence electrons
+fs_rels = [Rel('fit','fit_step',id=True)]
 
-    _init       = checksum
-    _components = 'Element', 'Setup_family'
+fit_data = Obj('fit_data',desc='Mapping table specifying which Cohesive_data was used in a given fit')
+fd_rels = [Rel('fit','fit_data',id=True),Rel('dft_data','fit_data',id=True)]
 
-class Calc(object):
-    ''' Calculator details '''
-    beef    = Int('tiny') # Whether or not functional is BEEF-style
-                          #  (i.e. whether or not the coefs attr is meaningful)
+const = Obj('const',desc='Constrain Fx(s,a)',
+             attrs=[Attr('const_name',Varchar(),id=True),
+                    Attr('description',Text(),desc='Description of constraint'),
+                    Attr('val',Decimal(),desc='Value of Fx(s,alpha)'),
+                    Attr('kind',Varchar(),desc='GT/LT/EQ'),
+                    Attr('s',Decimal(),desc='If valid only for particular s, else None'),
+                    Attr('alpha',Decimal(),desc='If valid only for particular alpha, else None'),
+                    Attr('vec',Text(),desc='Raw 64-float JSON, ignore s/a if defined')])
 
-    coefs   = Text()      # JSON dumped 8x8 matrix of exchange coefficients
-                          #  which defines a functional as a sum of bases
+fit_const = Obj('fit_const',desc='Mapping table to denote which constraints were used in a given fit',
+                attrs=[Attr('const_weight',Decimal())])
+fc_rels = [Rel('fit','fit_const',id=True),Rel('const','fit_const',id=True)]
 
-    xc      = Varchar()   # Name of functional
-    pw      = Int()       # Planewave cutoff, eV
-    econv   = Decimal()   # Energy convergance criterion
+nl_const = Obj('nonlin_const',desc='Nonlinear constraints',
+               attrs = [Attr('nlconst_name',Varchar(),id=True),
+                        Attr('description',Text(),desc='Description of nonlinear constraint'),
+                        Attr('f',Text(),desc='Source code for nonlin function to be minimized'),
+                        Attr('df',Text(),desc='Source code for derivative of f'),
+                        Attr('hess',Text(),desc='Source code for hessian of  f'),
+                        Attr('lb',Decimal(),desc='Lower bound'),
+                        Attr('ub',Decimal(),desc='Upper bound')])
+fnlc = Obj('fit_nonlin_const',desc='Mapping table to denote which constraints were used in a given fit',
+           attrs = [Attr('nl_const_weight',Decimal())])
+fnlc_rels = [Rel('fit','fit_nonlin_const',id=True),
+             Rel('nonlin_const','fit_nonlin_const',id=True)]
 
-    _init = beef, coefs, xc, pw, econv # kx,ky,kz need to change w/ cell size, atomic calculations are spinpol while the bulk jobs we want to compare to are not
+objs = [globals, elem, set_fam, setup, calc, cell, species, s_d, s_d_e,
+        species_comp, pure, struct, job, jobset, atom, expt, bj, ref, dft_data,
+        fit, fit_step,fit_data, const, fit_const, nl_const, fnlc ]
+rels = set_rels + sde_rels + sc_rels + struct_rels + job_rels+ jobsetrel + atom_rels \
+        + expt_rels + bj_rels + ref_rels + dft_rels + fs_rels + fd_rels \
+        + fc_rels + fnlc_rels
 
-class Cell(object):
-    """
-    Periodic cells defined by three vectors
-    """
-    a0,a1,a2     = Decimal(), Decimal(), Decimal()
-    b0,b1,b2     = Decimal(), Decimal(), Decimal()
-    c0,c1,c2     = Decimal(), Decimal(), Decimal()
-    a,b,c        = Decimal(), Decimal(), Decimal()
-    surface_area = Decimal()
-    volume       = Decimal()
-
-    _init = a0, a1, a2, b0, b1, b2, c0, c1, c2
-
-class Species(object):
-    """
-    Abstraction of a struct which throws away position info.
-
-    Like Pure_struct, but contains stoich information and special considerations
-    for molecules which are defined by pointgroup rather than spacegroup
-
-    Composition is a python dictionary mapping atomic number to NORMALIZED stoich
-    """
-    composition = Varchar()  # Stringified python dict (ordered, normalized)
-    symmetry    = Varchar()  # For molecules, pointgroup;
-                             # for bulks, Prototype name;
-                             # for surfaces, underlying prototype+facet
-    nickname    = Varchar()  # Human-readable name, ought (but need not) be unique
-    n_elems     = Int()      # # of distinct chemical elements in species
-    n_atoms     = Int()      # Total # of atoms in normalized stoich
-
-    _init = composition, symmetry
-
-class Species_dataset(object):
-    """
-    Datasets that contain information about chemical species
-    """
-    dataset_name = Varchar()
-
-class Species_dataset_element(object):
-    """
-    Datum about a particular species
-    """
-    property = Varchar()
-    value    = Text()
-    datatype = Varchar()
-
-    _init    = property
-    _parents = 'Species', 'Species_dataset'
-
-class Species_comp(object):
-    """
-    Mapping table between species and element to show composition
-    """
-    num = Int() # Number of this element in lowest integer terms
-
-    _parents = 'Species', 'Element'
-
-class Pure_struct(object):
-    """
-    Structure abstraction based on AFLOW prototypes refined by Ankit Jain
-    """
-    prototype  = Varchar()
-    spacegroup = Int()
-    free       = Int() #Number of free parameters
-    nickname   = Varchar()
-
-    _init = prototype
-
-class Struct(object):
-    """
-    Chemical structure defined in periodic cell
-    """
-    raw              = Text()    # JSON encoding of ASE atoms object
-    system_type      = Varchar() # One of: bulk, molecule, surface
-    composition_norm = Text()
-    n_atoms          = Int()
-    n_elems          = Int()
-    composition      = Text()
-    metal_comp       = Text()
-    str_symbols      = Text()
-    str_constraints  = Text()
-
-    _init       = raw
-    _components = 'Cell', 'Species', 'Pure_struct'
-
-class Job(object):
-    logfile    = Varchar()      # Path to primary log file
-    stordir    = Varchar()
-    log        = Text('long')   # Content of primary log file
-    timestamp  = Date()         # Unix timestamp on log file
-    user       = Varchar()
-    kx,ky,kz   = Int(),Int(),Int() # K-points
-    kptden_x   = Decimal()
-    kptden_y   = Decimal()
-    kptden_z   = Decimal()
-    spinpol    = Int('tiny')   # Whether calculation was spin polarized
-    has_contribs = Int('tiny') # Whether xc_contribs.txt exists
-    contribs   = Text()        # output exchange contribs, if beef calculation
-    energy     = Decimal()
-
-    _init       = logfile
-    _components = 'Calc', 'Struct'
-
-class Job_setup(object):
-    """mapping table between Setup and Job"""
-    _parents = 'Job', 'Setup'
-
-class Atom(object):
-    """
-    An atom, considered within a specific chemical structure
-    """
-    ind          = Int() # ASE atom index
-    number       = Int() # Atomic number
-    x,y,z        = Decimal(), Decimal(), Decimal() # position
-    constrained  = Int()     # Whether or not there was a FixAtoms constraint
-    magmom       = Decimal() # Units: Bohr
-    tag          = Int()     # ASE atom tag
-
-    _init       = ind
-    _parents    = 'Struct',
-    _components = 'Element',
-
-class Expt(object):
-    """
-    Set of single points on a particular material (with a particular calc)
-
-    This should be a bulk calculation
-    """
-    n_atoms    = Int()        # Value for all jobs in this experiment
-    energy_pa  = Decimal()    # Per atom, eV
-    bulkmod    = Decimal()    # Bulk modulus, GPa
-    volume_pa  = Decimal()    # Per atom, A^3
-    all_vols   = Text('long') # every volume of the related bulk jobs
-    volumes    = Text('long') # volumes of the 5 most optimal jobs
-    energies   = Text('long') # energies of the 5 most optimal jobs
-    contribs   = Text('long') # exchange contribs of the 5 most optimal jobs
-    img        = Text('long') # base64 encoded image of EOS fit
-    eform      = Decimal()    # Per atom, eV
-    lattice    = Decimal()    # Conventional unit cell lattice (optimized)
-    n_data     = Int()        # Number of aggregated data points
-    min_gap    = Decimal()    # Absolute difference between best singlepoint
-                               # volume_pa and the fitted optimum
-
-    _init    = n_atoms       # distinguish fits with different scales b/c DFT isn't perfect
-    _parents = 'Species', 'Calc'
-
-class Bulk_job(object):
-    """
-    A subset of jobs which have a many-one relationship linking jobs to an experiment
-    """
-    dv       = Decimal() # Difference in volume from 'minimum'
-    gap      = Decimal() # Abs(dv)
-    near_min = Int('tiny') # Whether or not job is in the bottom 5 data points
-
-    _init       = ()
-    _components = 'Expt'
-    _parents    = 'Job'
-
-class Reference(object):
-    """
-    A single calculation that gives the energy of an isolated atom (w/ a calc)
-    """
-    energy   = Decimal()
-
-    _init       = ()
-    _parents    = 'Job'
-    _components = 'Calc', 'Element'
-
-class Dft_data(object):
-    """
-    Data that are relevant to fitting BEEF coefs using cohesive energy
-    """
-    name                 = Varchar()     # Species nickname
-    coefs                = Text('long')  # Calc Coefs
-    composition          = Varchar()     # Species composition
-    atomic_contribs      = Text('long')  # Serialized dict of relevant reference info
-    atomic_energies      = Text()        # Serialized dict of relevant reference info
-    bulk_contribs        = Text('long')  # Best job xc contribs
-    bulk_energy          = Decimal()     # Best job energy
-    expt_cohesive_energy = Decimal()     # Experimental cohesive energy
-    expt_bm              = Decimal()     # Experimental bulk modulus
-    expt_volume          = Decimal()     # Experimental volume of reference stoichiometry
-    energy_vector        = Text('long')  # JSON'd vector of 5 energies
-    volume_vector        = Text('long')  # JSON'd vector of 5 volumes
-    contrib_vector       = Text('long')  # JSON'd 5x64 matrix with exchange contributions
-    bulk_ratio           = Int()         # Ratio of bulk system to size of normalized species
-
-    _init       = ()
-    _parents    = 'Expt'
-    _components = 'Job' # best job
-
-class Fit(object):
-    """
-    A fit to some subset of cohesive data + lattice data
-    """
-    # Input params
-    name         = Varchar()
-    bm_weight    = Decimal()    # Relative weight of bulk-modulus data to cohesive energy
-    lat_weight   = Decimal()    # Relative weight of lattice data to cohesive energy
-    consts       = Text()       # Python Dict {name : weight} (default 1.0)
-    nlconsts     = Text()       # (see above) {} = all, '' = none
-    dataconst    = Text()       # Regex const on what data should be included (species name)
-    basis        = Int()        # Size of fitted functional
-    initfit      = Int('tiny')  # If true: initialize with lstsq fit w/o
-                                # constraints (else with 0)
-    bound     = Decimal()       # Range over which to search for coefficients
-    maxiter   = Int()           # Stop nonlinear fitting after this step
-    constden  = Int()           # Number of s or alpha points linearly
-                                # constrained between logscale(-2,2)
-
-    # Intermediate computation
-    raw_data    = Text('long')      # Data to be fed to fitting script
-    raw_const   = Text('long')      # Data to be fed to fitting script
-    raw_nlconst = Text('long')      # Data to be fed to fitting script
-    n_const     = Int(),DEFAULT(0)  # Number of constraints
-    n_data      = Int(),DEFAULT(0)  # Number of data points
-    n_nlconst   = Int(),DEFAULT(0)  # Number of nonlinear constraints
-
-    # Result params
-    timestamp = Date()       # Timestamp of fitting
-    runtime   = Decimal()    # Duration of fitting, s
-    r2_ce     = Decimal()    # R2 fit of cohesive energies
-    r2_bm     = Decimal()    # R2 fit of bulk moduli
-    r2_lat    = Decimal()    # R2 fit of lattice constants
-    c_viol    = Decimal()
-    score     = Decimal()    # Arbitrary combination of R2's and c_viol
-    result    = Text()       # Flattened NxN fitted coefficients
-    log       = Text('long') # Output from fitting
-    err       = Text()       # Error during scipy.minimize()
-    beefdist  = Decimal()    # Score for cartesian distance btw output and BEEF
-    lda_viol  = Decimal()    # Distance from 1.0 at s = 0, alpha = 1
-    _init = name
-
-class Fit_step(object):
-    '''
-    A single iteration in a fitting process
-    '''
-    niter  = Int()     # Iteration number
-    cost   = Decimal() # Objective function cost
-    c_viol = Decimal() # Constraint cost
-
-    _init    = niter
-    _parents = 'Fit'
-
-class Fit_data(object):
-    '''
-    Mapping table specifying which Cohesive_data was used in a given fit
-    '''
-    _parents = 'Fit', 'Dft_data'
-
-
-class Const(object):
-    '''
-    Put a linear constraint (LT/GT/EQ) to Fx(s,a)
-    '''
-    const_name  = Varchar() # Name of constraint
-    description = Text()    # Description of constraint
-    val         = Decimal() # Value of Fx(s,alpha)
-    kind        = Varchar() # GT/LT/EQ
-    s           = Decimal() # If valid only for particular s, else None
-    alpha       = Decimal() # If valid only for particular alpha, else None
-    vec         = Text()    # Raw 64-float JSON, ignore s/a if defined
-
-    _init = const_name
-
-class Fit_const(object):
-    '''
-    Mapping table to denote which constraints were used in a given fit
-    '''
-    const_weight = Decimal()
-
-    _init    = ()
-    _parents = 'Fit', 'Const'
-
-class Nonlin_const(object):
-    '''
-    Nonlinear constraints
-    '''
-    nlconst_name = Varchar() # Name of nonlinear constraint
-    description  = Text()    # Description of nonlinear constraint
-    f            = Text()    # Source code for nonlin function to be minimized
-                              # expecting an 'x' input vector
-    df           = Text()    # Source code for derivative of f
-                              # expecting an 'x' input vector
-    hess         = Text()    # Source code for hessian of  f
-                              # expecting an 'x' input vector
-    lb           = Decimal() # Lower bound
-    ub           = Decimal() # Upper bound
-
-    _init = nlconst_name
-
-class Fit_nonlin_const(object):
-    '''
-    Mapping table to denote which constraints were used in a given fit
-    '''
-    nl_const_weight = Decimal()
-
-    _init    = ()
-    _parents = 'Fit', 'Nonlin_const'
-
-objs = [Globals,Element,Setup_family,Setup, Calc, Cell, Species, Species_dataset,
-        Species_dataset_element,
-        Species_comp, Pure_struct, Struct, Job, Job_setup, Atom, Expt, Bulk_job,
-        Reference, Dft_data,Fit,Fit_step, Fit_data, Const, Fit_const,
-        Nonlin_const, Fit_nonlin_const]
-
-def add_objects(mod:Model)->None:
-    mod.add(objs)
+def new_model() -> Model:
+    m = Model('functionals')
+    m.add(objs); m.add(rels)
+    return m

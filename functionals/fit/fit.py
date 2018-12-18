@@ -80,7 +80,7 @@ class Fit(object):
         '''
         constraints = cls.eval_sql_dict(cons)
         keys = ['s','alpha','val','kind','vec','weight']
-        grid = logspace(-2,2,gridden).tolist()
+        grid = logspace(-1,0.8,gridden).tolist()
         coefs,lo,hi = [],[],[] # type: T[list,list,list]
 
         for s_,a_,val_,kind,vec,weight in [map(c.get,keys) for c in constraints]:
