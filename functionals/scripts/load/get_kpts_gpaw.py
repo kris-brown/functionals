@@ -1,6 +1,6 @@
 from typing import Tuple as T
 
-from dbgen.core.parsing import parse_line
+from dbgen.utils.parsing import parse_line
 ######################################################
 def get_kpts_gpaw(log:str) -> T[int,int,int]:
     """

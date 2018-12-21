@@ -1,4 +1,4 @@
-from dbgen.core.parsing import parse_line
+from dbgen.utils.parsing import parse_line
 
 def parse_pw_gpaw(log:str) -> int:
     """

@@ -2,7 +2,7 @@
 from typing import Any, Type
 
 # Internal Modules
-from dbgen2 import Model, Obj, Attr, Rel, Int, Varchar, Text, Decimal, Date
+from dbgen import Model, Obj, Attr, Rel, Int, Varchar, Text, Decimal, Date
 
 ################################################################################
 # Add objects and relations

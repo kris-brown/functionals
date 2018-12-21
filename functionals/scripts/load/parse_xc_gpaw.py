@@ -1,5 +1,5 @@
 
-from dbgen.core.parsing import parse_line
+from dbgen.utils.parsing import parse_line
 ############################################################################
 def parse_xc_gpaw(log:str) -> str:
     """

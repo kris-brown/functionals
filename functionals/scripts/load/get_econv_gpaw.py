@@ -1,5 +1,5 @@
 from typing import Optional as O
-from dbgen.core.parsing import parse_line
+from dbgen.utils.parsing import parse_line
 ######################################################
 def get_econv_gpaw(log : str) -> O[float]:
     """

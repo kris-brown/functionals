@@ -1,7 +1,7 @@
 # External
 from typing import List as L, Tuple as T
 # Internal
-from dbgen.support.misc import ConnectInfo as Conn
+from dbgen.core.misc import ConnectInfo as Conn
 from dbgen.core.sql     import sqlselect
 
 

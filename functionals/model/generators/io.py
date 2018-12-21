@@ -4,7 +4,7 @@ from os         import environ
 from os.path    import exists, join
 
 # Internal Modules
-from dbgen2 import (Model, Gen, Ref, PyBlock, Env, Query, Const, Import, defaultEnv, EQ, Arg)
+from dbgen import (Model, Gen, PyBlock, Env, Query, Const, Import, defaultEnv, EQ, Arg)
 
 from functionals.scripts.io.parse_setup       import parse_setup
 from functionals.scripts.io.get_stray_gpaw    import get_stray_gpaw
@@ -17,7 +17,7 @@ from functionals.scripts.load.get_econv_gpaw  import get_econv_gpaw
 ##############################################################################
 elempath = environ['ELEMPATH']
 keldpath = environ['KELDPATH']
-logpth   = '/Users/ksb/scp_tmp/auto' #
+logpth   = '/Users/ksb/scp_tmp/auto/auto_small' #
 psppth   = '/Users/ksb/scp_tmp/norm_conserving_setups'
 
 pthEnv  = Env(Import('os.path','join','exists'))
@@ -39,7 +39,7 @@ def getcoef(stor:str, bf:str)->str:
                     if exists(coefpath(stor))
                         else readfile('/Users/ksb/functionals/data/beef.json'))
 
-parse_env = defaultEnv + Env(Import('dbgen.core.parsing','parse_line'))
+parse_env = defaultEnv + Env(Import('dbgen.utils.parsing','parse_line'))
 
 elemcols = ['symbol', 'name', 'atomic_weight','atomic_radius'
           , 'phase','evaporation_heat', 'pointgroup','spacegroup'
@@ -69,29 +69,36 @@ def io(mod:Model) -> None:
 
     ########################################################################
     gl_env = defaultEnv + Env(Import('subprocess','getstatusoutput'))
-    glpb = PyBlock(get_stray_gpaw, env=gl_env,
-                        args = [Const(logpth)],outnames=['log'])
+    glpb = PyBlock(get_stray_gpaw,
+                   env  = gl_env,
+                   args = [Const(logpth)])
     getlogs  =                                                              \
         Gen(name    = 'getlogs',
             desc    = 'Scrape folder recursively for any GPAW jobs',
-            actions = [Job(insert=True, logfile=glpb['log'])],
+            actions = [Job(insert  = True,
+                           logfile = glpb['out'])],
             funcs    = [glpb])
     ########################################################################
-    sdq  = Query(exprs={'log':Job['logfile']})
-    sdpb = PyBlock((lambda x: x[:x.rfind('/')]), args=[sdq['log']],outnames=['sd'])
+    sdq  = Query(exprs={'j'   : Job.id,
+                        'log' : Job['logfile']})
+
+    sdpb = PyBlock(lambda x: x[:x.rfind('/')],
+                   args = [sdq['log']])
+
     getsd    = Gen(name    = 'getsd',
                    desc    = 'Get folder from logfile path',
-                   actions = [Job(job=Ref('job'),stordir=sdpb['sd'])],
+                   actions = [Job(job     = sdq['j'],
+                                  stordir = sdpb['out'])],
                    query   = sdq,
                    funcs   = [sdpb])
     ########################################################################
-    dgq = Query(exprs={'log':Job['logfile']})
-    dgpb = PyBlock(readfile,args=[dgq['log']],outnames=['txt'])
+    dgq  = Query(exprs={'j' : Job.id, 'log' : Job['logfile']})
+    dgpb = PyBlock(readfile, args = [dgq['log']])
     datagpaw = Gen(name    = 'datagpaw',
-                   desc    =  'Read log file from disk',
+                   desc    = 'Read log file from disk',
                    query   = dgq,
-                   actions = [Job(job=Ref('job'),log=dgpb['txt'])],
-                   funcs   =  [dgpb])
+                   actions = [Job(job = dgq['j'], log = dgpb['out'])],
+                   funcs   = [dgpb])
     ########################################################################
     su_env = defaultEnv + Env(Import('gzip',open='gopen'),
                               Import('hashlib','md5'),
@@ -100,32 +107,39 @@ def io(mod:Model) -> None:
                               Import('xml.etree.ElementTree','fromstring'),
                               Import('ase.data','chemical_symbols'))
 
-    spb = PyBlock(parse_setup, env = su_env,args = [Const(psppth)],
-                   outnames = ['check','xc','kind','name','z','val'])
+    spb = PyBlock(parse_setup,
+                  env      = su_env,
+                  args     = [Const(psppth)],
+                  outnames = ['check','xc','kind','name','z','val'])
+
+    isetup = Setup_family(insert = True,
+                          name   = spb['name'],
+                          kind   = spb['kind'],
+                          xc     = spb['xc'])
+
+    ielem  = Element(insert        = True,
+                     atomic_number = spb['z'])
     setups =                                                                    \
         Gen(name    = 'setups',
             desc    = 'Populate Setup table from a path containing setups',
-            actions = [Setup(insert = True,
-                             setup_family=Setup_family(insert = True,
-                                                       name   = spb['name'],
-                                                       kind   = spb['kind'],
-                                                       xc     = spb['xc']),
-                             element = Element(insert        = True,
-                                               atomic_number = spb['z']),
-                             checksum = spb['check'],
-                             val = spb['val'])],
+            actions = [Setup(insert       = True,
+                             setup_family = isetup ,
+                             element      = ielem,
+                             checksum     = spb['check'],
+                             val          = spb['val'])],
             funcs    = [spb])
     ########################################################################
-    eiq       = Query(exprs={'z':Element['atomic_number']})
-    eipb_args = [eiq['z'],Const(elempath)] # type: L[U[Arg,Const]]
+    eiq       = Query(exprs={'e':Element.id,
+                             'z':Element['atomic_number']})
+
     eipb      = PyBlock(parse_mendeleev,
-                        args     = eipb_args,
+                        args     = [eiq['z'], Const(elempath)],
                         outnames = elemcols)
     elemzinfo =                                                                 \
         Gen(name    = 'elemzinfo',
             desc    = '''Read a JSON file containing element reference data
                         Requires providing path to this file as a constant''',
-            actions = [Element(element = Ref('element'),
+            actions = [Element(element = eiq['e'],
                                **{x:eipb[x] for x in elemcols})],
             query   = eiq,
             funcs   = [eipb])
@@ -134,77 +148,98 @@ def io(mod:Model) -> None:
     ########################################################################
     # things that get populated by kelddata
     keldenv  = Env(Import('ase.data','chemical_symbols'),
-                    Import('re','findall')) + defaultEnv
+                   Import('re','findall')) + defaultEnv
 
-    kpb = PyBlock(parse_keld,env = keldenv,args =[Const(keldpath)],
-                  outnames=['ds_name','comp',
-                           'sym','UNUSEDVAL','UNUSEDVAL2','n_elems',
-                           'prop','val','dt'])
+    kpb = PyBlock(parse_keld,
+                  env      = keldenv,
+                  args     = [Const(keldpath)],
+                  outnames = ['ds_name','comp',
+                              'sym','UNUSEDVAL','UNUSEDVAL2','n_elems',
+                              'prop','val','dt'])
 
-    sde = SDE(insert = True ,
-              property=kpb['prop'], value = kpb['val'], datatype=kpb['dt'],
-               species_dataset = SD(insert=True,dataset_name=kpb['ds_name']),
-               species = Species(insert=True,
-                                 composition=kpb['comp'],
-                                 symmetry = kpb['sym']))
+    ispecies = Species(insert      = True,
+                       composition = kpb['comp'],
+                       symmetry    = kpb['sym'])
+
+    isd  = SD(insert       = True,
+              dataset_name = kpb['ds_name'])
+
+    isde = SDE(insert          = True ,
+              property        = kpb['prop'],
+              value           = kpb['val'],
+              datatype        = kpb['dt'],
+              species_dataset = isd,
+              species         = ispecies)
 
     kelddata =                                                              \
         Gen(name    = 'kelddata',
             desc    = 'Parses a .py Keld data file',
-            actions = [sde],
+            actions = [isde],
             funcs   = [kpb])
     ########################################################################
 
-    cq    = Query(exprs={'log':Job['log'],'sd':Job['stordir']})
+    cq    = Query(exprs={'j':Job.id,'log':Job['log'],'sd':Job['stordir']})
 
     pw    = PyBlock(parse_pw_gpaw, env = parse_env,
-                    args = [cq['log']],outnames=['pw'])
+                    args = [cq['log']])
     xc    = PyBlock(parse_xc_gpaw, env = parse_env,
-                    args = [cq['log']],outnames=['xc'])
+                    args = [cq['log']])
     econv = PyBlock(get_econv_gpaw,env=parse_env,
-                    args=[cq['log']],outnames=['econv'])
+                    args=[cq['log']])
     beef  = PyBlock(lambda x: int('beef' in x.lower()),
-                    args=[xc['xc']],outnames=['beef'])
+                    args=[xc['out']])
     coef  = PyBlock(getcoef,env=pthEnv,
-                    args = [cq['sd'],beef['beef']],outnames=['coefs'])
-
+                    args = [cq['sd'],beef['out']])
 
     calc =                                                                      \
         Gen(name    = 'calc',
             desc    = 'Populate calc table + F.K. from Relax_job',
             query   = cq,
-            actions = [Job(job  = Ref('job'),
+            actions = [Job(job  = cq['j'],
                            calc = Calc(insert = True,
-                                     pw       = pw['pw'],
-                                     xc       = xc['xc'],
-                                     coefs    = coef['coefs'],
-                                     econv    = econv['econv'],
-                                     beef     = beef['beef']))],
+                                     pw       = pw['out'],
+                                     xc       = xc['out'],
+                                     coefs    = coef['out'],
+                                     econv    = econv['out'],
+                                     beef     = beef['out']))],
             funcs   = [pw,xc,econv,coef,beef])
     ########################################################################
     def xx(x:str)->bool:
         return exists(join(x,'xccontribs.txt'))
 
-    hcq  = Query(exprs={'sd':Job['stordir']}, constr= EQ(Calc['xc'],'mBEEF'))
-    hcpb = PyBlock(xx,env=pthEnv,args=[hcq['sd']],outnames=['hc'])
+    hcq  = Query(exprs  = {'j'  : Job.id,
+                           'sd' : Job['stordir']},
+                 basis  = ['job'],
+                 constr = EQ(Calc['xc'],'mBEEF'))
+
+    hcpb = PyBlock(xx,env=pthEnv,args=[hcq['sd']])
     has_contribs =                                                              \
         Gen(name    = 'has_contribs',
             desc    = '?',
-            actions = [Job(job=Ref('job'),has_contribs=hcpb['hc'])],
+            actions = [Job(job          = hcq['j'],
+                           has_contribs = hcpb['out'])],
             query   = hcq,
             funcs   = [hcpb])
     ########################################################################
     def get_c(x:str)->str:
         with open(join(x,'xccontribs.txt'),'r') as f:
             return f.read()
-    ctrq  = Query(exprs={'sd':Job['stordir']},constr=Job['has_contribs'])
-    ctrpb = PyBlock(get_c,env=pthEnv,args=[ctrq['sd']],outnames=['out'])
+
+    ctrq  = Query(exprs  = {'j':Job.id,
+                            'sd':Job['stordir']},
+                  constr = Job['has_contribs'])
+
+    ctrpb = PyBlock(get_c,
+                    env      = pthEnv,
+                    args     = [ctrq['sd']])
+
     contribs =                                                              \
         Gen(name    = 'contribs',
             desc    = '?',
-            actions = [Job(job=Ref('job'),contribs=ctrpb['out'])] ,
+            actions = [Job(job      = ctrq['j'],
+                           contribs = ctrpb['out'])],
             query   = ctrq,
-            funcs   =  [ctrpb])
+            funcs   = [ctrpb])
 
     ########################################################################
     ########################################################################

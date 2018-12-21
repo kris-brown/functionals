@@ -1,5 +1,5 @@
 # Internal Modules
-from dbgen2                        import Model
+from dbgen                        import Model
 from functionals.model.objects    import new_model
 from functionals.model.generators import add_generators
 

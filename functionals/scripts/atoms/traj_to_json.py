@@ -1,19 +1,24 @@
-import ase # type: ignore
-import json
+from ase import Atoms # type: ignore
+from ase.constraints import FixAtoms # type: ignore
+
+from json import dumps
 #from numpy.linalg import norm  # type: ignore
 
-from dbgen.core.numeric import roundfloat
-def traj_to_json(atoms : ase.Atoms) -> str:
+from dbgen.utils.numeric import roundfloat
+def traj_to_json(atoms : 'Atoms') -> str:
     """
     Serialize an Atoms object in a human readable way
     """
+    def roundfloat(x: float) -> float:
+        output = round(float(x), 3)
+        return abs(output) if output == 0 else output
 
     atomdata = []
 
     fixed_inds = []
     if atoms.constraints:
         for constraint in atoms.constraints:
-            if isinstance(constraint,ase.constraints.FixAtoms):
+            if isinstance(constraint,FixAtoms):
                 fixed_inds.extend(list(constraint.get_indices()))
 
     atoms.wrap()
@@ -29,4 +34,4 @@ def traj_to_json(atoms : ase.Atoms) -> str:
     out = {'cell': [[roundfloat(x) for x in xx] for xx in atoms.get_cell().tolist()]
           ,'atomdata':atomdata}
 
-    return json.dumps(out)
+    return dumps(out)

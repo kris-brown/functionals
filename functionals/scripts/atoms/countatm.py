@@ -1,6 +1,6 @@
 from typing import Tuple as T
 from json import loads
-from dbgen.core.lists import normalize_list,nub
+from dbgen.utils.lists import normalize_list,nub
 #########################################################################
 def countatm(raw:str)->T[int,int,str,str,str,str,str]:
     """
