@@ -74,10 +74,10 @@ def sqldict(d : dict) -> Expr:
 
 def fit(mod : Model) -> None:
     # Extract tables
-    tabs = ['fit','const','fit_step','fit_const','fit_data','dft_data',
+    tabs = ['fit','const','fit_step','fit_const','fit_data',
             'nonlin_const','fit_nonlin_const','globals','expt','species']
 
-    Fit, Const, Fit_step, Fit_const, Fit_data, D, Nl_const, Fit_nl_const,\
+    Fit, Const, Fit_step, Fit_const, Fit_data, Nl_const, Fit_nl_const,\
     Globals,Expt,Species = map(mod.get, tabs) # type: ignore
 
 
@@ -90,55 +90,65 @@ def fit(mod : Model) -> None:
     pop_constraint =                                                            \
         Gen(name    = 'pop_constraint',
             desc    = 'populate constraints',
-            actions = [Const(insert = True, **{x:pcpb[x] for x in constcols})],
             funcs   = [pcpb],
-            tags    = ['fit'])
+            tags    = ['fit'],
+            actions = [Const(insert = True, **{x:pcpb[x] for x in constcols})])
 
     ########################################################################
     nlconstcols = ['nlconst_name','description','f','df','hess','lb','ub']
-    ncpb = PyBlock(nlconst,env = csv_env, outnames = nlconstcols)
+
+    ncpb = PyBlock(nlconst,
+                   env      = csv_env,
+                   outnames = nlconstcols)
     pop_nlconstraint =                                                          \
         Gen(name    = 'pop_nlconstraint',
             desc    = 'populate nonlinear constraints',
-            actions = [Nl_const(insert = True, **{x:ncpb[x] for x in nlconstcols})],
             funcs   = [ncpb],
-            tags    = ['fit'])
+            tags    = ['fit'],
+            actions = [Nl_const(insert = True,
+                                **{x:ncpb[x] for x in nlconstcols})])
 
     ########################################################################
     all_fit = dict(name='all',consts = '{}',nlconsts = '{}', dataconst='.',
                    basis = 8, initfit = 1, bound = 1, maxiter=1000,
                    constden = 3, lat_weight = 1, bm_weight = 1)
-    afpb = PyBlock(lambda x:x, args = [Constant(tuple(all_fit.values()))],
-                    outnames = list(all_fit.keys()))
+
+    afpb = PyBlock(lambda x : x,
+                   args     = [Constant(tuple(all_fit.values()))],
+                   outnames = list(all_fit.keys()))
+
     pop_all_fit =                                                               \
         Gen(name    = 'pop_all_fit',
             desc    = 'Fills a special row in Fit table that includes all data and constraints',
-            actions = [Fit(insert = True, **{x:afpb[x] for x in all_fit.keys()})],
             funcs   = [afpb],
-            tags    = ['fit'])
+            tags    = ['fit'],
+            actions = [Fit(insert = True, **{x:afpb[x] for x in all_fit.keys()})])
+
     ########################################################################
-    pfpb = PyBlock(parse_fits, env = pf_env,
-                   outnames=fitcols)
+    pfpb = PyBlock(parse_fits,
+                   env      = pf_env,
+                   outnames = fitcols)
     pop_fit =                                                                   \
         Gen(name    = 'pop_fit',
             desc    = 'Looks in FITPATH for fitting specifications',
-            actions = [Fit(insert = True,
-                           **{x:pfpb[x] for x in fitcols})],
             funcs   = [pfpb],
-            tags    = ['fit', 'io'])
+            tags    = ['fit', 'io'],
+            actions = [Fit(insert = True,
+                           **{x:pfpb[x] for x in fitcols})])
     ########################################################################
     pfdq = Query(exprs   = {'f' : Fit.id,
-                            'd' : D.id},
-                 basis   = ['fit','dft_data'],
+                            'd' : Expt.id},
+                 basis   = ['fit','expt'],
                  constr  = REGEXP(Species['nickname'],BINARY(Fit['dataconst'])))
+
     pop_fitdata =                                                               \
         Gen(name    = 'pop_fitdata',
             desc    = 'Connect fit to DFT data based on Regex match',
+            query   = pfdq,
+            tags    = ['fit'],
             actions = [Fit_data(insert   = True,
                                 fit      = pfdq['f'],
-                                dft_data = pfdq['d'])],
-            query   = pfdq,
-            tags    = ['fit'])
+                                expt     = pfdq['d'])])
 
     ########################################################################
 
@@ -152,89 +162,100 @@ def fit(mod : Model) -> None:
 
     pfc = defaultEnv + Env(Import('ast','literal_eval'))
 
-    pfcq = Query({'f':Fit.id, 'c':Fit['consts'],'cn':Const['const_name']},
-                  basis   = ['Fit','Const'])
+    pfcq = Query(exprs  = {'f'  : Fit.id,
+                           'c'  : Fit['consts'],
+                           'cn' : Const['const_name']},
+                 basis  = ['Fit','Const'])
 
-    pfcpb = PyBlock(parse_dict, env = pfc,
-                    args = [pfcq['c'],pfcq['cn']],
+    pfcpb = PyBlock(parse_dict,
+                    env      = pfc,
+                    args     = [pfcq['c'],pfcq['cn']],
                     outnames = ['cn','cw'])
-    pop_fitconst =                                                          \
+
+    con = Const(const_name = pfcpb['cn'])
+
+    pop_fitconst =                                                              \
         Gen(name    = 'pop_fitconst',
             desc    = 'Parses weight dictionary',
-            actions = [Fit_const(insert = True,
-                                 fit    = pfcq['f'],
-                                 const  = Const(const_name = pfcpb['cn']),
-                                 const_weight = pfcpb['cw'])],
             query   = pfcq,
             funcs   = [pfcpb],
-            tags    = ['fit'])
+            tags    = ['fit'],
+            actions = [Fit_const(insert       = True,
+                                 fit          = pfcq['f'],
+                                 const        = con,
+                                 const_weight = pfcpb['cw'])])
 
-    pfncq = Query({'f' : Fit.id,
-                   'c' : Fit['nlconsts'],
-                   'n' : Nl_const['nlconst_name']},
+    pfncq = Query(exprs = {'f' : Fit.id,
+                           'c' : Fit['nlconsts'],
+                           'n' : Nl_const['nlconst_name']},
                   basis = ['Fit','nonlin_const'])
 
-    pfncpb = PyBlock(parse_dict, env = pfc,
+    pfncpb = PyBlock(parse_dict,
+                     env      = pfc,
                      args     = [pfncq[x] for x in 'cn'],
                      outnames = ['n','w'])
 
-    nlinsert = Fit_nl_const(insert = True,
-                            fit    = pfncq['f'],
+    nc = Nl_const(nlconst_name=pfncpb['n'])
+
+    nlinsert = Fit_nl_const(insert          = True,
+                            fit             = pfncq['f'],
                             nl_const_weight = pfncpb['w'],
-                            nonlin_const = Nl_const(nlconst_name=pfncpb['n']))
+                            nonlin_const    = nc)
     pop_fitnlconst =                                                            \
         Gen(name    = 'pop_fitnlconst',
             desc    = 'Parses weight dictionary' ,
-            actions = [nlinsert],
             query   = pfncq,
             funcs   = [pfncpb],
-            tags    = ['fit'])
+            tags    = ['fit'],
+            actions = [nlinsert])
 
     ########################################################################
 
     pfs_env = defaultEnv + Env(Import('re','findall'))
-    pfsq    = Query({'f':Fit.id,'log':Fit['log']})
+    pfsq    = Query(exprs = {'f':Fit.id,'log':Fit['log']})
     pfsns   = ['niter','cost','c_viol']
-    pfspb   = PyBlock(parse_fitstep, env = pfs_env,
-                      args = [pfsq['log']], outnames = pfsns)
+    pfspb   = PyBlock(parse_fitstep,
+                      env      = pfs_env,
+                      args     = [pfsq['log']],
+                      outnames = pfsns)
     pop_fitstep =                                                      \
         Gen(name    = 'pop_fitstep',
             desc    = 'Analyzes fitting result log, populates Fitstep',
-            actions = [Fit_step(insert = True,
-                                fit    = pfsq['f'],
-                                **{x:pfspb[x] for x in pfsns})],
             query   = pfsq,
             funcs   = [pfspb],
-            tags    = ['fit', 'parallel'])
+            tags    = ['fit', 'parallel'],
+            actions = [Fit_step(insert = True,
+                                fit    = pfsq['f'],
+                                **{x:pfspb[x] for x in pfsns})])
 
     ########################################################################
 
     data_dict = dict(
-        atomic_contribs      = C('"',D['atomic_contribs'],'"'),
-        atomic_energies      = C('"',D['atomic_energies'],'"'),
-        bulk_ratio           = D['bulk_ratio'],
-        bulk_energy          = D['bulk_energy'],
-        bulk_contribs        = C('"',D['bulk_contribs'],'"'),
-        coefs                = C('"',D['coefs'],'"'),
-        composition          = C('"',D['composition'],'"'),
-        expt_cohesive_energy = D['expt_cohesive_energy'],
-        expt_volume          = D['expt_volume'],
-        expt_bm              = D['expt_bm'],
-        energy_vector        = D['energy_vector'],
-        volume_vector        = D['volume_vector'],
-        contrib_vector       = D['contrib_vector'])
+        atomic_contribs      = C('"',Expt['atomic_contribs'],'"'),
+        atomic_energies      = C('"',Expt['atomic_energies'],'"'),
+        bulk_ratio           = Expt['bulk_ratio'],
+        bulk_energy          = Expt['bulk_energy'],
+        bulk_contribs        = C('"',Expt['bulk_contribs'],'"'),
+        coefs                = C('"',Expt['coefs'],'"'),
+        composition          = C('"',Expt['composition'],'"'),
+        expt_cohesive_energy = Expt['expt_cohesive_energy'],
+        expt_volume          = Expt['expt_volume'],
+        expt_bm              = Expt['expt_bm'],
+        energy_vector        = Expt['energy_vector'],
+        volume_vector        = Expt['volume_vector'],
+        contrib_vector       = Expt['contrib_vector'])
 
-    rdq = Query({'f': Fit.id, 'rd':sqldict(data_dict)},
-                links = [Fit_data.r('Fit')],
-                basis = ['fit'],
+    rdq = Query(exprs   = {'f': Fit.id, 'rd':sqldict(data_dict)},
+                links   = [Fit_data.r('Fit')],
+                basis   = ['fit'],
                 aggcols = [Fit['name']])
     raw_data =                                                              \
         Gen(name    = 'fit_rawdata',
-            desc    = 'Serialize info stored in dft_data mapping table',
-            actions = [Fit(fit      = rdq['f'],
-                           raw_data = rdq['rd'])],
+            desc    = 'Serialize info stored in expt mapping table',
             query   = rdq,
-            tags    = ['fit'])
+            tags    = ['fit'],
+            actions = [Fit(fit      = rdq['f'],
+                           raw_data = rdq['rd'])])
 
     ########################################################################
 
@@ -247,18 +268,19 @@ def fit(mod : Model) -> None:
                      weight = Fit_const['const_weight'])
 
 
-    rcq = Query({'f':Fit.id, 'rc':sqldict(constdict)},
+    rcq = Query(exprs    = {'f':Fit.id, 'rc':sqldict(constdict)},
                 basis    = ['fit'],
                 links    = [Fit_const.r('Fit')],
                 opt_attr = [Const['s'],Const['alpha']],
                 aggcols  = [Fit['name']])
+
     raw_const =                                                                 \
         Gen(name    = 'raw_const',
             desc    = 'Serialize info stored in constraint mapping table',
-            actions = [Fit(fit = rcq['f'],
-                           raw_const = rcq['rc'])],
             query   = rcq,
-            tags    = ['fit'])
+            tags    = ['fit'],
+            actions = [Fit(fit       = rcq['f'],
+                           raw_const = rcq['rc'])])
 
     ########################################################################
 
@@ -270,16 +292,17 @@ def fit(mod : Model) -> None:
                    lb     = Nl_const['lb'],
                    weight = Fit_nl_const['nl_const_weight'])
 
-    rncq = Query({'f' : Fit.id, 'rnc' : sqldict(nlcdict)},
+    rncq = Query(exprs   = {'f' : Fit.id, 'rnc' : sqldict(nlcdict)},
                 basis    = ['fit'],
                 links    = [Fit_nl_const.r('Fit')],
                 aggcols  = [Fit['name']])
     raw_nlconst =                                                           \
         Gen(name    = 'raw_nlconst',
             desc    = 'Serialize info stored in nl_const mapping table',
-            actions = [Fit(fit = rncq['f'], raw_nlconst = rncq['rnc'])],
             query   = rncq,
-            tags    = ['fit'])
+            tags    = ['fit'],
+            actions = [Fit(fit         = rncq['f'],
+                           raw_nlconst = rncq['rnc'])])
 
     ########################################################################
 
@@ -290,22 +313,23 @@ def fit(mod : Model) -> None:
 
     fit_env = Env(Import('functionals.fit','Fit')) + defaultEnv
 
-    mfq = Query({'f':Fit.id, **{x:Fit[x] for x in fit_in}},
+    mfq = Query(exprs     = {'f':Fit.id, **{x:Fit[x] for x in fit_in}},
                 opt_attr  = [Fit['raw_data'],
                              Fit['raw_const'],
                              Fit['raw_nlconst']])
 
-    mfpb = PyBlock(fitting, env = fit_env,
+    mfpb = PyBlock(fitting,
+                   env      = fit_env,
                    args     = [mfq[x] for x in fit_in],
                    outnames = fit_out)
     make_fit =                                                              \
         Gen(name    = 'make_fit',
             desc    = "Scipy minimize: fill out 'Fit['err' iff it fails",
-            actions = [Fit(fit = mfq['f'],
-                           **{x:mfpb[x] for x in fit_out})],
             query   = mfq,
             funcs   = [mfpb],
-            tags    = ['fit','parallel'])
+            tags    = ['fit','parallel'],
+            actions = [Fit(fit = mfq['f'],
+                           **{x:mfpb[x] for x in fit_out})])
 
     ########################################################################
 
@@ -316,16 +340,17 @@ def fit(mod : Model) -> None:
     threegens = []
 
     for x,y in countdict.items():
-        q = Query({'f':Fit.id, 'n':COUNT(Literal(1))},
+        q = Query(exprs   = {'f':Fit.id, 'n':COUNT(Literal(1))},
                   aggcols = [Fit.id],
-                  basis = [y.name]
-                  )
+                  basis   = [y.name])
+
         threegens.append(
             Gen(name    = 'pop_'+x,
                 desc    = 'Aggregate and count Fit-related mapping tables',
-                actions = [Fit(fit=q['f'], **{x:q['n']})],
                 query   = q,
-                tags    = ['fit']))
+                tags    = ['fit'],
+                actions = [Fit(fit = q['f'],
+                               **{x:q['n']})]))
 
     nconst,nnlconst,ndata = threegens
     ########################################################################
@@ -336,13 +361,12 @@ def fit(mod : Model) -> None:
     gq = Query({y:Fit[x] for x,y in zipped},
                 constr  = EQ(Fit['name'], 'all'))
 
-
     globals =                                                               \
         Gen(name    = 'globals',
             desc    = 'Copies data from "all" row in Fit to Globals table',
-            actions = [Globals(insert = True, **{g:gq[g] for g in gcols})],
             query   = gq,
-            tags    = ['fit'])
+            tags    = ['fit'],
+            actions = [Globals(insert = True, **{g:gq[g] for g in gcols})])
 
     ########################################################################
     resid_cols = ['r2_ce','r2_bm','r2_lat','c_viol']
@@ -352,21 +376,24 @@ def fit(mod : Model) -> None:
     def f(dat:str,con:str,nlcon:str,x:str,n:int)->T[float,float,float,float]:
         return FromMatrix(np.array(loads(x)).reshape((n,n))).costs(dat,con,nlcon)
 
-    rq = Query({'f'   : Fit.id,
-                'res' : Fit['result'],
-                'b'   : Fit['basis'],
-                **{g:Globals[g] for g in gcols}},
+    rq = Query(exprs = {'f'   : Fit.id,
+                        'res' : Fit['result'],
+                        'b'   : Fit['basis'],
+                        **{g:Globals[g] for g in gcols}},
                 basis = ['Fit','Globals'])
-    rpb = PyBlock(f, env = fm_env,
-                  args= [rq[x] for x in gcols+['res','b']],
+
+    rpb = PyBlock(f,
+                  env      = fm_env,
+                  args     = [rq[x] for x in gcols+['res','b']],
                   outnames = resid_cols)
     resid =                                                                     \
         Gen(name    = 'resid',
             desc    = 'Computes metrics for a fit result',
-            actions = [Fit(fit=rq['f'],**{x:rpb[x] for x in resid_cols})],
             query   = rq,
             tags    = ['fit'],
-            funcs   = [rpb])
+            funcs   = [rpb],
+            actions = [Fit(fit=rq['f'],
+                           **{x:rpb[x] for x in resid_cols})])
     ########################################################################
 
     def bdist(x:str,n:int)->float:
@@ -382,10 +409,11 @@ def fit(mod : Model) -> None:
     beefdist =                                                                  \
         Gen(name    = 'beefdist',
             desc    = 'Computes Fit.beefdist',
-            actions = [Fit(fit=fbq['f'],beefdist=bdpb['out'])],
             query   = fbq,
             funcs   = [bdpb],
-            tags    = ['fit'])
+            tags    = ['fit'],
+            actions = [Fit(fit      = fbq['f'],
+                           beefdist = bdpb['out'])])
 
     ########################################################################
 
@@ -393,17 +421,20 @@ def fit(mod : Model) -> None:
         return float(2*r2ce + r2bm + r2lat) - log10(cviol)/5
 
     menv = Env(Import('math','log10'))
-    sq   = Query({'f':Fit.id,**{x:Fit[x] for x in resid_cols}})
+
+    sq   = Query({'f':Fit.id,
+                 **{x:Fit[x] for x in resid_cols}})
     spb  = PyBlock(f_score,
                    env  = menv,
                    args = [sq[x] for x in resid_cols])
     score =                                                                     \
         Gen(name    = 'score',
             desc    = 'Computes Fit.score',
-            actions = [Fit(fit=sq['f'],score=spb['out'])],
             query   = sq,
             funcs   = [spb],
-            tags    = ['fit'])
+            tags    = ['fit'],
+            actions = [Fit(fit   = sq['f'],
+                           score = spb['out'])])
 
     ########################################################################
 
@@ -412,15 +443,15 @@ def fit(mod : Model) -> None:
         return abs(1 - FromMatrix(M).apply(s=0,a=1))
 
     lvpb = PyBlock(get_lda_viol,
-                   env   = fm_env,
-                    args = [fbq['r'], fbq['b']])
+                   env  = fm_env,
+                   args = [fbq['r'], fbq['b']])
     lda_viol =                                                                 \
         Gen(name    = 'lda_viol',
             desc    = 'Computes Fit.lda_viol',
-            actions = [Fit(fit=fbq['f'],lda_viol=lvpb['out'])] ,
             query   = fbq,
             funcs   = [lvpb],
-            tags    = ['fit'])
+            tags    = ['fit'],
+            actions = [Fit(fit=fbq['f'],lda_viol=lvpb['out'])])
 
     ########################################################################
     ########################################################################

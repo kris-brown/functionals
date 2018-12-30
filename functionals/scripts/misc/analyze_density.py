@@ -28,7 +28,6 @@ if __name__=='__main__':
     #---------------------------------------
     atoms,calc = restart(pth)
 
-    print('fix treatment of pseudo_wave_function')
     '''
     T = -1/2  < psi | del^2 | psi>
       integrate by parts

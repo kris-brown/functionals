@@ -17,7 +17,7 @@ from functionals.scripts.load.get_econv_gpaw  import get_econv_gpaw
 ##############################################################################
 elempath = environ['ELEMPATH']
 keldpath = environ['KELDPATH']
-logpth   = '/Users/ksb/scp_tmp/auto/auto_small' #
+logpth   = '/Users/ksb/scp_tmp/auto/auto' #
 psppth   = '/Users/ksb/scp_tmp/norm_conserving_setups'
 
 pthEnv  = Env(Import('os.path','join','exists'))

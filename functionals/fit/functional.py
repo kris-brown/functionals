@@ -1,5 +1,5 @@
 # External Modules
-from typing import Callable as C, Optional as O, List as L, Tuple as T
+from typing import Callable as C, List as L, Tuple as T
 from abc    import ABCMeta, abstractmethod
 from json   import load
 from numpy  import array,sum,multiply,heaviside,exp,arange # type: ignore
@@ -102,7 +102,7 @@ class FromMatrix(Functional):
     Implicitly define Fx formula in terms of a 2D matrix corresponding to
     coefficients for Legendre Polynomials
     """
-    def __init__(self, A:array, name : O[str] = None) -> None:
+    def __init__(self, A:array, name : str = None) -> None:
         self.A = A
         self.x = A.flatten()
         self.N,self.M = A.shape

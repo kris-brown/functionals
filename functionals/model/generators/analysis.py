@@ -34,9 +34,9 @@ def get_near_min(dv:float,all_vols:str)->int:
     n     = len(vols)
     m     = vols.index(float(dv))
     if n % 2 == 1:
-        min_n = (n-1)//2
+        min_n = (n-1) // 2
     else:
-        mid   = n//2
+        mid   = n // 2
         lo,hi = mid - 1, mid + 1
         min_n = lo if abs(vols[lo]) < abs(vols[hi]) else hi
 
@@ -51,15 +51,14 @@ def analysis(mod : Model) -> None:
     #---------------
     tabs = ['job','atom','element','struct','calc','cell',
             'species','expt','bulk_job','reference','species_dataset',
-            'species_comp','species_dataset_element','dft_data']
+            'species_comp','species_dataset_element']
 
     Job, Atom, Element, Struct, Calc, Cell, Species, Expt, Bulk_job,\
     Reference, Species_dataset,Species_comp,Species_dataset_element,\
-    Dft_data = map(mod.get, tabs) # type: ignore
+      = map(mod.get, tabs) # type: ignore
 
     # Abbreviations
     #--------------
-    D   = Dft_data
     SDE = Species_dataset_element
     BJ  = Bulk_job.r('job')
     BJE = Bulk_job.r('Expt')
@@ -70,18 +69,20 @@ def analysis(mod : Model) -> None:
                          'n' : Struct['n_atoms']},
                 basis   = ['Bulk_job'],
                 constr  = EQ(Calc['xc'], 'mBEEF'))
-    bulkexpt =                                                                  \
-        Gen(name = 'bulkexpt',
-            desc = 'All pairs of (bulk) species + calc., if mBEEF calc'\
-                    'Links the bulk_job table to Expt table, too',
-            actions = [Bulk_job(bulk_job = beq['b'],
-                                expt     = Expt(insert  = True,
-                                                n_atoms = beq['n'],
-                                                species = beq['s'], # otherwise tries to link through FK that we're populating!
-                                                calc    = beq['c']))],
 
-            query   = beq)
-    ########################################################################
+    iexpt = Expt(insert  = True,
+                    n_atoms = beq['n'],
+                    species = beq['s'], # otherwise tries to link through FK that we're populating!
+                    calc    = beq['c'])
+    bulkexpt =                                                                  \
+        Gen(name    = 'bulkexpt',
+            desc    = 'All pairs of (bulk) species + calc., if mBEEF calc'\
+                      'Links the bulk_job table to Expt table, too',
+            query   = beq,
+            actions = [Bulk_job(bulk_job = beq['b'],
+                                expt     = iexpt)])
+    ############################################################################
+
     aggs = ['contribs','energies','volumes']
 
     agg_dict = dict(contribs = Job['contribs'](BJE),
@@ -99,8 +100,8 @@ def analysis(mod : Model) -> None:
     pop_aggs =                                                                  \
         Gen(name    = 'pop_aggs',
             desc    = 'Store information about closest 5 singlepoints near optimum',
-            actions = [Expt(expt=paq['e'],**{x:paq[x] for x in aggs})] ,
-            query     = paq)
+            query   = paq,
+            actions = [Expt(expt=paq['e'],**{x:paq[x] for x in aggs})])
 
     ########################################################################
     avq = Query(exprs   = {'e':Expt.id,
@@ -111,8 +112,8 @@ def analysis(mod : Model) -> None:
     all_vols =                                                                  \
         Gen(name    = 'all_vols',
             desc    = 'Store all volumes',
-            actions = [Expt(expt = avq['e'], all_vols = avq['av'])],
-            query   = avq)
+            query   = avq,
+            actions = [Expt(expt = avq['e'], all_vols = avq['av'])])
     ########################################################################
     nmq  = Query(exprs = {'b':Bulk_job.id,
                           'dv':Bulk_job['dv'],
@@ -124,10 +125,10 @@ def analysis(mod : Model) -> None:
     near_min =                                                                  \
         Gen(name    = 'near_min',
             desc    = '?',
-            actions = [Bulk_job(bulk_job = nmq['b'],
-                                near_min = nmpb['out'])],
             query   = nmq,
-            funcs   = [nmpb])
+            funcs   = [nmpb],
+            actions = [Bulk_job(bulk_job = nmq['b'],
+                                near_min = nmpb['out'])])
 
     ########################################################################
     Num = Species_comp['num']
@@ -177,11 +178,11 @@ def analysis(mod : Model) -> None:
     kpts =                                                                      \
         Gen(name    = 'kpts',
             desc    = 'Kpoints and kpoint density for each job',
+            query   = kq,
+            funcs   = [kpb1,kpb0],
             actions = [Job(job = kq['j'],
                            **{x:kpb0[x] for x in ks},
-                           **{x:kpb1[x] for x in kds})],
-            query   = kq,
-            funcs   = [kpb1,kpb0])
+                           **{x:kpb1[x] for x in kds})])
 
     ########################################################################
 
@@ -211,11 +212,11 @@ def analysis(mod : Model) -> None:
         Gen(name    = 'eos',
             desc    = 'Uses ASE equation of state over aggregated volumes '
                       'and energies for an experiment',
+            query   = eosq,
+            funcs   = [eospb],
             actions = [Expt(expt   = eosq['ex'],
                             n_data = eosq['ndata'],
-                            **{x:eospb[x] for x in eos_cols})],
-            query   = eosq,
-            funcs   = [eospb])
+                            **{x:eospb[x] for x in eos_cols})])
 
     ########################################################################
     lq = Query(exprs={'e' : Expt.id,
@@ -250,16 +251,15 @@ def analysis(mod : Model) -> None:
                             |AND| (Expt['n_data'] > 5))
     cohesive =                                                                  \
         Gen(name    = 'cohesive',
-            desc    = 'Populates DFT data',
-            actions = [D(insert         = True,
+            desc    = 'Populates more things in experiment',
+            query   = cq,
+            actions = [Expt(expt           = cq['e'],
                          coefs          = cq['coefs'],
                          name           = cq['name'],
                          composition    = cq['comp'],
                          energy_vector  = cq['ev'],
                          volume_vector  = cq['vv'],
-                         contrib_vector = cq['cv'],
-                         expt           = cq['e'])],
-            query   = cq)
+                         contrib_vector = cq['cv'])])
 
 
 
@@ -270,25 +270,25 @@ def analysis(mod : Model) -> None:
 
     twogens = []
     for x,y in sde_dict.items():
-        q = Query(exprs={'d':Dft_data.id,'v':SDE['value']},
+        q = Query(exprs={'d':Expt.id,'v':SDE['value']},
                   links = [SDE.r('species')],
-                  basis = ['dft_data'],
+                  basis = ['expt'],
                   constr= EQ(SDE['property'], x))
 
         twogens.append(Gen(name    = x.replace(' ','_'),
                            desc    = 'Copying %s info from Kelddata into dataset'%x,
-                           actions = [D(dft_data = q['d'], **{y:q['v']})],
-                           query   = q))
+                           query   = q,
+                           actions = [Expt(expt = q['d'], **{y:q['v']})]))
 
     cohesive_target,bm_target = twogens # unpack
 
 
     ########################################################################
-    vq = Query(exprs    = {'d': Dft_data.id,
+    vq = Query(exprs    = {'d': Expt.id,
                            'v':SDE['value'],
                            's':Species['symmetry']},
                 links   = [SDE.r('Species')],
-                basis   = ['dft_data'],
+                basis   = ['expt'],
                 constr  = EQ(SDE['property'], 'lattice parameter'))
 
     vpb = PyBlock(make_volume,
@@ -296,10 +296,10 @@ def analysis(mod : Model) -> None:
     vol_target =                                                                \
         Gen(name    = 'vol_target',
             desc    = '?',
-            actions = [D(dft_data    = vq['d'],
-                         expt_volume = vpb['out'])],
             query   = vq,
-            funcs   = [vpb])
+            funcs   = [vpb],
+            actions = [Expt(expt    = vq['d'],
+                         expt_volume = vpb['out'])])
 
     ########################################################################
 
@@ -315,22 +315,22 @@ def analysis(mod : Model) -> None:
 
         return CONCAT('{',group,'}')
 
-    ceq = Query({'d'   : Dft_data.id,
+    ceq = Query({'d'   : Expt.id,
                  'a_c' : make_dict('contribs'),
                  'a_e' : make_dict('energy')},
                 links = [Species_comp.r('Species'),
                              Reference.r('Element'),
                              Reference.r('Calc')],
-                basis   = ['dft_data'],
-                aggcols = [D.id])
+                basis   = ['expt'],
+                aggcols = [Expt.id])
 
     cohesive_elems =                                                            \
         Gen(name    = 'cohesive_elems',
             desc    = '?',
-            actions = [D(dft_data       = ceq['d'],
+            query   = ceq,
+            actions = [Expt(expt        = ceq['d'],
                         atomic_contribs = ceq['a_c'],
-                        atomic_energies = ceq['a_e'])],
-            query   = ceq)
+                        atomic_energies = ceq['a_e'])])
     ########################################################################
 
     vol_pa = Cell['volume'] / Struct['n_atoms']
@@ -355,34 +355,36 @@ def analysis(mod : Model) -> None:
     mingap =                                                                    \
         Gen(name    = 'mingap',
             desc    = 'Stores a value under "Expt" unique to the best corresponding Bulk_job' ,
+            query   = minq,
             actions = [Expt(expt    = minq['e'],
-                            min_gap = minq['m'])] ,
-            query   = minq)
+                            min_gap = minq['m'])])
 
 
     ########################################################################
 
     ratio = Struct['n_atoms'](BJ) / Species['n_atoms']
-    co = Query({'d'  : Dft_data.id,
-                'j'  : Job.id(BJ),
-                'be' : Job['energy'](BJ),
-                'bc' : Job['contribs'](BJ),
-                'br' : ratio},
+    co = Query(exprs   = {'d'  : Expt.id,
+                          'j'  : Bulk_job.id,
+                          'be' : Job['energy'](BJ),
+                          'bc' : Job['contribs'](BJ),
+                          'br' : ratio},
                 links  = [BJE],
-                basis  = ['dft_data'],
+                basis  = ['expt'],
                 constr = EQ(Bulk_job['gap'], Expt['min_gap']))
 
     cohesive_optjob =                                                           \
         Gen(name    = 'cohesive_optjob',
-            desc    = 'Populates FK using the data populated by generators '
-                       '"gap" and "mingap"',
-            actions = [D(dft_data      = co['d'],
-                         best_job      = co['j'],
-                         bulk_energy   = co['be'],
-                         bulk_contribs = co['bc'],
-                         bulk_ratio    = co['br'])],
-            query   = co)
+            desc    = '???',
+            query   = co,
+            actions = [Expt(expt      = co['d'],
+                             best_job      = co['j'],
+                             bulk_energy   = co['be'],
+                             bulk_contribs = co['bc'],
+                             bulk_ratio    = co['br'])])
 
+    ########################################################################
+    ########################################################################
+    ########################################################################
 
     gens = [bulkexpt, pop_aggs, all_vols, near_min, eform, kpts, eos, lattice,
             cohesive, cohesive_target, bm_target, vol_target, cohesive_elems,

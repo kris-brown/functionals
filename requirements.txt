@@ -10,4 +10,3 @@ pathos
 pymatgen
 plotly
 sklearn
-gpaw

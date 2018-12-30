@@ -18,8 +18,8 @@ def query_fitdata(cxnpth : str, where : str) -> BigTuple:
                      pw,
                      econv,
                      expt.n_atoms
-                FROM dft_data
-                    JOIN expt ON dft_data__expt = expt_id
+                FROM expt
+                    JOIN expt ON expt__expt = expt_id
                     JOIN species ON expt__species = species_id
                     JOIN calc ON expt__calc = calc_id
                  WHERE '''+(where or '1')

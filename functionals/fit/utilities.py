@@ -1,5 +1,5 @@
 # External modules
-from typing import List as L,Tuple as T,TypeVar,Callable as C, Optional as O
+from typing import List as L,Tuple as T,TypeVar,Callable as C
 from numpy import zeros,array                        # type: ignore
 from numpy.polynomial.legendre import Legendre # type: ignore
 import numpy as np  # type: ignore
@@ -102,10 +102,10 @@ def flatten(lol: L[L[A]])->L[A]:
 def lst_sq_pulp(A      : np.array,
                b      : np.array,
                bounds : L[T[float,float]],
-               A_eq   : O[np.array] = None,
-               b_eq   : O[np.array] = None,
-               A_ub   : O[np.array] = None,
-               b_ub   : O[np.array] = None,
+               A_eq   : np.array = None,
+               b_eq   : np.array = None,
+               A_ub   : np.array = None,
+               b_ub   : np.array = None,
                maxiter: int   = 1000,
                tol    : float = .01,
                verbose: bool  = True
@@ -151,10 +151,10 @@ def lst_sq_pulp(A      : np.array,
 def lst_sq_linprog(A      : np.array,
                    b      : np.array,
                    bounds : L[T[float,float]],
-                   A_eq   : O[np.array] = None,
-                   b_eq   : O[np.array] = None,
-                   A_ub   : O[np.array] = None,
-                   b_ub   : O[np.array] = None,
+                   A_eq   : np.array = None,
+                   b_eq   : np.array = None,
+                   A_ub   : np.array = None,
+                   b_ub   : np.array = None,
                    maxiter: int   = 1000,
                    tol    : float = .01,
                    verbose: bool  = True

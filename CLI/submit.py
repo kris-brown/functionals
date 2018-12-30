@@ -1,5 +1,5 @@
 # External modules
-from typing      import Union, List
+from typing      import Union as U, List as L
 from abc         import ABCMeta, abstractmethod
 from os.path     import join,exists
 from os          import chdir,system,mkdir,listdir,environ
@@ -18,6 +18,10 @@ python
     functionals/submit.py
     --target=/scratch/users/ksb/atomization/auto/bulks
     --src=/scratch/users/ksb/functionals/data/structures
+
+python
+    functionals/submit.py
+
 """
 ################################################################################
 def get_script(s:str)->str:
@@ -25,7 +29,7 @@ def get_script(s:str)->str:
     with open(join(funcroot,'functionals/scripts/'+s),'r') as f:
         return f.read()
 
-def safeMkdir(pth:str)->None:
+def safeMkdir(pth:str) -> None:
     if not exists(pth): mkdir(pth)
 
 allelems = list(range(1,57)) + list(range(72,83))
@@ -40,11 +44,12 @@ class Calc(object):
                  dconv  : float = 1e-2,
                  nbands : int   = -8,
                  setups : str   = 'paw',
-                 kpts   : Union[int,float,tuple,list] = (1,1,1)
+                 kpts   : U[int,float,tuple,list] = (1,1,1)
                 ) -> None:
 
         if isinstance(kpts,(int,float)):
-            self.kpts = {'density':kpts,'gamma':True} # type: Union[dict,tuple]
+            self.kpts = {'density':kpts,'gamma':True} # type: U[dict,tuple]
+
         elif isinstance(kpts,(tuple,list)):
             self.kpts=tuple(kpts)
         else: raise ValueError
@@ -115,11 +120,13 @@ class Atomic(Job):
             self._submit(pth)
 
     @staticmethod
-    def enmasse(elems  : List[int], submitpth : str,
-                time   : int   = 10,
-                sigma  : float = 0.01,
-                econv  : float = 1e-3,
-                dconv  : float = 1e-3,
+    def enmasse(elems     : L[int],
+                submitpth : str,
+                beef      : str   = '',
+                time      : int   = 10,
+                sigma     : float = 0.01,
+                econv     : float = 1e-3,
+                dconv     : float = 1e-3,
                 ) -> None:
         """Submit many atomic jobs with the same parameters"""
         es = [Atomic(e,time,sigma,econv,dconv) for e in elems]
@@ -136,7 +143,7 @@ class Bulk(Job):
                  sigma  : float = 0.01,
                  econv  : float = 1e-3,
                  dconv  : float = 1e-3,
-                 strains: list  = list(range(-10,11))
+                 strains: list  = list(range(-9,10))
                 ) -> None:
         self.atoms   = read(bulk)
         self.name    = bulk[bulk.rfind('/')+1:bulk.find('.')]
@@ -163,6 +170,7 @@ class Bulk(Job):
 
     @staticmethod
     def enmasse(pth    : str, submitpth : str,
+                beef   : str   = '',
                 time   : int   = 1,
                 sigma  : float = 0.01,
                 econv  : float = 1e-3,
@@ -171,56 +179,63 @@ class Bulk(Job):
                 retry  : bool  = False
                 ) -> None:
         """ Create a bunch of bulks from a directory containing .traj files"""
-        bulks = [Bulk(join(pth,p),time,sigma,econv,dconv,strains)
+        bulks = [Bulk(bulk=join(pth,p),time=time,sigma=sigma,econv=econv,dconv=dconv,strains=strains)
                     for p in listdir(pth) if p[-5:]=='.traj']
         for b in bulks:
             b.submit(submitpth, retry)
 
 
 #########################################
+# PARSER #
+def parse_elems(x : str) -> L[int]:
+    if x == 'all': return allelems
+    else:          return list(map(int, x.split()))
+
+parser = ArgumentParser(description  = 'Submit some jobs',
+                        allow_abbrev = True)
+
+parser.add_argument('--time',
+                    default = 5,
+                    type    = int,
+                    help    = 'Walltime for batch jobs')
+
+parser.add_argument('--sigma',
+                    default = 0.01,
+                    type    = float,
+                    help    = 'Fermi temperature')
+
+parser.add_argument('--econv',
+                    default = 0.001,
+                    type    = float,
+                    help    = 'Energy convergence criterion ')
+
+parser.add_argument('--dconv',
+                    default = 0.001,
+                    type    = float,
+                    help    = 'Density convergence criterion')
+
+parser.add_argument('--src',
+                    default = '',
+                    type    = str,
+                    help    = 'Path to bulk .traj files')
+
+parser.add_argument('--target',
+                    default = '',
+                    type    = str,
+                    help    = 'Path to where jobs will be submitted from')
+
+parser.add_argument('--elems',
+                    default = '',
+                    type    = parse_elems,
+                    help    = 'Either "all" or space separated list of positive integers')
+
+parser.add_argument('--beef',
+                    default = '',
+                    help    = 'Copies a file into the working directory as BEEFoftheDay.txt')
+
+
 def main()->None:
-    parser = ArgumentParser(description  = 'Submit some jobs',
-                            allow_abbrev = True)
-
-    parser.add_argument('--time',
-                        default = 5,
-                        type    = int,
-                        help    = 'Walltime for batch jobs')
-
-    parser.add_argument('--sigma',
-                        default = 0.01,
-                        type    = float,
-                        help    = 'Walltime for batch jobs')
-
-    parser.add_argument('--econv',
-                        default = 0.001,
-                        type    = float,
-                        help    = 'Walltime for batch jobs')
-
-    parser.add_argument('--dconv',
-                        default = 0.001,
-                        type    = float,
-                        help    = 'Walltime for batch jobs')
-
-    parser.add_argument('--src',
-                        default = '',
-                        type    = str,
-                        help    = 'Path to bulk .traj files')
-
-    parser.add_argument('--target',
-                        default = '',
-                        type    = str,
-                        help    = 'Path to where jobs will be submitted from')
-
-    def parse_elems(x:str)->List[int]:
-        if x == 'all': return allelems
-        else:          return list(map(int, x.split()))
-
-    parser.add_argument('--elems',
-                        default = '',
-                        type    = parse_elems,
-                        help    = 'Either "all" or space separated list of positive integers')
-
+    '''Submit either bulk or element singlepoint calculations'''
     args = parser.parse_args()
     assert bool(args.src) ^ bool(args.elems), "Must be submiting Bulk or Atomic jobs"
     assert args.target,                       "Need a target location to submit jobs"
@@ -228,12 +243,12 @@ def main()->None:
 
     calc = {attr:getattr(args,attr) for attr in ['time','sigma','econv','dconv']}
 
-
+    common = {'submitpth':args.target,'beef':args.beef}
 
     if args.elems:
-        Atomic.enmasse(elems=args.elems,submitpth=args.target,**calc)
+        Atomic.enmasse(elems=args.elems,**common,**calc) # type: ignore
     elif args.src:
-        Bulk.enmasse(pth=args.src,submitpth=args.target,**calc)
+        Bulk.enmasse(pth=args.src,**common,**calc) # type: ignore
     else:
         raise ValueError("Must be submiting Bulk or Atomic jobs")
 
