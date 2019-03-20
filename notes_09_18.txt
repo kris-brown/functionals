@@ -7,13 +7,19 @@ Need: main project + 2-3 subprojects (give current status report)
       - improvement of chemisorption energies (chemical accuracy)
       - improved transferability (look at residuals compared to mBEEF)
     Path to success
-      - Analytical constraints + BEEF coefficient fitting
-      - sg15 pseudopotentials for well-behaved transition metals
+      - Analytical constraints + BEEF coefficient fitting (modifications to basis functions - SCAN inspiration)
+      - train with multiple pseudopotentials to avoid PP bias
       - Lattice optimization, Surface relaxation, Bulk modulus, Reaction energies, Chemisorption energies
     Incremental Progress
       - Understand at higher level - incremental progress towards better functionals
+      - Focusing on chemi/physi-sorption while using constraints to avoid unphysical (e.g. worse lattice constants of BEEF vs PBEsol)
       - Improve chemisorption accuracy without chemisorption data: mBEEF style + SCAN constraints
+      - Exploring regions of s/alpha space are relevant (possibility for tailoring functionals to domains or making 'data-free' regions analytical (due to soft PP, we don't get diverse data))
+
 Related-Subprojects
   - Parameterized BEEF coefficients from system analysis (ML)
-  - Personalized functionals, optimized over materials and output domains
-  - Density error reduction for surfaces
+  - Personalized functional fitting
+    - Easy to use python package as a deliverable
+    - AKA optimized over materials and output domains
+  - Density error reduction for surfaces (surface magnetic moments? atoms?)
+  - Google subproject???

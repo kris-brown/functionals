@@ -28,10 +28,10 @@ def parse_keld(pth:str) -> T[str,L[str],L[str],L[int],int,L[str],L[str],str]:
     with open(pth,'r') as f:
         keld = load(f)
 
-    cols      = ['lattice parameter'
-                ,'cohesive energy'
-                ,'bulk modulus'
-                ,'magmom']
+    cols      = ['lattice parameter',
+                 'cohesive energy',
+                 'bulk modulus',
+                 'magmom',]
 
     # Extract data
     #------------
@@ -40,6 +40,10 @@ def parse_keld(pth:str) -> T[str,L[str],L[str],L[int],int,L[str],L[str],str]:
         composition = [] # type: L[T[str,str,int,int]]
 
         k = v['name']
+
+        bm = 'bulk modulus'
+        if bm not in v and bm + ' kittel' in v:
+            v[bm] = v[bm + ' kittel']
 
         elemstr,crystal = k.split('-')                  # 'LiH','b1'
         sym     = struct_dict[crystal]             # 'b1' -> 'AB_1_a_b_225'

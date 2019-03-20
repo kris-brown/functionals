@@ -9,12 +9,14 @@ def anytraj(root : str) -> 'Atoms':
     """
     ASE IO read function - takes any traj it can find
     """
-    trajs = glob('%s/*.traj'%root)
-    for t in trajs:
-        if getsize(t) > 10:
-            atoms = read(t)
-            return atoms
-    raise ValueError('Get Traj could not find any traj in '+root)
+    from os.path import join
+    return read(join(root,'POSCAR'))
+    # trajs = glob('%s/*.traj'%root)
+    # for t in trajs:
+    #     if getsize(t) > 10:
+    #         atoms = read(t)
+    #         return atoms
+    # raise ValueError('Get Traj could not find any traj in '+root)
 
 if __name__=='__main__':
     import sys

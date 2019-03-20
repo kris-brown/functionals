@@ -8,9 +8,9 @@ from functionals.fit.utilities import LegendreProduct
 # Type Synonyms
 Unary = C[[float],float]
 ################################################################################
-def fx(i : int, j : int) -> Unary:
+def fx(i : int, j : int, a1: float, msb: float) -> Unary:
     '''input float in callable is reduced gradient'''
-    return lambda s: LegendreProduct(s,0,i,j)
+    return lambda s: LegendreProduct(s,0,a1,msb,i,j)
 
 # Shorthand for precise thirds
 #-----------------------------
@@ -19,8 +19,8 @@ _2  = 2.E0/3.E0
 _4  = 4.E0/3.E0
 _8  = 8.E0/3.E0
 
-def intkernel(i : int, j : int) -> Unary:
-    fx_ij = fx(i,j)
+def intkernel(i : int, j : int, a1: float, msb: float) -> Unary:
+    fx_ij = fx(i,j,a1,msb)
 
     def f(r :float) -> float:
         """
@@ -34,22 +34,21 @@ def intkernel(i : int, j : int) -> Unary:
         return -3.*3.**(_1)/pi**(_2)*2.**(_1)*exp(-r * _8)*r**2 * fx_ij(s)
     return f
 
-def one_time_function()->array:
-    return [quad(intkernel(i,j), 0., inf)[0]
+def one_time_function(a1:float,msb:float)->array:
+    return [quad(intkernel(i,j,a1,msb), 0., inf)[0]
                     for j in range(8) for i in range(8)]
 
-def h_norm_const()->T[str,float]:
+def h_norm_const(a1:float,msb:float)->T[str,float]:
     '''Returns a 64-element vector which can be dotted with a BEEF coef vector,
        the constraint being equality with -0.3125'''
-    return dumps(one_time_function()),-0.3125
+    return dumps(one_time_function(a1,msb)),-0.3125
 
-def weighted_s()->None:
+def weighted_s() -> None:
 
     from plotly.graph_objs import Figure,Histogram as Hist # type: ignore
     from numpy.random      import choice # type: ignore
-    from numpy import array,logspace
+    from numpy             import array,logspace # type: ignore
     from plotly.offline    import plot # type: ignore
-
 
     rpt = lambda x: [x() for _ in range(10000)]
 
@@ -61,11 +60,8 @@ def weighted_s()->None:
     s    = p**(0.5)
     dist = rpt(lambda:choice(a = s, p = pden)) # type: ignore
 
-    print('\ndist',dist)
-
     data = [Hist(x        = dist,
-                 nbinsx = 10000,
-
+                 nbinsx   = 10000,
                  name     = 'hydrogen',
                  histnorm = 'probability')]
 

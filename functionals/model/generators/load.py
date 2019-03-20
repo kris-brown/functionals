@@ -5,7 +5,8 @@ from ase.data   import chemical_symbols # type: ignore
 from ast        import literal_eval
 
 # Internal Modules
-from dbgen import (Model, Gen, Query, PyBlock, AND, Env, defaultEnv, Import, EQ)
+from dbgen import (Model, Gen, Query, PyBlock, AND, Env, defaultEnv, Import,
+                     Literal as Lit,  EQ, JPath, Constraint)
 
 from functionals.scripts.io.anytraj             import anytraj
 from functionals.scripts.load.find_setups       import find_setups
@@ -19,9 +20,11 @@ from functionals.scripts.atoms.get_pure_struct  import get_pure_struct
 from functionals.scripts.atoms.cell_info        import cell_info
 from functionals.scripts.atoms.countatm         import countatm
 from functionals.scripts.atoms.traj_to_json     import traj_to_json
+
 '''
 Pure functions to extract information loaded by IO actions
 '''
+
 ##############################################################################
 ##############################################################################
 ##############################################################################
@@ -46,12 +49,21 @@ def species_nick(comp:str, sym:str)->str:
     return elems+'_'+nick_dict.get(sym,'')
 
 eng_env = Env(Import('re','search'))
-def eng(s:str)->float:
+
+def eng_gpaw(s:str)->float:
     '''Parse the result free energy from a GPAW logfile'''
     pat = r'Free energy:\s+([-+]?\d+\.\d+)'
-    match = search(pat, s); assert match
-    return float(match.groups()[0])
+    from re import findall
+    match = findall(pat, s); assert match
+    return float(match[-1])
 
+def eng_vasp(s:str)->float:
+    '''Parse the result free energy from a GPAW logfile'''
+    from re import findall
+    pat = r'TOTEN\s+=\s+([-+]?\d+\.\d+)'
+    match = findall(pat, s); assert match
+    out = float(match[-1])
+    return out
 ##############################################################################
 ##############################################################################
 ##############################################################################
@@ -59,37 +71,25 @@ def eng(s:str)->float:
 def load(mod : Model) -> None:
     # Extract tables
     tabs = ['job','atom','element','struct','calc','cell','pure_struct',
-            'species','bulk_job','reference','setup','setup_family',
-            'job_setup','species_comp','species_dataset',
+            'species','bulk_job','reference','species_comp','species_dataset',
             'species_dataset_element']
 
     Job, Atom, Element, Struct, Calc, Cell, Pure_struct, Species, Bulk_job,\
-    Reference, Setup, Setup_family, Job_setup, Species_comp, Species_dataset,         \
+    Reference, Species_comp, Species_dataset,         \
     Species_dataset_element = map(mod.get, tabs) # type: ignore
 
+    struct__pure_struct,job__calc,atom__struct, job__struct = map(mod.get_rel,[
+        Struct.r('pure_struct'),Job.r('calc'),Atom.r('struct'),Job.r('struct')])
 
-    sdq   = Query(exprs={'j':Job.id,    'sd'  : Job['stordir']})
-    logq  = Query(exprs={'j':Job.id,    'log' : Job['log']})
-    rawq  = Query(exprs={'s':Struct.id, 'raw' : Struct['raw']})
-    spcq  = Query(exprs={'s':Species.id,'c'   : Species['composition']})
+    sdq   = Query(exprs={'j':Job.id(),    'sd'  : Job['stordir']()})
+    logq  = Query(exprs={'j':Job.id(),    'log' : Job['log']()})
+    rawq  = Query(exprs={'s':Struct.id(), 'raw' : Struct['raw']()})
+    spcq  = Query(exprs={'s':Species.id(),'c'   : Species['composition']()})
+
     ########################################################################
-    fs_env = defaultEnv + Env(Import('re','findall'))
 
-    jspb = PyBlock(find_setups, env = fs_env,
-                    args = [logq['log']])
-
-    jobsetup =                                                                  \
-        Gen(name    = 'jobsetup',
-            desc    = 'Populate mapping table between Job and Setup',
-            actions = [Job_setup(insert=True,
-                                 job   = logq['j'],
-                                 setup = Setup(insert   = True,
-                                               checksum = jspb['out']))],
-            query   = logq,
-            funcs   = [jspb])
-    ########################################################################
-    psq = Query(exprs = {'p'  : Pure_struct.id,
-                         'pt' : Pure_struct['prototype']})
+    psq = Query(exprs = {'p'  : Pure_struct.id(),
+                         'pt' : Pure_struct['prototype']()})
 
     pspb = PyBlock((lambda x: {'AB_1_a_b_225'       : 'rocksalt',
                             'AB_1_a_c_216'       : 'zincblende',
@@ -138,7 +138,7 @@ def load(mod : Model) -> None:
 
     ########################################################################
 
-    jepb = PyBlock(eng,
+    jepb = PyBlock(eng_vasp,
                    env  = eng_env,
                    args = [logq['log']])
 
@@ -211,7 +211,7 @@ def load(mod : Model) -> None:
             funcs   = [cpb])
 
     ########################################################################
-    cellq   = Query(exprs = {'c':Cell.id, **{x : Cell[x] for x in Cell.ids()}})
+    cellq   = Query(exprs = {'c':Cell.id(), **{x : Cell[x]() for x in Cell.ids()}})
     cpbout  = ['surface_area', 'volume', 'a', 'b', 'c']
     cellpb  = PyBlock(cell_info,
                       args     = [cellq[x] for x in Cell.ids()],
@@ -246,8 +246,8 @@ def load(mod : Model) -> None:
                   Import('random','choices'),
                   Import('string', 'ascii_lowercase'))
 
-    psq = Query(exprs  = {'s': Struct.id, 'raw' : Struct['raw']},
-                constr = EQ(Struct['system_type'], 'bulk'))
+    psq = Query(exprs  = {'s': Struct.id(), 'raw' : Struct['raw']()},
+                constr = EQ(Struct['system_type'](), Lit('bulk')))
 
     psb1 = PyBlock(json_to_traj,env=jtt_env,args=[psq['raw']],outnames=['traj'])
     psb2 = PyBlock(get_bulk,env=gb_env,args=[psb1['traj']],outnames=['b'])
@@ -264,12 +264,12 @@ def load(mod : Model) -> None:
             funcs   = [psb1,psb2,psb3],
             tags    = ['long','parallel'])
     ########################################################################
-    le_env = defaultEnv + Env(Import('ast','literal_eval'))
+    le_env = defaultEnv + Env(Import('ast', 'literal_eval'))
     cs_env = Env(Import('ase.data','chemical_symbols'))
 
-    spnq  = Query(exprs={'sp':Species.id,
-                         'c':Species['composition'],
-                         's':Species['symmetry']})
+    spnq  = Query(exprs={'sp' : Species.id(),
+                         'c'  : Species['composition'](),
+                         's'  : Species['symmetry']()})
 
     spnpb =  PyBlock(species_nick,
                      env      = le_env + cs_env,
@@ -298,11 +298,15 @@ def load(mod : Model) -> None:
                                     element = Element(atomic_number=spf['z']))],
             query   = spcq,
             funcs   = [spf])
+
     ########################################################################
-    pops_q = Query(exprs={'str' : Struct.id,
-                          'c'   : Struct['composition_norm'],
-                          's'   : Pure_struct['prototype'],
-                          'n'   : Struct['n_elems']},
+
+    sps = JPath(Pure_struct,[struct__pure_struct])
+
+    pops_q = Query(exprs={'str' : Struct.id(),
+                          'c'   : Struct['composition_norm'](),
+                          's'   : Pure_struct['prototype'](sps),
+                          'n'   : Struct['n_elems']()},
                     basis = ['struct'])
 
     ispecies = Species(insert      = True,
@@ -316,46 +320,60 @@ def load(mod : Model) -> None:
                               species = ispecies)],
             query   = pops_q)
 
-    ########################################################################
+    ############################################################################
+
     def sum_values(x:str)->int:
         return sum(dict(literal_eval(x)).values())
+
     snapb = PyBlock(sum_values, env = le_env,args=[spcq['c']],outnames=['n'])
+
     species_natoms =                                                            \
         Gen(name    = 'species_natoms',
             desc    = 'Total number of atoms in the most reduced stoichiometric ratios',
             actions = [Species(species=spcq['s'],n_atoms=snapb['n'])],
             query   = spcq,
             funcs   = [snapb])
-    ########################################################################
-    refq = Query(exprs = {'j'  : Job.id,
-                          'c'  : Calc.id,
-                          'xc' : Calc['xc'],
-                          'z'  : Atom['number'],
-                          'e'  : Job['energy']},
-                 basis = ['job'],
-                 links = [Atom.r('struct')],
-                 constr = EQ(Struct['system_type'], 'molecule')
-                              |AND| EQ(Struct['n_atoms'],1))
+    ############################################################################
+
+    #c = Constraint(Atom)
+    #c.find(mod,basis=['job'],links=[Atom.r('struct')],quit=False)
+
+    jc    = JPath(Calc,[job__calc])
+    jatom = JPath("atom", [atom__struct, job__struct])
+    sj    = JPath("struct", [job__struct])
+
+    refq = Query(exprs  = dict(j = Job.id(),
+                               c = Calc.id(jc),
+                               z = Atom['number'](jatom),
+                               e = Job['energy'](),
+                               t = Job['contribs']()),
+                 basis  = ['job'],
+                 constr = EQ(Struct['system_type'](sj), Lit('molecule'))
+                              |AND| EQ(Struct['n_atoms'](sj),Lit(1)))
     refr =                                                                      \
         Gen(name    = 'refr',
             desc    = 'Collects calculations of isolated atoms',
-            actions = [Reference(insert  = True,
-                                 job     = refq['j'],
-                                 calc    = refq['c'],
-                                 element = Element(atomic_number=refq['z']),
-                                 energy  = refq['e'])],
-            query   = refq)
+            query   = refq,
+            actions = [Reference(insert   = True,
+                                 job      = refq['j'],
+                                 calc     = refq['c'],
+                                 element  = Element(atomic_number = refq['z']),
+                                 energy   = refq['e'],
+                                 contribs = refq['t'])])
 
     ########################################################################
-    bjq = Query(exprs  = {'j':Job.id},
+
+    bjq = Query(exprs  = {'j':Job.id()},
                 basis  = ['job'],
-                constr = EQ(Struct['system_type'], 'bulk'))
+                constr = EQ(Struct['system_type'](sj), Lit('bulk')))
     bulkjob =                                                                   \
         Gen(name    = 'bulkjob',
             desc    = "Subset of jobs that are bulk calculations",
             actions = [Bulk_job(insert = True, job=bjq['j'])],
             query   =  bjq)
-    ########################################################################
+
+    ###########################################################################
+
     spinb = PyBlock(lambda x: int('Spin-polarized calculation' in x),
                     args    =[logq['log']])
 
@@ -366,7 +384,9 @@ def load(mod : Model) -> None:
                            spinpol = spinb['out'])],
             query   = logq,
             funcs   = [spinb])
+
     ########################################################################
+
     compcols = ['n_atoms','n_elems','composition',
                      'composition_norm','metal_comp','str_symbols',
                      'str_constraints']
@@ -376,6 +396,7 @@ def load(mod : Model) -> None:
                    env      = ca_env,
                    args     =[rawq['raw']],
                    outnames = compcols)
+
     countatoms =                                                            \
         Gen(name    = 'countatoms',
             desc    = 'Get stoichiometric properties of Structure from raw',
@@ -388,7 +409,7 @@ def load(mod : Model) -> None:
     ########################################################################
     ########################################################################
 
-    gens = [jobsetup,psnick,struct,jobeng,jobmetadata,atom,elems,cell,celinfo,
+    gens = [psnick,struct,jobeng,jobmetadata,atom,elems,cell,celinfo,
             systype,ps,spnick,sp_comp,pop_species,species_natoms,refr,bulkjob,
             spinpol, countatoms]
 

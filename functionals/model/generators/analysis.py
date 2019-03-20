@@ -3,11 +3,11 @@ from json   import loads
 
 # Internal Modules
 from dbgen import (Model, Gen, PyBlock, Query, Expr, AND, GROUP_CONCAT,
-                   SUM, COUNT, Literal, NOT, NULL, CONCAT, ABS, MIN, EQ, NE,
-                    defaultEnv, Env,Import)
+                   SUM, COUNT, Literal as Lit, NOT, NULL, CONCAT, ABS, MIN, EQ, NE, GT,
+                    defaultEnv, Env,Import, Constraint, JPath)
 
 from functionals.scripts.load.get_kptden             import get_kptden
-from functionals.scripts.load.get_kpts_gpaw          import get_kpts_gpaw
+from functionals.scripts.load.get_kpts_vasp          import get_kpts_vasp
 from functionals.scripts.misc.eos_func               import eos_func
 from functionals.scripts.misc.conventional_lattice   import conventional_lattice
 
@@ -51,29 +51,60 @@ def analysis(mod : Model) -> None:
     #---------------
     tabs = ['job','atom','element','struct','calc','cell',
             'species','expt','bulk_job','reference','species_dataset',
-            'species_comp','species_dataset_element']
+            'species_comp','species_dataset_element','functional','beef',
+            'expt_refs']
 
     Job, Atom, Element, Struct, Calc, Cell, Species, Expt, Bulk_job,\
-    Reference, Species_dataset,Species_comp,Species_dataset_element,\
-      = map(mod.get, tabs) # type: ignore
+    Reference, Species_dataset,Species_comp,Species_dataset_element,Functional,\
+    Beef,Expt_refs = map(mod.get, tabs) # type: ignore
+
+    job__calc, bulk_job__job,struct__species, job__struct,bulk_job__expt,   \
+        struct__cell,reference__calc, expt__calc,reference__element,        \
+        species_comp__element, species_comp__species, expt__species,        \
+        reference__job,species_dataset_element__species,calc__functional,   \
+        beef__functional,expt_refs__reference,expt_refs__expt =             \
+            map(mod.get_rel,[
+                Job.r('calc'),Bulk_job.r('job'),Struct.r('species'), Job.r('struct'),
+                Bulk_job.r('Expt'),Struct.r('cell'),Reference.r('calc'), Expt.r('calc'),
+                Reference.r('element'), Species_comp.r('element'), Species_comp.r('species'),
+                Expt.r('species'),Reference.r('job'),Species_dataset_element.r('species'),
+                Calc.r('functional'),Beef.r('functional'),Expt_refs.r('reference'),
+                Expt_refs.r('expt')])
 
     # Abbreviations
     #--------------
     SDE = Species_dataset_element
-    BJ  = Bulk_job.r('job')
-    BJE = Bulk_job.r('Expt')
-    ########################################################################
-    beq = Query(exprs = {'b' : Bulk_job.id,
-                         'c' : Calc.id,
-                         's' : Species.id(Struct.r('species')),
-                         'n' : Struct['n_atoms']},
-                basis   = ['Bulk_job'],
-                constr  = EQ(Calc['xc'], 'mBEEF'))
+    BJE = bulk_job__expt
+    BJ  = bulk_job__job
+
+    xsp = JPath("species",[expt__species])
+    xc  = JPath("functional",[calc__functional,expt__calc])
+    bjj = JPath('job',[bulk_job__job])
+
+    ############################################################################
+
+    #c = Constraint(Calc)
+    #c.find(mod,['bulk_job'],quit=False)
+
+    bjc = JPath("calc", [job__calc, bulk_job__job])
+    bfxc = JPath("beef",[beef__functional,calc__functional,job__calc,bulk_job__job])
+
+    #c = Constraint(Species,[Struct.r('species')])
+    #c.find(mod,['bulk_job'])
+
+    bjsp = JPath("species", [struct__species, job__struct, bulk_job__job])
+    bjst = JPath("struct", [job__struct, bulk_job__job])
+    beq  = Query(exprs = dict(b = Bulk_job.id(),
+                              c = Calc.id(bjc),
+                              s = Species.id(bjsp),
+                              n = Struct['n_atoms'](bjst),
+                              x = Beef.id(bfxc)),
+                 basis   = ['bulk_job'])
 
     iexpt = Expt(insert  = True,
-                    n_atoms = beq['n'],
-                    species = beq['s'], # otherwise tries to link through FK that we're populating!
-                    calc    = beq['c'])
+                 n_atoms = beq['n'],
+                 species = beq['s'],
+                 calc    = beq['c'])
     bulkexpt =                                                                  \
         Gen(name    = 'bulkexpt',
             desc    = 'All pairs of (bulk) species + calc., if mBEEF calc'\
@@ -83,19 +114,46 @@ def analysis(mod : Model) -> None:
                                 expt     = iexpt)])
     ############################################################################
 
+    refpth = JPath("reference", [[[reference__calc, expt__calc],
+                                  [reference__element, species_comp__element, species_comp__species, expt__species]]])
+
+    erq = Query(exprs = dict(e = Expt.id(),r = Reference.id(refpth)),
+                basis = [Expt])
+    exptref =                                                                   \
+        Gen(name    = 'expt_refs',
+            desc    = 'Populates expt_refs mapping table',
+            query   = erq,
+            actions = [Expt_refs(insert    = True,
+                                 expt      = erq['e'],
+                                 reference = erq['r'])])
+
+    ############################################################################
+
+    #c = Constraint(Job,[BJE])
+    #c.find(mod,['expt'],links   = [BJE],quit=False)
+
+    jx = JPath("job", [bulk_job__job, bulk_job__expt])
+    bjx = JPath("bulk_job", [bulk_job__expt])
+
+    #c = Constraint(Cell,[BJE])
+    #c.find(mod,['expt'],links   = [BJE])
+
+    cx = JPath("cell", [struct__cell, job__struct, bulk_job__job, bulk_job__expt])
+
     aggs = ['contribs','energies','volumes']
 
-    agg_dict = dict(contribs = Job['contribs'](BJE),
-                    energies = Job['energy'](BJE),
-                    volumes  = Cell['volume'](BJE))
+    agg_dict = dict(contribs = Job['contribs'](jx),
+                    energies = Job['energy'](jx),
+                    volumes  = Cell['volume'](cx))
 
-    paq = Query(exprs = {'e':Expt.id,
-                         **{x : CONCAT('[', GROUP_CONCAT(y), ']')
+    lbra,rbra = [Lit(x) for x in '[]']
+
+    paq = Query(exprs = {'e':Expt.id(),
+                         **{x : CONCAT(lbra, GROUP_CONCAT(y), rbra)
                              for x,y in agg_dict.items()}},
-                links   = [BJE],
-                aggcols = [Expt.id],
+                aggcols = [Expt.id()],
                 basis   = ['expt'],
-                constr  = Bulk_job['near_min'])
+                constr  = Bulk_job['near_min'](bjx))
 
     pop_aggs =                                                                  \
         Gen(name    = 'pop_aggs',
@@ -104,20 +162,25 @@ def analysis(mod : Model) -> None:
             actions = [Expt(expt=paq['e'],**{x:paq[x] for x in aggs})])
 
     ########################################################################
-    avq = Query(exprs   = {'e':Expt.id,
-                           'av':CONCAT('[',GROUP_CONCAT(Bulk_job['dv']),']')},
+
+    allvolcol = CONCAT(lbra, GROUP_CONCAT(Bulk_job['dv'](bjx)), rbra)
+
+    avq = Query(exprs   = {'e' : Expt.id(), 'av' : allvolcol},
                 basis   = ['expt'],
-                links   = [BJE],
-                aggcols = [Expt.id] )
+                aggcols = [Expt.id()] )
     all_vols =                                                                  \
         Gen(name    = 'all_vols',
             desc    = 'Store all volumes',
             query   = avq,
             actions = [Expt(expt = avq['e'], all_vols = avq['av'])])
-    ########################################################################
-    nmq  = Query(exprs = {'b':Bulk_job.id,
-                          'dv':Bulk_job['dv'],
-                          'av':Expt['all_vols']},
+
+    ############################################################################
+
+    bjexpt = JPath("expt",[bulk_job__expt])
+
+    nmq  = Query(exprs = {'b':Bulk_job.id(),
+                          'dv':Bulk_job['dv'](),
+                          'av':Expt['all_vols'](bjexpt)},
                  basis = ['bulk_job'])
 
     nmpb = PyBlock(get_near_min,
@@ -130,19 +193,50 @@ def analysis(mod : Model) -> None:
             actions = [Bulk_job(bulk_job = nmq['b'],
                                 near_min = nmpb['out'])])
 
-    ########################################################################
-    Num = Species_comp['num']
-    Eng  = Reference['energy'](multi=((Reference.r('Calc'),   ),
-                                      (Reference.r('Element'),)))
+    ################################################################################
 
-    eq = Query(exprs = {'ex':Expt.id,'e':Expt['energy_pa'] - SUM(Eng* Num)/ SUM(Num)},
-                links   = [Species_comp.r('Species'),
-                           Reference.r('Calc'),
-                           Reference.r('Element')],
-                aggcols = [Expt.id],
+    # xbq = Query(exprs  = dict(e = Expt.id(bjexpt),
+    #                           x = GROUP_CONCAT(Job['contribs'](bjj))),
+    #             basis  = [Bulk_job],
+    #             constr = Bulk_job['near_min'](),
+    #             aggcols = [Expt.id(bjexpt)] )
+    # popxbulk =                                                                  \
+    #     Gen(name='xbulk',
+    #         desc='Populates exchange contributions from 5 bulk jobs near minimum',
+    #         query = xbq,
+    #         actions = [Expt(expt=xbq['e'],xbulk=xbq['x'])])
+    #
+    # popdxba =                                                                   \
+    #     Gen(name = 'dxba',
+    #         desc = 'Populates dx_bulk_atom')
+    #         #Serialized vector of the difference in exchange energy contributions between (optimum) bulk and (stoichiometrically-weighted) atoms
+
+    ############################################################################
+
+    # branch = [Constraint(Reference,[Reference.r('Calc')]),
+    #                                   Constraint(Reference,[Reference.r('Element')]
+    # findargs = dict(m = mod, basis = ['expt'],
+    #                 links = [Species_comp.r('Species'), Reference.r('Calc'), Reference.r('Element')])
+    # c=Constraint(Reference, branch = branch)])
+    # c=Constraint(Job, [Reference.r('job')], branch = branch)
+    # c.find(**findargs)
+
+    # Paths
+    refpth = JPath("reference", [[[reference__calc, expt__calc], [reference__element, species_comp__element, species_comp__species, expt__species]]])
+    jref   = JPath("job", [reference__job, [[reference__calc, expt__calc], [reference__element, species_comp__element, species_comp__species, expt__species]]])
+    spcref =  JPath('species_comp',[species_comp__species, expt__species])
+
+    # Attributes
+    Num    = Species_comp['num'](spcref)
+    Eng    = Reference['energy'](refpth)
+    Norm   = SUM(Eng * Num) / SUM(Num)
+
+    eq = Query(exprs    = {'ex':Expt.id(),
+                           'e':Expt['energy_pa']() - Norm},
+                aggcols = [Expt.id()],
                 basis   = ['expt'],
-                constr  = NOT(NULL(Job['contribs'](Reference.r('Job')))), #Edge case - what if job has an energy but x_contribs failed?
-                aconstr = EQ(COUNT(Literal(1)), Species['n_elems']))
+                constr  = NOT(NULL(Job['contribs'](jref))), #Edge case - what if job has an energy but x_contribs failed?
+                aconstr = COUNT(Lit(1)) |EQ| Species['n_elems'](xsp))
 
 
     eform =                                                                     \
@@ -160,15 +254,15 @@ def analysis(mod : Model) -> None:
 
     k_env = defaultEnv + Env(Import('ase','Atoms'))
     p_env = defaultEnv + Env(Import('dbgen.utils.parsing','parse_line'))
-
-    kq = Query(exprs = {'j'   : Job.id,
-                        'log' : Job['log'],
-                        **{x:Cell[x] for x in Cell.ids()}},
+    jcell = JPath('cell',[struct__cell,job__struct])
+    kq = Query(exprs = {'j'       : Job.id(),
+                        'stordir' : Job['stordir'](),
+                        **{x:Cell[x](jcell) for x in Cell.ids()}},
                basis = ['job'])
 
-    kpb0 =  PyBlock(get_kpts_gpaw,
+    kpb0 =  PyBlock(get_kpts_vasp,
                     env      = p_env,
-                    args     = [kq['log']],
+                    args     = [kq['stordir']],
                     outnames = ks)
 
     kpb1 = PyBlock(get_kptden,
@@ -185,24 +279,25 @@ def analysis(mod : Model) -> None:
                            **{x:kpb1[x] for x in kds})])
 
     ########################################################################
-
-    eos_cols = ['energy_pa', 'bulkmod', 'volume_pa', 'img']
+    bjcell   = JPath('cell',[struct__cell, job__struct, bulk_job__job])
+    eos_cols = ['volume_pa','energy_pa', 'bulkmod',  'img','complete']
     eos_env  = Env(Import('string','ascii_lowercase'),
+                    Import('numpy','polyfit','poly1d','mean','std','array'),
                     Import('random','choices'),
                     Import('os','environ','remove'),
                     Import('os.path','join'),
                     Import('base64','b64encode'),
                     Import('ase.eos','EquationOfState'),
-                    Import('numpy','polyfit','poly1d','mean','std','array')
+                    Import('ase.units','kJ'),
                     ) + defaultEnv
 
-    eosq = Query(exprs={'ex':Expt.id,
-                        'v':GROUP_CONCAT(Cell['volume']),
-                        'e':GROUP_CONCAT(Job['energy']),
-                        'n':Expt['n_atoms'],
-                        'ndata':COUNT(Literal(1))},
+    eosq = Query(exprs={'ex' : Expt.id(bjexpt),
+                        'v'  : GROUP_CONCAT(Cell['volume'](bjcell)),
+                        'e'  : GROUP_CONCAT(Job['energy'](bjj)),
+                        'n'  : Expt['n_atoms'](bjexpt),
+                        'ndata' : COUNT(Lit(1))},
                 basis   = ['bulk_job'],
-                aggcols = [Expt.id])
+                aggcols = [Expt.id(bjexpt)])
 
     eospb = PyBlock(eos_func,
                     env      = eos_env,
@@ -219,9 +314,9 @@ def analysis(mod : Model) -> None:
                             **{x:eospb[x] for x in eos_cols})])
 
     ########################################################################
-    lq = Query(exprs={'e' : Expt.id,
-                      's' : Species['symmetry'],
-                      'v' : Expt['volume_pa']},
+    lq = Query(exprs={'e' : Expt.id(),
+                      's' : Species['symmetry'](xsp),
+                      'v' : Expt['volume_pa']()},
                basis = ['expt'])
 
     lpb = PyBlock(conventional_lattice,
@@ -238,22 +333,25 @@ def analysis(mod : Model) -> None:
     dcols = ['coefs','name','composition',
              'energy_vector','volume_vector','contrib_vector']
 
-    cq = Query(exprs={'e'     : Expt.id,
-                      'coefs' : Calc['coefs'],
-                      'name'  : Species['nickname'],
-                      'comp'  : Species['composition'],
-                      'ev'    : Expt['energies'],
-                      'vv'    : Expt['volumes'],
-                      'cv'    : Expt['contribs']},
+    bxc  = xc + JPath("beef",[beef__functional])
+
+    cq = Query(exprs={'e'     : Expt.id(),
+                      'coefs' : Functional['data'](xc),
+                      'name'  : Species['nickname'](xsp),
+                      'comp'  : Species['composition'](xsp),
+                      'ev'    : Expt['energies'](),
+                      'vv'    : Expt['volumes'](),
+                      'cv'    : Expt['contribs'](),
+                      'x'     : Beef.id(bxc)},
                basis   = ['expt'],
-               constr  = EQ(Calc['xc'],'mBEEF')
-                            |AND| NOT(NULL(Expt['eform']))
-                            |AND| (Expt['n_data'] > 5))
+               constr  = NOT(NULL(Expt['eform']()))
+                            |AND| (Expt['n_data']() |GT| Lit(5)))
+
     cohesive =                                                                  \
         Gen(name    = 'cohesive',
             desc    = 'Populates more things in experiment',
             query   = cq,
-            actions = [Expt(expt           = cq['e'],
+            actions = [Expt(expt        = cq['e'],
                          coefs          = cq['coefs'],
                          name           = cq['name'],
                          composition    = cq['comp'],
@@ -261,19 +359,20 @@ def analysis(mod : Model) -> None:
                          volume_vector  = cq['vv'],
                          contrib_vector = cq['cv'])])
 
-
-
     ########################################################################
+
+    #c = Constraint(SDE)
+    #c.find(mod, basis=['expt'], links = [SDE.r('species')])
+    xsde = JPath("species_dataset_element", [species_dataset_element__species, expt__species])
 
     sde_dict = {'cohesive energy' : 'expt_cohesive_energy',
                 'bulk modulus'    : 'expt_bm'}
 
     twogens = []
     for x,y in sde_dict.items():
-        q = Query(exprs={'d':Expt.id,'v':SDE['value']},
-                  links = [SDE.r('species')],
+        q = Query(exprs = dict(d = Expt.id(), v = SDE['value'](xsde)),
                   basis = ['expt'],
-                  constr= EQ(SDE['property'], x))
+                  constr= EQ(SDE['property'](xsde), Lit(x)))
 
         twogens.append(Gen(name    = x.replace(' ','_'),
                            desc    = 'Copying %s info from Kelddata into dataset'%x,
@@ -282,20 +381,17 @@ def analysis(mod : Model) -> None:
 
     cohesive_target,bm_target = twogens # unpack
 
-
     ########################################################################
-    vq = Query(exprs    = {'d': Expt.id,
-                           'v':SDE['value'],
-                           's':Species['symmetry']},
-                links   = [SDE.r('Species')],
+    vq = Query(exprs    = {'d' : Expt.id(),
+                           'v' : SDE['value'](xsde),
+                           's' : Species['symmetry'](xsp)},
                 basis   = ['expt'],
-                constr  = EQ(SDE['property'], 'lattice parameter'))
+                constr  = SDE['property'](xsde) |EQ| Lit('lattice parameter'))
 
-    vpb = PyBlock(make_volume,
-                   args = [vq['v'],vq['s']])
+    vpb = PyBlock(make_volume, args = [vq['v'], vq['s']])
     vol_target =                                                                \
         Gen(name    = 'vol_target',
-            desc    = '?',
+            desc    = 'Literature value of volume for this experiement',
             query   = vq,
             funcs   = [vpb],
             actions = [Expt(expt    = vq['d'],
@@ -303,26 +399,29 @@ def analysis(mod : Model) -> None:
 
     ########################################################################
 
+    #links = [Species_comp.r('Species'), Reference.r('Element'), Reference.r('Calc')]
+    #c = Constraint(Element,[Species_comp.r('Element')])
+    #c.find(mod,['expt'],links = links)
+
+    err  = JPath("reference", [expt_refs__reference])
+    erre = err + JPath("element",[reference__element])
+    ere  = JPath("expt", [expt_refs__expt])
     def make_dict(attr : str) -> Expr:
         '''
         Makes a serialized python dictionary mapping element_ids to Job
         properties of their reference calculation
         '''
-        elemattr = Element['atomic_number'](Species_comp.r('Element'))
-        jobattr  = Job[attr](multi=((Reference.r('Element'),),
-                                    (Reference.r('Calc'),)))
-        group    = GROUP_CONCAT(CONCAT(elemattr,':',jobattr))
+        elemattr = Element['atomic_number'](erre)
+        jobattr  = Reference[attr](err)
+        group    = GROUP_CONCAT(CONCAT(elemattr,Lit(':'),jobattr))
 
-        return CONCAT('{',group,'}')
+        return CONCAT(Lit('{'),group,Lit('}'))
 
-    ceq = Query({'d'   : Expt.id,
+    ceq = Query({'d'   : Expt.id(ere),
                  'a_c' : make_dict('contribs'),
                  'a_e' : make_dict('energy')},
-                links = [Species_comp.r('Species'),
-                             Reference.r('Element'),
-                             Reference.r('Calc')],
-                basis   = ['expt'],
-                aggcols = [Expt.id])
+                basis   = [Expt_refs],
+                aggcols = [Expt.id(ere)])
 
     cohesive_elems =                                                            \
         Gen(name    = 'cohesive_elems',
@@ -333,10 +432,10 @@ def analysis(mod : Model) -> None:
                         atomic_energies = ceq['a_e'])])
     ########################################################################
 
-    vol_pa = Cell['volume'] / Struct['n_atoms']
-    gapq = Query({'b'   : Bulk_job.id,
-                  'gap' : ABS(vol_pa - Expt['volume_pa']),
-                  'dv'  : vol_pa - Expt['volume_pa']},
+    vol_pa = Cell['volume'](bjcell) / Struct['n_atoms'](bjst)
+    gapq = Query({'b'   : Bulk_job.id(),
+                  'gap' : ABS(vol_pa - Expt['volume_pa'](bjexpt)),
+                  'dv'  : vol_pa - Expt['volume_pa'](bjexpt)},
                   basis = ['bulk_job'])
     gap =                                                                       \
         Gen(name    = 'gap',
@@ -347,11 +446,10 @@ def analysis(mod : Model) -> None:
             query   = gapq)
 
     ########################################################################
-    minq = Query({'e':Expt.id,
-                  'm':MIN(Bulk_job['gap'])},
+    #links   = [BJE],
+    minq = Query({'e':Expt.id(), 'm':MIN(Bulk_job['gap'](bjx))},
                  basis    = ['expt'],
-                 links   = [BJE],
-                 aggcols = [Expt.id])
+                 aggcols = [Expt.id()])
     mingap =                                                                    \
         Gen(name    = 'mingap',
             desc    = 'Stores a value under "Expt" unique to the best corresponding Bulk_job' ,
@@ -361,26 +459,27 @@ def analysis(mod : Model) -> None:
 
 
     ########################################################################
+    exptstructs = JPath("struct", [job__struct, bulk_job__job,bulk_job__expt])
+    exptsjobs   = JPath("job",[bulk_job__job,bulk_job__expt])
 
-    ratio = Struct['n_atoms'](BJ) / Species['n_atoms']
-    co = Query(exprs   = {'d'  : Expt.id,
-                          'j'  : Bulk_job.id,
-                          'be' : Job['energy'](BJ),
-                          'bc' : Job['contribs'](BJ),
+    ratio = Struct['n_atoms'](exptstructs) / Species['n_atoms'](xsp)
+    co = Query(exprs   = {'d'  : Expt.id(),
+                          'j'  : Bulk_job.id(bjx),
+                          'be' : Job['energy'](exptsjobs),
+                          'bc' : Job['contribs'](exptsjobs),
                           'br' : ratio},
-                links  = [BJE],
                 basis  = ['expt'],
-                constr = EQ(Bulk_job['gap'], Expt['min_gap']))
+                constr = EQ(Bulk_job['gap'](bjx), Expt['min_gap']()))
 
     cohesive_optjob =                                                           \
         Gen(name    = 'cohesive_optjob',
             desc    = '???',
             query   = co,
-            actions = [Expt(expt      = co['d'],
-                             best_job      = co['j'],
-                             bulk_energy   = co['be'],
-                             bulk_contribs = co['bc'],
-                             bulk_ratio    = co['br'])])
+            actions = [Expt(expt          = co['d'],
+                            best_job      = co['j'],
+                            bulk_energy   = co['be'],
+                            bulk_contribs = co['bc'],
+                            bulk_ratio    = co['br'])])
 
     ########################################################################
     ########################################################################
@@ -388,6 +487,6 @@ def analysis(mod : Model) -> None:
 
     gens = [bulkexpt, pop_aggs, all_vols, near_min, eform, kpts, eos, lattice,
             cohesive, cohesive_target, bm_target, vol_target, cohesive_elems,
-            gap, mingap, cohesive_optjob,]
+            gap, mingap, cohesive_optjob, exptref]#, popxbulk, popdxba]
 
     mod.add(gens)

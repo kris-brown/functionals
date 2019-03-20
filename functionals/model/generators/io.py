@@ -1,104 +1,100 @@
 # External Modules
-from typing     import Callable as C, Union as U, List as L
+from typing     import Callable as C, Union as U, List as L, Tuple as T, Optional as O, Dict as D
 from os         import environ
 from os.path    import exists, join
-
+from csv        import DictReader, reader
+from json       import load, dumps
 # Internal Modules
-from dbgen import (Model, Gen, PyBlock, Env, Query, Const, Import, defaultEnv, EQ, Arg)
+from dbgen import (Model, Gen, PyBlock, Env, Query, Const, Import, defaultEnv,
+                    EQ, Literal as Lit, Arg, JPath, CONCAT, LIKE)
 
-from functionals.scripts.io.parse_setup       import parse_setup
-from functionals.scripts.io.get_stray_gpaw    import get_stray_gpaw
-from functionals.scripts.io.parse_mendeleev   import parse_mendeleev
-from functionals.scripts.io.parse_keld        import parse_keld
-from functionals.scripts.load.parse_pw_gpaw   import parse_pw_gpaw
-from functionals.scripts.load.parse_xc_gpaw   import parse_xc_gpaw
-from functionals.scripts.load.get_econv_gpaw  import get_econv_gpaw
+from functionals.scripts.io.parse_setup             import parse_setup
+from functionals.scripts.io.parse_mendeleev         import parse_mendeleev
+from functionals.scripts.io.parse_keld              import parse_keld
+from functionals.scripts.io.parse_fit               import parse_fit
+from functionals.scripts.io.get_stray_vasp          import get_stray_vasp
+from functionals.scripts.load.parse_incar           import parse_incar
+from functionals.scripts.load.parse_potcar          import parse_potcar
+from functionals.scripts.load.parse_pw_vasp         import parse_pw_vasp
+from functionals.scripts.load.parse_xc_vasp         import parse_xc_vasp
+from functionals.scripts.load.parse_contribs_vasp   import parse_contribs_vasp
 
 ##############################################################################
+# CONSTANTS #
+ ##########
 elempath = environ['ELEMPATH']
 keldpath = environ['KELDPATH']
-logpth   = '/Users/ksb/scp_tmp/auto/auto' #
-psppth   = '/Users/ksb/scp_tmp/norm_conserving_setups'
-
+logpth   = '/Users/ksb/scp_tmp/vauto' #
+psppth   = '/Users/ksb/vossj/vasp/potpaw_PBE'
+fitpth   = '/Users/ksb/scp_tmp/fitresult'
 pthEnv  = Env(Import('os.path','join','exists'))
+
+a1msb = ['a11','a12','a13','a14','a15','msb']
+
+def const() -> T[L[O[str]],L[O[str]],L[O[float]],L[O[float]],L[O[float]],L[O[str]],L[O[str]]]:
+
+    with open('/Users/ksb/functionals/data/constraints.csv','r') as f:
+        r = reader(f)
+        next(r)
+        name,desc,s,a,val,typ,vec = tuple(map(list,zip(*r)))
+    s_,a_,val_  = [[float(str(x)) if x else None for x in xs] for xs in [s,a,val]]
+    n_,d_,t_,v_ = [[str(x) if x else None for x in xs] for xs in [name,desc,typ,vec]]
+    return n_,d_,s_,a_,val_,t_,v_
 
 def readfile(pth:str)->str:
     with open(pth,'r') as f: return f.read()
 
-def getcoef(stor:str, bf:str)->str:
-    def coefpath(x:str)->str:
-        return join(x,'BEEFoftheDay.txt')
-
-    def readfile(pth:str)->str:
-        with open(pth,'r') as f: return f.read()
-
-    if not bf:
-        return ''
-    else:
-        return (readfile(coefpath(stor))
-                    if exists(coefpath(stor))
-                        else readfile('/Users/ksb/functionals/data/beef.json'))
-
 parse_env = defaultEnv + Env(Import('dbgen.utils.parsing','parse_line'))
 
-elemcols = ['symbol', 'name', 'atomic_weight','atomic_radius'
-          , 'phase','evaporation_heat', 'pointgroup','spacegroup'
-          , 'melting_point', 'metallic_radius', 'vdw_radius'
-          , 'density', 'en_allen' , 'is_radioactive'
-          , 'lattice_struct' , 'fusion_heat'
-          , 'econf', 'period', 'covalent_radius_bragg'
-          , 'geochemical_class', 'abundance_crust', 'heat_of_formation'
-          , 'electron_affinity', 'atomic_volume',  'boiling_point'
-          , 'proton_affinity', 'covalent_radius_slater'
-          , 'lattice_constant', 'dipole_polarizability'
-          , 'en_ghosh', 'thermal_conductivity', 'group_id', 'en_pauling'
-          , 'gas_basicity'
-          ,'abundance_sea']
+elemcols = ['symbol', 'name', 'atomic_weight','atomic_radius',
+            'phase','evaporation_heat', 'pointgroup','spacegroup',
+            'melting_point', 'metallic_radius', 'vdw_radius',
+            'density', 'en_allen' , 'is_radioactive',
+            'lattice_struct' , 'fusion_heat',
+            'econf', 'period', 'covalent_radius_bragg',
+            'geochemical_class', 'abundance_crust', 'heat_of_formation',
+            'electron_affinity', 'atomic_volume',  'boiling_point',
+            'proton_affinity', 'covalent_radius_slater',
+            'lattice_constant', 'dipole_polarizability',
+            'en_ghosh', 'thermal_conductivity', 'group_id', 'en_pauling',
+            'gas_basicity', 'abundance_sea']
 #################################################################################
-def io(mod:Model) -> None:
+def io(mod : Model) -> None:
 
     # Extract tables
-    tabs = ['job','atom','element','struct','calc','cell','pure_struct',
-            'species','expt','bulk_job','reference','setup','setup_family',
-            'job_setup','species_comp','species_dataset',
-            'species_dataset_element']
+    tabs = ['job', 'atom', 'element', 'struct', 'calc', 'cell', 'pure_struct',
+            'species', 'expt', 'bulk_job', 'reference',
+            'species_comp', 'species_dataset',
+            'species_dataset_element', 'incar', 'potcar', 'functional', 'beef',
+            'const','fitparams','fit']
 
     Job, Atom, Element, Struct, Calc, Cell, Pure_struct, Species, Expt, Bulk_job,\
-    Reference, Setup, Setup_family, Job_setup, Species_comp, SD, SDE \
+    Reference, Species_comp, SD, SDE,Incar, Potcar,Functional,Beef, Cnst, \
+    Fitparams, Fit \
         = map(mod.get, tabs)
 
+    job__calc, job__incar, job__struct \
+        = map(mod.get_rel,[Job.r('calc'),Job.r('incar'),Job.r('struct')])
     ########################################################################
     gl_env = defaultEnv + Env(Import('subprocess','getstatusoutput'))
-    glpb = PyBlock(get_stray_gpaw,
+
+    glpb = PyBlock(get_stray_vasp,
                    env  = gl_env,
                    args = [Const(logpth)])
-    getlogs  =                                                              \
+    getlogs  =                                                                  \
         Gen(name    = 'getlogs',
-            desc    = 'Scrape folder recursively for any GPAW jobs',
+            desc    = 'Scrape folder recursively for any VASP jobs',
             actions = [Job(insert  = True,
-                           logfile = glpb['out'])],
+                           stordir = glpb['out'])],
             funcs    = [glpb])
     ########################################################################
-    sdq  = Query(exprs={'j'   : Job.id,
-                        'log' : Job['logfile']})
-
-    sdpb = PyBlock(lambda x: x[:x.rfind('/')],
-                   args = [sdq['log']])
-
-    getsd    = Gen(name    = 'getsd',
-                   desc    = 'Get folder from logfile path',
-                   actions = [Job(job     = sdq['j'],
-                                  stordir = sdpb['out'])],
-                   query   = sdq,
-                   funcs   = [sdpb])
-    ########################################################################
-    dgq  = Query(exprs={'j' : Job.id, 'log' : Job['logfile']})
-    dgpb = PyBlock(readfile, args = [dgq['log']])
-    datagpaw = Gen(name    = 'datagpaw',
+    dvq  = Query(exprs={'j' : Job.id(), 'log' : CONCAT(Job['stordir'](),Lit('/OUTCAR'))})
+    dvpb = PyBlock(readfile, args = [dvq['log']])
+    datavasp = Gen(name    = 'datavasp',
                    desc    = 'Read log file from disk',
-                   query   = dgq,
-                   actions = [Job(job = dgq['j'], log = dgpb['out'])],
-                   funcs   = [dgpb])
+                   query   = dvq,
+                   actions = [Job(job = dvq['j'], log = dvpb['out'])],
+                   funcs   = [dvpb])
     ########################################################################
     su_env = defaultEnv + Env(Import('gzip',open='gopen'),
                               Import('hashlib','md5'),
@@ -107,30 +103,10 @@ def io(mod:Model) -> None:
                               Import('xml.etree.ElementTree','fromstring'),
                               Import('ase.data','chemical_symbols'))
 
-    spb = PyBlock(parse_setup,
-                  env      = su_env,
-                  args     = [Const(psppth)],
-                  outnames = ['check','xc','kind','name','z','val'])
 
-    isetup = Setup_family(insert = True,
-                          name   = spb['name'],
-                          kind   = spb['kind'],
-                          xc     = spb['xc'])
-
-    ielem  = Element(insert        = True,
-                     atomic_number = spb['z'])
-    setups =                                                                    \
-        Gen(name    = 'setups',
-            desc    = 'Populate Setup table from a path containing setups',
-            actions = [Setup(insert       = True,
-                             setup_family = isetup ,
-                             element      = ielem,
-                             checksum     = spb['check'],
-                             val          = spb['val'])],
-            funcs    = [spb])
     ########################################################################
-    eiq       = Query(exprs={'e':Element.id,
-                             'z':Element['atomic_number']})
+    eiq       = Query(exprs={'e':Element.id(),
+                             'z':Element['atomic_number']()})
 
     eipb      = PyBlock(parse_mendeleev,
                         args     = [eiq['z'], Const(elempath)],
@@ -171,69 +147,78 @@ def io(mod:Model) -> None:
               species_dataset = isd,
               species         = ispecies)
 
-    kelddata =                                                              \
+    kelddata =                                                                  \
         Gen(name    = 'kelddata',
             desc    = 'Parses a .py Keld data file',
             actions = [isde],
             funcs   = [kpb])
     ########################################################################
 
-    cq    = Query(exprs={'j':Job.id,'log':Job['log'],'sd':Job['stordir']})
 
-    pw    = PyBlock(parse_pw_gpaw, env = parse_env,
-                    args = [cq['log']])
-    xc    = PyBlock(parse_xc_gpaw, env = parse_env,
-                    args = [cq['log']])
-    econv = PyBlock(get_econv_gpaw,env=parse_env,
-                    args=[cq['log']])
-    beef  = PyBlock(lambda x: int('beef' in x.lower()),
-                    args=[xc['out']])
-    coef  = PyBlock(getcoef,env=pthEnv,
-                    args = [cq['sd'],beef['out']])
+    ipth = JPath(Incar, [job__incar])
+
+
+    cq    = Query(exprs={'j'    : Job.id(),
+                         'sd'   : Job['stordir'](),
+                         'p'    : Incar['encut'](ipth),
+                         'e'    : Incar['ediff'](ipth),
+                         **{x:Incar[x](ipth) for x in a1msb}},
+                  basis = [Job])
+
+    xc    = PyBlock(parse_xc_vasp,
+                    env  = parse_env + Env(Import('os.path','exists')),
+                    args = [cq['sd']])
+
+    def floatfun(*xs:float)->tuple:
+        return tuple(map(float,xs))
+
+    ffloat = PyBlock(floatfun,
+                     args     = [cq[z] for z in ['p','e']+a1msb],
+                     outnames = ['p','e'] + a1msb)
 
     calc =                                                                      \
         Gen(name    = 'calc',
             desc    = 'Populate calc table + F.K. from Relax_job',
             query   = cq,
             actions = [Job(job  = cq['j'],
-                           calc = Calc(insert = True,
-                                     pw       = pw['out'],
-                                     xc       = xc['out'],
-                                     coefs    = coef['out'],
-                                     econv    = econv['out'],
-                                     beef     = beef['out']))],
-            funcs   = [pw,xc,econv,coef,beef])
+                           calc = Calc(insert     = True,
+                                       pw         = ffloat['p'],
+                                       econv      = ffloat['e'],
+                                       **{x:ffloat[x] for x in a1msb},
+                                       functional = Functional(insert = True,
+                                                               data   = xc['out'])))],
+            funcs   = [xc,ffloat])
+
+    bq = Query(exprs  = {'f':Functional.id()},
+               constr = Functional['data']() |LIKE| Lit('[%'))
+    fxbeef = Gen(name = 'beef',
+                 desc = 'Populate BEEF table from Functionals table',
+                 query = bq ,
+                 actions = [Beef(insert=True, functional = bq['f'])])
+
     ########################################################################
-    def xx(x:str)->bool:
-        return exists(join(x,'xccontribs.txt'))
 
-    hcq  = Query(exprs  = {'j'  : Job.id,
-                           'sd' : Job['stordir']},
-                 basis  = ['job'],
-                 constr = EQ(Calc['xc'],'mBEEF'))
+    icols = ['encut','sigma','metagga','prec','ediff','algo','ismear','npar',
+            'nelm','ispin','ibrion','lcharg','lbeefens','addgrid','lasph','lwave',
+            'a11','a12','a13','a14','a15','msb','magmom']
 
-    hcpb = PyBlock(xx,env=pthEnv,args=[hcq['sd']])
-    has_contribs =                                                              \
-        Gen(name    = 'has_contribs',
-            desc    = '?',
-            actions = [Job(job          = hcq['j'],
-                           has_contribs = hcpb['out'])],
-            query   = hcq,
-            funcs   = [hcpb])
+    iq    = Query(exprs={'j'   : Job.id(),
+                         'log' : CONCAT(Job['stordir'](), Lit('/INCAR'))})
+    ipb   = PyBlock(parse_incar, args = [iq['log']], outnames = icols)
+    incar = Gen(name    = 'incar',
+                desc    = 'Read incar file from disk',
+                query   = iq,
+                actions = [Job(job   = iq['j'],
+                               incar = Incar(insert=True,
+                                             **{k:ipb[k] for k in icols}))],
+                funcs   = [ipb])
+
     ########################################################################
-    def get_c(x:str)->str:
-        with open(join(x,'xccontribs.txt'),'r') as f:
-            return f.read()
+    ctrq  = Query(exprs  = {'j':Job.id(),'l':Job['log']()})
 
-    ctrq  = Query(exprs  = {'j':Job.id,
-                            'sd':Job['stordir']},
-                  constr = Job['has_contribs'])
+    ctrpb = PyBlock(parse_contribs_vasp,args = [ctrq['l']])
 
-    ctrpb = PyBlock(get_c,
-                    env      = pthEnv,
-                    args     = [ctrq['sd']])
-
-    contribs =                                                              \
+    contribs =                                                                  \
         Gen(name    = 'contribs',
             desc    = '?',
             actions = [Job(job      = ctrq['j'],
@@ -242,9 +227,162 @@ def io(mod:Model) -> None:
             funcs   = [ctrpb])
 
     ########################################################################
+    js  = JPath(Struct,[job__struct])
+    pcols = ['ind','titel','lultra','iunscr','rpacor','pomass','zval','rcore',
+             'rwigs','enmax','enmin','lcor','lpaw','eaug','rmax','raug','rdep',
+             'rdept']
+    ppq = Query(exprs = dict(sd = CONCAT(Job['stordir'](),Lit('/POTCAR')),
+                             s  = Struct.id(js)),
+                basis = [Job])
+    pppb = PyBlock(parse_potcar,
+                   env  = defaultEnv + Env(Import('re','search')),
+                   args = [ppq['sd']],
+                   outnames = pcols)
+    potcar =                                                                    \
+        Gen(name    = 'potcar',
+            desc    ='Finds potcar of every atom',
+            query   = ppq,
+            funcs   = [pppb],
+            actions = [Atom(insert = True,
+                            struct = ppq['s'],
+                            ind    = pppb['ind'],
+                            potcar = Potcar(insert = True,
+                                            **{x:pppb[x] for x in pcols[1:]}))])
+
+    ########################################################################
+
+    def int_occupied(pth:str)->bool:
+        '''Parse Vasp EIGENVAL - check if all bands have integer occupation'''
+        with open(pth,'r') as f:
+            lines = reversed(f.readlines())
+        for l in lines:
+            n,_,_,a,b = map(float,l.split())
+            if int(a)!=a or int(b)!= b: return False
+            if n == 1.0: return True
+        raise ValueError('Should not reach this part of code...')
+
+    iq    = Query(exprs={'j'   : Job.id(),
+                         'log' : CONCAT(Job['stordir'](), Lit('/EIGENVAL'))})
+    iopb  = PyBlock(int_occupied,args=[iq['log']])
+
+    iogen =                                                                     \
+        Gen(name    = 'int_occupied',
+            desc    = 'populates',
+            query   = iq,
+            funcs   = [iopb],
+            actions = [Job(job=iq['j'],int_occupation=iopb['out'])])
+
+
+    ########################################################################
+
+    constcols = ['const_name','description','s','alpha','val','kind','vec']
+
+    csv_env   = defaultEnv + Env(Import('csv','reader'))
+    pcpb      = PyBlock(const, env = csv_env, outnames = constcols)
+
+    pop_constraint =                                                            \
+        Gen(name    = 'pop_constraint',
+            desc    = 'populate constraints',
+            funcs   = [pcpb],
+            tags    = ['fit'],
+            actions = [Cnst(insert = True, **{x:pcpb[x] for x in constcols})])
+
+################################################################################
+    fitcols = ['constden','consts','reg','dataconst', 'bm_weight','lat_weight']
+
+    pf_env = Env(Import('os','environ'), Import('csv','DictReader')) + defaultEnv
+
+    def parse_fitparams() -> T[L[str],L[str],L[str],L[str],L[str],L[str]]:
+        fitcols = ['constden','consts','reg','dataconst','bm_weight','lat_weight']
+        vals = {c:[] for c in fitcols} # type: D[str,L[str]]
+        with open(environ['FITPATH'],'r') as fi:
+            reader = DictReader(fi)
+            for row in reader:
+                for k,v in vals.items(): v.append(row[k])
+        a,b,c,d,e,f = tuple([list(x) for x in vals.values()])
+        return a,b,c,d,e,f
+
+    pfpb = PyBlock(parse_fitparams,
+                   env      = pf_env,
+                   outnames = fitcols)
+
+    pop_fitparams =                                                             \
+        Gen(name    = 'pop_fitparams',
+            desc    = 'Looks in FITPATH for fitting specifications',
+            funcs   = [pfpb],
+            actions = [Fitparams(insert = True,
+                           **{x:pfpb[x] for x in fitcols})])
+
+    ########################################################################
+    fcols = ['name','a1','pth','timestamp','decay','nsteps','steps','result','runtime']
+    fpb = PyBlock(parse_fit,
+                  args     = [Const(fitpth)],
+                  outnames = fcols + ['pw','econv','data'] + fitcols + a1msb)
+
+    pop_fit =                                                                   \
+        Gen(name    = 'pop_fit',
+            desc    = 'looks for completed fitting jobs - grabs identifying info',
+            funcs   = [fpb],
+            tags    = ['io'],
+            actions = [Fit(insert = True,
+                           msb    = fpb['msb'],
+                           **{x:fpb[x] for x in fcols},
+                           calc   = Calc(insert = True,
+                                        **{x:fpb[x] for x in ['pw','econv']+a1msb},
+                                        functional = Functional(insert = True,
+                                                                data   = fpb['data'])),
+                           fitparams = Fitparams(insert=True,
+                                                 **{x:fpb[x] for x in fitcols}))])
+
+    ########################################################################
     ########################################################################
     ########################################################################
 
-    gens = [getlogs,getsd,setups,datagpaw,kelddata,elemzinfo,calc,has_contribs,contribs]
+    gens = [getlogs,datavasp,kelddata,elemzinfo,calc,contribs,incar,potcar,
+            fxbeef,iogen,pop_constraint,pop_fitparams,pop_fit,
+            ]#pop_fitstep]
 
     mod.add(gens)
+
+
+###deprecated
+    ########################################################################
+    # def parse_fitstep(pth:str)->T[int,L[int],L[float],L[float]]:
+    #     with open(pth,'r') as f: d = load(f)
+    #     ntot = len(d)
+    #     import pdb;pdb.set_trace()
+    #     steps,costs,viols = map(list,zip(*d))
+    #     import pdb;pdb.set_trace()
+    #     return ntot,steps,costs,viols # type: ignore
+    #
+    # pfsq    = Query(exprs = {'f':Fit.id(),'o':CONCAT(Fit['pth'](),Lit('/output.json'))})
+    # pfsns   = ['n', 'niter', 'cost', 'c_viol']
+    # pfspb   = PyBlock(parse_fitstep,
+    #                   args     = [pfsq['o']],
+    #                   outnames = pfsns)
+    #
+    # pop_fitstep =                                                      \
+    #     Gen(name    = 'pop_fitstep',
+    #         desc    = 'Analyzes fitting result log, populates Fitstep',
+    #         query   = pfsq,
+    #         funcs   = [pfspb],
+    #         #tags    = ['fit', 'parallel'],
+    #         actions = [Fit(fit      = pfsq['f'],
+    #                        nsteps   = pfspb['n']),
+    #                    Fit_step(insert = True,
+    #                             fit = pfsq['f'],
+    #                             **{x:pfspb[x] for x in pfsns[1:]})])
+    ########################################################################
+    # nlconstcols = ['nlconst_name','description','f','df','hess','lb','ub']
+    #
+    # ncpb = PyBlock(nlconst,
+    #                env      = csv_env,
+    #                outnames = nlconstcols)
+    #
+    # pop_nlconstraint =                                                          \
+    #     Gen(name    = 'pop_nlconstraint',
+    #         desc    = 'populate nonlinear constraints',
+    #         funcs   = [ncpb],
+    #         tags    = ['fit'],
+    #         actions = [Nl_const(insert = True,
+    #                             **{x:ncpb[x] for x in nlconstcols})])

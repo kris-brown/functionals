@@ -1,7 +1,6 @@
 numpy
 scipy
 ase
-pyqt5
 tqdm
 networkx
 infix
@@ -9,4 +8,4 @@ mysqlclient
 pathos
 pymatgen
 plotly
-sklearn
+infinite

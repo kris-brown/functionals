@@ -39,13 +39,13 @@ common_calc_params = {{
 }}
 
 xcs = ['PBE','mBEEF']
-
+atoms.set_calculator()
 for xc in xcs:
     atoms.calc = GPAW(xc  = xc,
                       txt = xc+'.txt',
                       **common_calc_params)
 
-
+    atoms.get_potential_energy()
     atoms.calc.write('inp.gpw', mode='all')
 
     atoms,calc = restart('inp.gpw')

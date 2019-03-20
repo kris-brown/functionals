@@ -1,15 +1,15 @@
 # External Modules
-from typing import Callable as C, List as L, Tuple as T
+from typing import Callable as C, List as L, Dict as D, Tuple as T
 from abc    import ABCMeta, abstractmethod
-from json   import load
-from numpy  import array,sum,multiply,heaviside,exp,arange # type: ignore
-from plotly.graph_objs import Figure,Layout,Scatter         # type: ignore
+from json   import load, loads
+from numpy  import inf,vstack,array,sum,multiply,heaviside,exp,arange,concatenate as concat # type: ignore
+from plotly.graph_objs import Figure,Layout,Scatter        # type: ignore
 from plotly.offline    import plot # type: ignore
-
+from sklearn.linear_model import LinearRegression as LinReg          # type: ignore
+from MySQLdb    import connect # type: ignore
 # Internal
-from dbgen                     import flatten
 from functionals.fit.utilities import LegendreProduct
-from functionals.fit           import Fit
+from functionals.fit.fit           import Fit,sqlselect
 binary = C[[float,float],float]
 ################################################################################
 ################################################################################
@@ -22,6 +22,9 @@ mu       = 10./81
 ################################################################################
 ################################################################################
 ################################################################################
+def flatten(lol:list)->list: return [item for sublist in lol for item in sublist]
+
+
 # Functional classes
 #-------------------
 class Functional(object, metaclass = ABCMeta):
@@ -102,11 +105,12 @@ class FromMatrix(Functional):
     Implicitly define Fx formula in terms of a 2D matrix corresponding to
     coefficients for Legendre Polynomials
     """
-    def __init__(self, A:array, name : str = None) -> None:
-        self.A = A
+    def __init__(self, A:array, a1 : float, msb : float, name : str = None) -> None:
+        self.A = A.reshape((8,8))
         self.x = A.flatten()
-        self.N,self.M = A.shape
-        assert self.N == self.M
+        self.a1 = a1
+        self.msb = msb
+        assert self.A.shape == (8,8)
         self._name = name or '<no name>'
 
     @property
@@ -119,24 +123,35 @@ class FromMatrix(Functional):
         """
         A - an MxN matrix with rows corresponding to s basis functions coefficients
             and columns corresponding to alpha basis function coefficients
-
         Eq # 5 in mBEEF paper
         """
+        P = array([LegendreProduct(s,a,self.a1,self.msb,i,j)
+                                   for i in range(8) for j in range(8)])
+        return sum(self.x @ P)
 
-        P = array([[LegendreProduct(s,a,j,i)
-                        for j in range(self.N)]
-                        for i in range(self.M)])
+    @staticmethod
+    def mkPlots(a1:float,msb:float,**ps : str) -> None:
+        Functional.plots([FromMatrix(loads(p) if isinstance(p,str) else p,a1,msb,n)
+                            for n,p in ps.items()])
 
-        return sum(multiply(self.A,P))
-
-    def costs(self,data:str,const:str,nlconst:str)->T[float,float,float,float]:
-        '''Run a single fitting step to compute costs and constraint violation'''
-        f = Fit(data = data, constraints = const, nlconstraints = nlconst,
-                maxit = 1, n = self.N, bound = 1, ifit = False,
-                gridden = 3, bm_weight = 1, lat_weight = 1)
-        classes = ['ce','bm','lat']
-        r2_ce,r2_bm,r2_lat = [f.r2(self.x,c) for c in classes]
-        return r2_ce,r2_bm,r2_lat,f.constr_violation(self.x)
+    # def costs(self,dbpth:str,calc:int,decay:int) -> T[float,float,float,float]:
+    #     '''Returns r2_ce, r2_bm, r2_lat, and c_viol'''
+    #     with open(dbpth,'r') as f: conn = connect(**load(f),  autocommit  = True)
+    #
+    #     constraints = {n:1 for (n,) in sqlselect(conn,'SELECT name FROM const')}
+    #     fit = Fit.from_db(db=dbpth,constraints=constraints,calc_id=calc,decay=decay,dataconstr='.',bmw=0,lw=0,reg=0,cd=0)
+    #     ceX,bmX,lX,ceY,bmY,lY = fit.data
+    #     p = fit.metadata()['params']
+    #     c_A_eq,c_b_eq,c_A_lt,c_b_lt = fit.const_xy()
+    #
+    #     def relu(x : array) -> array: return x * (x > 0)
+    #     def c_lt_loss(x : array) -> float: return relu(c_A_lt @ x - c_b_lt)
+    #     def c_eq_loss(x  : array) -> float: return c_A_eq @ x - c_b_eq
+    #     def c_loss(x : array) -> float: return concat((c_lt_loss(x), c_eq_loss(x)))
+    #
+    #     rc,rb,rl =  [LinReg().fit(a @ self.x, b).score(a @ self.x, b) for a,b in
+    #                     [(ceX,ceY),(bmX,bmY),(lX,lY)]]
+    #     return rc,rb,rl,c_loss(self.x)
 
     # def spaghetti(self)->np.array:
     #     #Effective number of degrees of freedom gives a scale of the ensemble
@@ -180,7 +195,32 @@ def fxSCAN(s:float,alpha:float)->float:
     x   = mu*s2*(1 + b4*s2/mu) + (b1*s2 + b2*(1-alpha)*exp(-b3*(1-alpha)**2))**2
     h1x = 1 + k1 - k1/(1+x/k1)
     gx  = 1 - exp(-a1*s**(-0.5))
-    fx  = exp(-c1x*alpha/(1-alpha))*theta_1a - dx*exp(c2x/(1-alpha))*theta_a1
+    fx  = exp(-c1x * alpha/(1-alpha)) * theta_1a - dx*exp(c2x/(1-alpha))*theta_a1
+    # Main output
+    return (h1x + fx*(h0x-h1x))*gx
+
+def fxSCAN_(s:float,alpha:float)->float:
+    '''Comment out taylor expansion terms in gx as desired'''
+    # Scan-specific constants
+    h0x,c1x,c2x,dx,b3,k1,a1 = 1.174,0.667,0.8,1.24,0.5,0.065,4.9479
+    b2 = (5913/405000)**0.5
+    b1 = (511/13500) / (2*b2)
+    b4 = mu**2/k1 - 1606/18225 - b1**2
+    # Edge conditions with numerical instability
+    assert s >= 0 and alpha >= 0
+    if s < 0.01: s = 0.01
+    if abs(alpha-1) < 0.01: alpha = 1.001
+    # Intermediate values
+    theta_1a = float(heaviside(1-alpha,0.5))
+    theta_a1 = float(heaviside(alpha-1,0.5))
+    s2  = s**2
+    x   = mu*s2*(1 + b4*s2/mu) + (b1*s2 + b2*(1-alpha)*exp(-b3*(1-alpha)**2))**2
+    h1x = 1 + k1 - k1/(1+x/k1)
+    #gx  = 1 - exp(-a1*s**(-0.5))
+    ea = exp(-a1)
+    gx   = ((1-ea) - 0.5*(a1*ea)*(s-1) + a1*ea*(s-1)**2 *(0.375-0.125*a1)
+            +a1 * (-0.0208333 * a1**2 + 0.1875 * a1 - 0.3125) * ea * (s - 1)**3)
+    fx  = exp(-c1x * alpha/(1-alpha)) * theta_1a - dx*exp(c2x/(1-alpha))*theta_a1
     # Main output
     return (h1x + fx*(h0x-h1x))*gx
 
@@ -201,4 +241,4 @@ MS2 = FromFunc('MS2',fxMS2)
 with open('/Users/ksb/functionals/data/beef.json') as f:
     beefcoeff = array(load(f))
 
-BEEF = FromMatrix(beefcoeff.reshape(8,8),'beef')
+BEEF = FromMatrix(beefcoeff.reshape(8,8),a1=float('inf'),msb=1,name='beef')
