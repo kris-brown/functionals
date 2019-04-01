@@ -1,4 +1,5 @@
-from os.path           import exists
+from os.path           import exists,join
+from os                import environ 
 from sys               import argv
 from json              import load
 from numpy             import array # type: ignore
@@ -27,14 +28,14 @@ def main()->None:
         pth = argv[1]
         assert exists(pth), 'Point to a JSON output from analyize_density.py'
     else:
-        pth = '/Users/ksb/scp_tmp/out.json'
+        pth = join(environ['HOME'],'/scp_tmp/out.json')
 
     with open(pth,'r') as fi:
-        dists = list(map(array,load(fi)))
+        s,a,pden = map(array,load(fi))
 
     # Randomly sample with weighting, filter all below a threshold
     #----------------------------------------------------------
-    #dists = [rpt(lambda:choice(a=mat.flatten(),p=pden)) for mat in [s,a]] # type: ignore
+    dists = [rpt(lambda:choice(a=mat.flatten(),p=pden)) for mat in [s,a]] # type: ignore
 
     # Plotly minutiae
     #----------------

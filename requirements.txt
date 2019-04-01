@@ -4,8 +4,10 @@ ase
 tqdm
 networkx
 infix
-mysqlclient
+psycopg2-binary
 pathos
 pymatgen
 plotly
 infinite
+jsonpickle
+sklearn

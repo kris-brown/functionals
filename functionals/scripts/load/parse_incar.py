@@ -1,6 +1,6 @@
 from typing import Callable as C, Tuple as T
 
-def parse_incar(pth:str)->T[float,float,str,str,float,str,int,int,int,int,int,int,int,int,float,float,float,float,float,float,int]:
+def parse_incar(pth:str)->T[float,float,str,str,str,float,str,int,int,int,int,int,int,int,int,float,float,float,float,float,float,int]:
 
     with open(pth,'r') as f:
         pairs = [l.split('=') for l in f if len(l.split('=')) == 2]
@@ -17,6 +17,7 @@ def parse_incar(pth:str)->T[float,float,str,str,float,str,int,int,int,int,int,in
     keys = dict(encut     = float,
                 sigma     = float,
                 metagga   = str,
+                gga       = str,
                 prec      = str,
                 ediff     = float,
                 algo      = str,

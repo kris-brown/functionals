@@ -4,7 +4,7 @@ from json   import loads
 # Internal Modules
 from dbgen import (Model, Gen, PyBlock, Query, Expr, AND, GROUP_CONCAT,
                    SUM, COUNT, Literal as Lit, NOT, NULL, CONCAT, ABS, MIN, EQ, NE, GT,
-                    defaultEnv, Env,Import, Constraint, JPath)
+                    defaultEnv, Env,Import, Constraint, JPath, R2)
 
 from functionals.scripts.load.get_kptden             import get_kptden
 from functionals.scripts.load.get_kpts_vasp          import get_kpts_vasp
@@ -15,7 +15,7 @@ from functionals.scripts.misc.conventional_lattice   import conventional_lattice
 ################################################################################
 ################################################################################
 
-def make_volume(val:str,sym:str)->float:
+def make_volume(val : str,sym : str) -> float:
     sg = int(sym.split('_')[-1])
     if sg < 168: raise ValueError
     elif sg < 195:
@@ -23,7 +23,7 @@ def make_volume(val:str,sym:str)->float:
     else:
         return float(val)**3
 
-def get_near_min(dv:float,all_vols:str)->int:
+def get_near_min(dv : float, all_vols : str) -> bool:
     '''
     Given a deviation from optimum volume (and a list of all volumes), return
     whether or not the given deviation is in the following subset:
@@ -40,7 +40,7 @@ def get_near_min(dv:float,all_vols:str)->int:
         lo,hi = mid - 1, mid + 1
         min_n = lo if abs(vols[lo]) < abs(vols[hi]) else hi
 
-    return int(m in range(min_n - 2, min_n + 3))
+    return m in range(min_n - 2, min_n + 3)
 
 ################################################################################
 ################################################################################
@@ -98,8 +98,9 @@ def analysis(mod : Model) -> None:
                               c = Calc.id(bjc),
                               s = Species.id(bjsp),
                               n = Struct['n_atoms'](bjst),
-                              x = Beef.id(bfxc)),
-                 basis   = ['bulk_job'])
+                              ),#x = Beef.id(bfxc)),
+                 basis   = ['bulk_job'],
+                 )#ption  = [Beef.r('functional')])
 
     iexpt = Expt(insert  = True,
                  n_atoms = beq['n'],
@@ -153,7 +154,8 @@ def analysis(mod : Model) -> None:
                              for x,y in agg_dict.items()}},
                 aggcols = [Expt.id()],
                 basis   = ['expt'],
-                constr  = Bulk_job['near_min'](bjx))
+                constr  = Bulk_job['near_min'](bjx),
+                aconstr = COUNT(Lit(1)) |EQ| Lit(5))
 
     pop_aggs =                                                                  \
         Gen(name    = 'pop_aggs',
@@ -234,9 +236,9 @@ def analysis(mod : Model) -> None:
     eq = Query(exprs    = {'ex':Expt.id(),
                            'e':Expt['energy_pa']() - Norm},
                 aggcols = [Expt.id()],
-                basis   = ['expt'],
-                constr  = NOT(NULL(Job['contribs'](jref))), #Edge case - what if job has an energy but x_contribs failed?
-                aconstr = COUNT(Lit(1)) |EQ| Species['n_elems'](xsp))
+                basis   = ['expt'])
+                #constr  = NOT(NULL(Job['contribs'](jref))), #Edge case - what if job has an energy but x_contribs failed?
+                #)#aconstr = COUNT(Lit(1)) |EQ| Species['n_elems'](xsp))
 
 
     eform =                                                                     \
@@ -388,7 +390,7 @@ def analysis(mod : Model) -> None:
                 basis   = ['expt'],
                 constr  = SDE['property'](xsde) |EQ| Lit('lattice parameter'))
 
-    vpb = PyBlock(make_volume, args = [vq['v'], vq['s']])
+    vpb = PyBlock(make_volume, args = [vq['v'], vq['s']],tests = [(('3','x_225'),27)])
     vol_target =                                                                \
         Gen(name    = 'vol_target',
             desc    = 'Literature value of volume for this experiement',
@@ -427,9 +429,9 @@ def analysis(mod : Model) -> None:
         Gen(name    = 'cohesive_elems',
             desc    = '?',
             query   = ceq,
-            actions = [Expt(expt        = ceq['d'],
-                        atomic_contribs = ceq['a_c'],
-                        atomic_energies = ceq['a_e'])])
+            actions = [Expt(expt            = ceq['d'],
+                            atomic_contribs = ceq['a_c'],
+                            atomic_energies = ceq['a_e'])])
     ########################################################################
 
     vol_pa = Cell['volume'](bjcell) / Struct['n_atoms'](bjst)
@@ -468,8 +470,9 @@ def analysis(mod : Model) -> None:
                           'be' : Job['energy'](exptsjobs),
                           'bc' : Job['contribs'](exptsjobs),
                           'br' : ratio},
-                basis  = ['expt'],
-                constr = EQ(Bulk_job['gap'](bjx), Expt['min_gap']()))
+                basis    = ['expt'],
+                constr   = EQ(Bulk_job['gap'](bjx), Expt['min_gap']()),
+                opt_attr = [Job['contribs'](exptsjobs)])
 
     cohesive_optjob =                                                           \
         Gen(name    = 'cohesive_optjob',
@@ -482,11 +485,26 @@ def analysis(mod : Model) -> None:
                             bulk_ratio    = co['br'])])
 
     ########################################################################
+    fpth  = JPath('calc',[expt__calc])
+    qr2bm = Query(exprs = dict(c = Calc.id(fpth),
+                               xb = GROUP_CONCAT(Expt['expt_bm']()),
+                               b  = GROUP_CONCAT(Expt['bulkmod']()),
+                               xl = GROUP_CONCAT(Expt['expt_lattice']())),
+                  basis = [Expt],
+                  aggcols   = [Calc.id(fpth)])
+
+    r2bm =                                                                      \
+        Gen(name    = 'r2bm',
+            desc    = 'Calculates R2 for bulk modulus for functionals',
+            query   = qr2bm,
+            actions = [Calc(calc=qr2bm['c'],r2_bm=qr2bm['r'])])
+
+    ########################################################################
     ########################################################################
     ########################################################################
 
     gens = [bulkexpt, pop_aggs, all_vols, near_min, eform, kpts, eos, lattice,
             cohesive, cohesive_target, bm_target, vol_target, cohesive_elems,
-            gap, mingap, cohesive_optjob, exptref]#, popxbulk, popdxba]
+            gap, mingap, cohesive_optjob, exptref, r2bm]
 
     mod.add(gens)

@@ -1,5 +1,5 @@
 #!/bin/bash
-source /nfs/slac/staas/fs1/g/suncat/ksb/vasp/olsherlock/runpaths.source
+#source /nfs/slac/staas/fs1/g/suncat/ksb/vasp/olsherlock/runpaths.source
 
 echo $HOST > host.txt
 

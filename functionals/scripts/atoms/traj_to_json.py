@@ -22,14 +22,14 @@ def traj_to_json(atoms : 'Atoms') -> str:
                 fixed_inds.extend(list(constraint.get_indices()))
 
     atoms.wrap()
-    for a in atoms: atomdata.append({'number'       : int(a.number)
-                                    ,'x'            : roundfloat(a.x)
-                                    ,'y'            : roundfloat(a.y)
-                                    ,'z'            : roundfloat(a.z)
-                                    ,'magmom'       : roundfloat(a.magmom)
-                                    ,'tag'          : int(a.tag)
-                                    ,'constrained'  : int(a.index in fixed_inds)
-                                    ,'index'        : int(a.index)})
+    for a in atoms: atomdata.append({'number'       : int(a.number),
+                                     'x'            : roundfloat(a.x),
+                                     'y'            : roundfloat(a.y),
+                                     'z'            : roundfloat(a.z),
+                                     'magmom'       : roundfloat(a.magmom),
+                                     'tag'          : int(a.tag),
+                                     'constrained'  : a.index in fixed_inds,
+                                     'index'        : int(a.index)})
 
     out = {'cell': [[roundfloat(x) for x in xx] for xx in atoms.get_cell().tolist()]
           ,'atomdata':atomdata}

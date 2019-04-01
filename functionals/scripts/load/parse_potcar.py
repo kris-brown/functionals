@@ -1,6 +1,8 @@
 from typing import List as L, Tuple as T
 from re     import search
-
+from os     import environ
+from os.path import join
+###############################################################################
 def parse_potcar(pth : str) -> T[L[int],L[str],L[bool],L[int],L[float],      \
                                  L[float],L[float],L[float],L[float],        \
                                  L[float],L[float],L[bool],L[bool],L[float], \
@@ -63,4 +65,4 @@ def parse_potcar(pth : str) -> T[L[int],L[str],L[bool],L[int],L[float],      \
                   *map(list,zip(*[p.values() for p in potcars]))])
 
 if __name__=='__main__':
-    print(parse_potcar('/Users/ksb/scp_tmp/vauto/bulks/AgCl_b1/strain_-1/POTCAR'))
+    print(parse_potcar(join(environ['HOME'],'scp_tmp/vauto/bulks/AgCl_b1/strain_-1/POTCAR')))

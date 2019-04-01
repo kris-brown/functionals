@@ -1,0 +1,5 @@
+{"passwd": "ksb"
+  , "host": "localhost"
+  , "db": "functionals_log"
+  , "port": 5432
+  , "user": "ksb"}

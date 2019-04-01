@@ -1,34 +1,34 @@
 # External
-from typing     import Dict as D, List as L, Tuple as T, Any, Optional as O
-from ast        import literal_eval
-from time       import time
-from os.path    import join
-from shutil     import copyfile
-from os         import system
-from json       import dumps, loads, dump, load
-from io         import StringIO
-from contextlib import redirect_stdout
-from traceback  import format_exc
-from contextlib import contextmanager
-from hashlib import sha512
-from numpy.linalg              import lstsq,norm                            # type: ignore
+from typing       import Dict as D, List as L, Tuple as T, Any, Optional as O
+from ast          import literal_eval
+from time         import time
+from os.path      import join
+from shutil       import copyfile
+from os           import system, environ
+from json         import dumps, loads, dump, load
+from io           import StringIO
+from contextlib   import redirect_stdout
+from traceback    import format_exc
+from contextlib   import contextmanager
+from hashlib      import sha512
 
-import sys
+from numpy          import (average,empty,tile,eye,sum,ones,array,linspace,inf,  # type: ignore
+                            zeros,vstack,concatenate as concat,diag, multiply)
+from numpy.linalg   import lstsq,norm,inv      # type: ignore
 
 from scipy.optimize import least_squares # type: ignore
 
-from numpy          import (average,empty,tile,eye,sum,ones,array,linspace,inf,  # type: ignore
-                            zeros,vstack,concatenate as concat)
-from numpy.linalg   import lstsq,inv                            # type: ignore
-import warnings; warnings.filterwarnings("ignore")
+#import warnings; warnings.filterwarnings("ignore")
+
 from scipy.stats import linregress         # type: ignore
-from MySQLdb     import connect,Connection # type: ignore
+from psycopg2    import connect # type: ignore
 
 # Internal
-from functionals.fit.utilities import LegendreProduct
-from functionals.fit.data import process_data,weight
+from functionals.fit.utilities            import LegendreProduct
+from functionals.fit.data                 import process_data,weight
 from functionals.scripts.fit.h_norm_const import intkernel,quad
 
+Connection = Any
 ################################################################################
 # Helper functions
 #-----------------
@@ -36,15 +36,15 @@ def flatten(lol:list)->list: return [item for sublist in lol for item in sublist
 
 def sqlselect(conn : Connection, q : str, binds : list = []) -> L[tuple]:
     with conn.cursor() as cxn: # type: ignore
-        cxn.execute(q,args=binds)
+        cxn.execute(q,vars=binds)
         return cxn.fetchall()
 
-def hash_(x:Any)->str:
-    return sha512(str(x).encode()).hexdigest()[:10]
+def hash_(x : Any)->str: return sha512(str(x).encode()).hexdigest()[:10]
 
-def h_norm_vec(a1:float,msb:float)->array:
+def h_norm_vec(a1 : float, msb : float) -> array:
     return [quad(intkernel(i,j,a1,msb), 0., inf)[0] for j in range(8) for i in range(8)]
 
+bias = array([10**(x%8 + x//8) for x in range(64)]) # unequally weigh matrix elements
 
 # SQL
 q1 = '''SELECT const_name FROM const'''
@@ -57,19 +57,17 @@ q3 = '''SELECT expt.n_atoms, species.n_atoms, volumes, energies,
                 atomic_energies, bulk_contribs, bulk_energy,
                 expt_cohesive_energy, expt_bm, expt_volume
         FROM expt JOIN species ON species=species_id
-        WHERE calc = %s
-              AND name REGEXP BINARY(%s)'''
+        WHERE calc = %s AND name ~ %s'''
 
 q4 = '''SELECT pw,econv,data,a11,a12,a13,a14,a15,msb
         FROM calc JOIN functional ON functional=functional_id
         WHERE calc_id = %s'''
 
-q5 = '''SELECT const_name,val,kind,s,alpha
-        FROM const'''
+q5 = '''SELECT const_name,val,kind,s,alpha FROM const'''
 
 q7 = '''SELECT expt.n_atoms,expt.composition,symmetry
         FROM expt JOIN species ON species=species_id
-        WHERE calc = %s AND name REGEXP BINARY(%s)'''
+        WHERE calc = %s AND name ~ %s'''
 
 class Fit(object):
     """
@@ -94,7 +92,10 @@ class Fit(object):
                  ceY            : array,
                  bmY            : array,
                  lY             : array,
-                 expts : L[T[str,str,str]],
+                 pre_ce         : float,
+                 pre_bm         : float,
+                 pre_l          : float,
+                 expts          : L[T[str,str,str]],
                  ) -> None:
         self.constraints = constraints
         self.calc        = calc
@@ -105,11 +106,13 @@ class Fit(object):
         self.lw          = lw
         self.lam_reg     = reg
         self.cd          = cd
-        self.a1         = a1
-        self.msb = msb
+        self.a1          = a1
+        self.msb         = msb
         self.ceX,self.bmX,self.lX,self.ceY,self.bmY,self.lY=ceX,bmX,lX,ceY,bmY,lY
-        self.data = [ceX,bmX,lX,ceY,bmY,lY]
-        self.X,self.Y = vstack((ceX,bmX,lX)), concat((ceY,bmY,lY))
+        self.pre_ce,self.pre_bm,self.pre_l = pre_ce, pre_bm, pre_l
+        self.data     = [ceX,bmX,lX,ceY,bmY,lY]
+        self.X = vstack((ceX*pre_ce,bmX*pre_bm,lX*pre_l))
+        self.Y = concat((ceY*pre_ce,bmY*pre_bm,lY*pre_l))
         self.expts = expts
 
         self.c_A_eq,self.c_b_eq,self.c_A_lt,self.c_b_lt = self.const_xy()
@@ -156,23 +159,20 @@ class Fit(object):
         return time() - start_time, sols
 
     @classmethod
-    def costs(cls, db : str, x_ : str, calc : int, decay : int) -> T[float,float,float,float]:
+    def costs(cls, db : str, x_ : str, calc : int, decay : int) -> T[float,float,float,float,float,float,float]:
+        '''Returns the following metrics: MSE - cohesive (eV), bulkmod (GPa), lattice (A), three r2 values, and constraint violation'''
         from numpy.linalg import norm
-
-        def r2(vec:array,A:array,b:array)->float:
-            yhat = A @ vec
-            _,_,r,_,_  = linregress(yhat,b)
-            return r**2
 
         x = loads(x_)
         fit = cls.from_db(db,fp_id=None,calc_id=calc,decay=decay)
-        ceX,bmX,lX,ceY,bmY,lY = fit.data
+        ceX,bmX,lX,ceY,bmY,lY = map(array,fit.data)
+        yys = [(ceX@x,ceY),(bmX@x,bmY),(lX@x,lY)]
 
-        ce,bm,l = [r2(x,array(getattr(fit,a+'X')),array(getattr(fit,a+'Y')))
-                    for a in ['ce','bm','l']]
+        (rce,ce),(rbm,bm),(rl,l) = [(linregress(y_,y)[2]**2,average(norm(y_-y))) for y_,y in yys]
+
         c_viol = norm(fit.c_loss(x))
 
-        return ce,bm,l,c_viol
+        return ce,bm,l,rce,rbm,rl,c_viol
 
     ################
     # CONSTRUCTORS #
@@ -184,7 +184,10 @@ class Fit(object):
                 calc_id     : int,
                 decay       : int,
                )->'Fit':
-        with open(db,'r') as fi: conn = connect(**load(fi),  autocommit  = True)
+        with open(db,'r') as fi:
+            kwargs = load(fi)
+            kwargs['dbname']=kwargs.pop('db'); kwargs['password']=kwargs.pop('passwd')
+            conn = connect(**kwargs)
 
         # Extract fitting parameters
         if fp_id is not None:
@@ -210,9 +213,10 @@ class Fit(object):
         calc = dict(pw=pw,econv=econv,a11=a11,a12=a12,a13=a13,a14=a14,a15=a15,msb=msb,fx=loads(fx_))
         a1 = [a11,a12,a13,a14,a15][decay]
         expts = cls.get_expts(conn,calc_id,dc)
-        ceX,bmX,lX,ceY,bmY,lY = cls.data_xy(db=conn,calc=calc_id,fx=calc['fx'],decay=decay,dconstraint=dc,bmw=bmw,lw=lw)
+        ceX,bmX,lX,ceY,bmY,lY,pre_ce,pre_bm,pre_l = cls.data_xy(db=conn,calc=calc_id,fx=calc['fx'],decay=decay,dconstraint=dc,bmw=bmw,lw=lw)
         return cls(constraints=con,calc=calc,decay=decay,cd=cd,bmw=bmw,lw=lw,dataconstraint=dc,
-                   reg=reg,a1=a1,msb=msb,ceX=ceX,bmX=bmX,lX=lX,ceY=ceY,bmY=bmY,lY=lY,expts=expts)
+                   reg=reg,a1=a1,msb=msb,ceX=ceX,bmX=bmX,lX=lX,ceY=ceY,bmY=bmY,lY=lY,expts=expts,
+                   pre_ce=pre_ce,pre_bm=pre_bm,pre_l=pre_l)
 
     @classmethod
     def from_json(cls,pth : str)->'Fit':
@@ -224,7 +228,7 @@ class Fit(object):
         return cls(constraints=con,calc=md['calc'],decay=p['decay'],cd=p['cd'],
                     bmw=p['bmw'],lw=p['lw'],reg=p['reg'],a1=p['a1'],msb=p['msb'],
                     dataconstraint=p['dc'],ceX=ceX,bmX=bmX,lX=lX,ceY=ceY,bmY=bmY,lY=lY,
-                    expts=md['expts'])
+                    expts=md['expts'],pre_ce=p['pre_ce'],pre_bm=p['pre_bm'],pre_l=p['pre_l'])
 
     #######################
     # COST/LOSS FUNCTIONS #
@@ -243,9 +247,9 @@ class Fit(object):
 
     # Regularization
     @staticmethod
-    def reg(x  : array) -> array: return x
+    def reg(x  : array) -> array: return multiply(bias,x)
     @staticmethod
-    def dreg(_ : array) -> array: return eye(64)
+    def dreg(_ : array) -> array: return diag(bias)
 
     # Data
     def loss(self,x  : array) -> array: return self.X @ x - self.Y
@@ -308,8 +312,10 @@ class Fit(object):
         '''Summary of parameters used to determine fit inputs'''
         c = [x['name'] for x in self.constraints]
         return dict(expts = self.expts, cons=[c['name'] for c in self.constraints],
-                    params = dict(bmw=self.bmw,lw=self.lw,cd=self.cd,c=c,decay=self.decay,
-                                reg=self.lam_reg,dc=self.dataconstraint,a1=self.a1,msb=self.msb),
+                    params = dict(bmw=self.bmw,lw=self.lw,cd=self.cd,c=c,
+                                  decay=self.decay, reg=self.lam_reg,
+                                  dc=self.dataconstraint,a1=self.a1,msb=self.msb,
+                                  pre_ce=self.pre_ce,pre_bm=self.pre_bm,pre_l=self.pre_l),
                     calc   = self.calc)
 
     @staticmethod
@@ -326,19 +332,25 @@ class Fit(object):
                 dconstraint : str,
                 bmw         : float,
                 lw          : float
-               ) -> T[array,array,array,array,array,array]:
+               ) -> T[array,array,array,array,array,array,float,float,float]:
+
             sli = slice(64*decay,64*(decay+1))
             fxi = fx[sli]
+
             ceX_,bmX_,lX_,ceY_,bmY_,lY_ = [],[],[],[],[],[]
+
             for n,nsp,vols,engs,xcs,comp,ac,ae,bc,be,ce,bm,vol in sqlselect(db,q3,[calc,dconstraint]):
                 a_contribs = {k:array(v)[sli] for k,v in literal_eval(ac).items()}
                 b_contribs = array(loads(bc)[sli])
                 contribvec = [xc[sli] for xc in loads(xcs)]
-                new_cex,new_cey = cls.cohesive(comp,a_contribs,ae,fx,n//nsp,ce,be,b_contribs)
-                ceX_.append(new_cex);ceY_.append(new_cey)
-                new_bmx,new_bmy,new_lx,new_ly = cls.bm_lat(engs,vols,contribvec,float(bm),float(vol),fx)
-                lX_.append(new_lx);bmX_.append(new_bmx)
-                bmY_.append(new_ly);lY_.append(new_bmy)
+                if ce: # some datapoints have no cohesive energy
+                    new_cex,new_cey = cls.cohesive(comp,a_contribs,ae,fx,n//nsp,ce,be,b_contribs)
+                    ceX_.append(new_cex);ceY_.append(new_cey)
+
+                new_bmx,new_bmy,new_lx,new_ly = cls.bm_lat(engs,vols,contribvec,float(bm or 0),float(vol or 0),fx)
+                if bm:  bmX_.append(new_bmx);bmY_.append(new_bmy)
+                if vol: lX_.append(new_lx);lY_.append(new_ly)
+
 
             ceX,bmX,lX = [array(x) if x else empty((0,64)) for x in [ceX_,bmX_,lX_]]
             ceY,bmY,lY = [array(x) if x else empty(0) for x in [ceY_,bmY_,lY_]]
@@ -346,11 +358,10 @@ class Fit(object):
             ce_avg,bm_avg,l_avg = [average(x) if 0 not in x.shape else 0 for x in [ceY,bmY,lY]]
             pre_l = lw * ce_avg / l_avg
             pre_b = bmw * ce_avg / bm_avg
-            return (ceX, pre_b * bmX, pre_l * lX,
-                    ceY, pre_b * bmY, pre_l * lY)
+            return (ceX,bmX,lX,ceY,bmY,lY,1/ce_avg,bmw/bm_avg ,lw/l_avg)
 
     def write(self, pth : str)->None:
-        root = '/Users/ksb/functionals/functionals/scripts/fit/'
+        root = join(environ['FUNCTIONALS_ROOT'],'functionals/scripts/fit/')
         def write(fi:str,x:Any)->None:
             with open(join(pth,fi)+'.json','w') as file: dump(x,file)
 
@@ -393,7 +404,6 @@ class Fit(object):
         comp   = literal_eval(comp_)             # type: D[int,int]
         raw_ac = raw_ac_.items() # int -> 64 element array
         raw_ae = literal_eval(raw_ae_).items() # int -> float
-
         ex_ce  = float(tar)           # experimental E atom - E bulk
         e_bulk = float(ebulk_) / ratio            # calculated energy of bulk reference system
 
@@ -476,7 +486,7 @@ class Fit(object):
 
         # Get experimental curvature to E vs V
         #--------------------------------------
-        curv_      = bm / expt_volume                   # experimental d²E/dV², J/m^6 = N/m^5
+        curv_      = bm / (expt_volume or float('inf'))                   # experimental d²E/dV², J/m^6 = N/m^5
         expt_curv  = curv_ * (10**-60) * (6.242*10**18) # eV / A^6
 
 

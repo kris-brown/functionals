@@ -3,6 +3,8 @@ from sys     import argv
 from sys     import argv
 from io      import BytesIO
 from base64  import decodestring
+from os      import environ
+from os.path import join
 from json    import loads, dumps
 from math    import log10
 from numpy   import array # type: ignore
@@ -25,7 +27,7 @@ Functions:
 
 
 ################################################################################
-db      = '/Users/ksb/Documents/JSON/functionals_test.json'
+db      = join(environ['HOME'],'Documents/JSON/functionals_test.json')
 default = ConnectInfo.from_file(db)
 
 def viz(material : str, cxn : ConnectInfo = default) -> None:
@@ -80,7 +82,7 @@ def fxviz(*datas:str)->None:
                 name = fn + '__' + str(float(a1))
                 fxs.append(FromMatrix(array(loads(result)),float(a1),float(msb),name))
     Functional.plots(fxs+[PBE,BEEF,SCAN])
-    
+
 def r2tradeoff()->None:
     q = '''SELECT name,r2_ce,r2_bm,r2_lat,c_viol FROM fit'''
     res = sqlselect(default.connect(),q)

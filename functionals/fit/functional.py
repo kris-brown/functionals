@@ -2,11 +2,13 @@
 from typing import Callable as C, List as L, Dict as D, Tuple as T
 from abc    import ABCMeta, abstractmethod
 from json   import load, loads
+from os     import environ
+from os.path import join 
 from numpy  import inf,vstack,array,sum,multiply,heaviside,exp,arange,concatenate as concat # type: ignore
 from plotly.graph_objs import Figure,Layout,Scatter        # type: ignore
 from plotly.offline    import plot # type: ignore
 from sklearn.linear_model import LinearRegression as LinReg          # type: ignore
-from MySQLdb    import connect # type: ignore
+
 # Internal
 from functionals.fit.utilities import LegendreProduct
 from functionals.fit.fit           import Fit,sqlselect
@@ -238,7 +240,7 @@ MS2 = FromFunc('MS2',fxMS2)
 
 # From data
 #----------
-with open('/Users/ksb/functionals/data/beef.json') as f:
+with open(join(environ['FUNCTIONALS_ROOT'],'data/beef.json'),'r') as f:
     beefcoeff = array(load(f))
 
 BEEF = FromMatrix(beefcoeff.reshape(8,8),a1=float('inf'),msb=1,name='beef')

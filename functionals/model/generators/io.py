@@ -6,7 +6,7 @@ from csv        import DictReader, reader
 from json       import load, dumps
 # Internal Modules
 from dbgen import (Model, Gen, PyBlock, Env, Query, Const, Import, defaultEnv,
-                    EQ, Literal as Lit, Arg, JPath, CONCAT, LIKE)
+                    EQ, Literal as Lit, Arg, JPath, CONCAT, NULL, LIKE, NOT, AND)
 
 from functionals.scripts.io.parse_setup             import parse_setup
 from functionals.scripts.io.parse_mendeleev         import parse_mendeleev
@@ -22,24 +22,27 @@ from functionals.scripts.load.parse_contribs_vasp   import parse_contribs_vasp
 ##############################################################################
 # CONSTANTS #
  ##########
+home     = environ['HOME']
 elempath = environ['ELEMPATH']
 keldpath = environ['KELDPATH']
-logpth   = '/Users/ksb/scp_tmp/vauto' #
-psppth   = '/Users/ksb/vossj/vasp/potpaw_PBE'
-fitpth   = '/Users/ksb/scp_tmp/fitresult'
-pthEnv  = Env(Import('os.path','join','exists'))
+logpth   = join(home,'scp_tmp/vauto') #
+fitpth   = join(home,'scp_tmp/fitresult')
+pthEnv   = Env(Import('os.path','join','exists'))
 
 a1msb = ['a11','a12','a13','a14','a15','msb']
 
-def const() -> T[L[O[str]],L[O[str]],L[O[float]],L[O[float]],L[O[float]],L[O[str]],L[O[str]]]:
-
-    with open('/Users/ksb/functionals/data/constraints.csv','r') as f:
-        r = reader(f)
-        next(r)
-        name,desc,s,a,val,typ,vec = tuple(map(list,zip(*r)))
-    s_,a_,val_  = [[float(str(x)) if x else None for x in xs] for xs in [s,a,val]]
-    n_,d_,t_,v_ = [[str(x) if x else None for x in xs] for xs in [name,desc,typ,vec]]
-    return n_,d_,s_,a_,val_,t_,v_
+def const() -> T[L[O[str]],L[O[str]],L[O[float]],L[O[float]],L[O[float]],L[O[str]]]:
+    from os.path import join
+    from os      import environ
+    n_,d_,s_,a_,v_,t_ = [],[],[],[],[],[]
+    with open(join(environ['FUNCTIONALS_ROOT'],'data/constraints.csv'),'r') as f:
+        r = reader(f); next(r)
+        for name,desc,s,a,v,t in r:
+            s_.append(float(s) if s else None);
+            a_.append(float(a) if a else None);
+            v_.append(float(v) if v else None);
+            n_.append(name or None); d_.append(desc or None); t_.append(t or None)
+    return n_,d_,s_,a_,v_,t_
 
 def readfile(pth:str)->str:
     with open(pth,'r') as f: return f.read()
@@ -73,8 +76,9 @@ def io(mod : Model) -> None:
     Fitparams, Fit \
         = map(mod.get, tabs)
 
-    job__calc, job__incar, job__struct \
-        = map(mod.get_rel,[Job.r('calc'),Job.r('incar'),Job.r('struct')])
+    job__calc, job__incar, job__struct,calc__functional \
+        = map(mod.get_rel,[Job.r('calc'),Job.r('incar'),Job.r('struct'),
+                           Calc.r('functional')])
     ########################################################################
     gl_env = defaultEnv + Env(Import('subprocess','getstatusoutput'))
 
@@ -157,20 +161,23 @@ def io(mod : Model) -> None:
 
     ipth = JPath(Incar, [job__incar])
 
+    mgga  = Incar['metagga'](ipth)
 
-    cq    = Query(exprs={'j'    : Job.id(),
-                         'sd'   : Job['stordir'](),
-                         'p'    : Incar['encut'](ipth),
-                         'e'    : Incar['ediff'](ipth),
-                         **{x:Incar[x](ipth) for x in a1msb}},
-                  basis = [Job])
+    cq    = Query(exprs=dict(j   = Job.id(),
+                             sd  = Job['stordir'](),
+                             p   = Incar['encut'](ipth),
+                             e   = Incar['ediff'](ipth),
+                             bf  = NOT(NULL(mgga)) |AND| EQ(mgga,Lit('BF')),
+                         **{x:Incar[x](ipth) for x in a1msb}),
+                  basis = [Job],
+                  opt_attr = [Incar[x](ipth) for x in a1msb+['metagga']])
 
     xc    = PyBlock(parse_xc_vasp,
                     env  = parse_env + Env(Import('os.path','exists')),
                     args = [cq['sd']])
 
     def floatfun(*xs:float)->tuple:
-        return tuple(map(float,xs))
+        return tuple([float(x) if x is not None else x for x in xs])
 
     ffloat = PyBlock(floatfun,
                      args     = [cq[z] for z in ['p','e']+a1msb],
@@ -186,6 +193,7 @@ def io(mod : Model) -> None:
                                        econv      = ffloat['e'],
                                        **{x:ffloat[x] for x in a1msb},
                                        functional = Functional(insert = True,
+                                                               beef   = cq['bf'],
                                                                data   = xc['out'])))],
             funcs   = [xc,ffloat])
 
@@ -198,7 +206,7 @@ def io(mod : Model) -> None:
 
     ########################################################################
 
-    icols = ['encut','sigma','metagga','prec','ediff','algo','ismear','npar',
+    icols = ['encut','sigma','metagga','gga', 'prec','ediff','algo','ismear','npar',
             'nelm','ispin','ibrion','lcharg','lbeefens','addgrid','lasph','lwave',
             'a11','a12','a13','a14','a15','msb','magmom']
 
@@ -214,7 +222,11 @@ def io(mod : Model) -> None:
                 funcs   = [ipb])
 
     ########################################################################
-    ctrq  = Query(exprs  = {'j':Job.id(),'l':Job['log']()})
+    fpth = JPath('functional',[calc__functional,job__calc])
+
+    ctrq  = Query(exprs  = dict(j=Job.id(),l=Job['log']()),
+                  constr = Functional['beef'](fpth),
+                  basis  = [Job])
 
     ctrpb = PyBlock(parse_contribs_vasp,args = [ctrq['l']])
 
@@ -261,8 +273,11 @@ def io(mod : Model) -> None:
             if n == 1.0: return True
         raise ValueError('Should not reach this part of code...')
 
-    iq    = Query(exprs={'j'   : Job.id(),
-                         'log' : CONCAT(Job['stordir'](), Lit('/EIGENVAL'))})
+    iq    = Query(exprs= dict(j   = Job.id(),
+                              log = CONCAT(Job['stordir'](), Lit('/EIGENVAL'))),
+                  basis = [Job],
+                  constr = Struct['system_type'](js) |EQ| Lit('molecule'))
+
     iopb  = PyBlock(int_occupied,args=[iq['log']])
 
     iogen =                                                                     \
@@ -270,12 +285,13 @@ def io(mod : Model) -> None:
             desc    = 'populates',
             query   = iq,
             funcs   = [iopb],
-            actions = [Job(job=iq['j'],int_occupation=iopb['out'])])
+            actions = [Job(job            = iq['j'],
+                           int_occupation = iopb['out'])])
 
 
     ########################################################################
 
-    constcols = ['const_name','description','s','alpha','val','kind','vec']
+    constcols = ['const_name','description','s','alpha','val','kind']
 
     csv_env   = defaultEnv + Env(Import('csv','reader'))
     pcpb      = PyBlock(const, env = csv_env, outnames = constcols)
@@ -293,9 +309,10 @@ def io(mod : Model) -> None:
     pf_env = Env(Import('os','environ'), Import('csv','DictReader')) + defaultEnv
 
     def parse_fitparams() -> T[L[str],L[str],L[str],L[str],L[str],L[str]]:
+        from os.path import join
         fitcols = ['constden','consts','reg','dataconst','bm_weight','lat_weight']
         vals = {c:[] for c in fitcols} # type: D[str,L[str]]
-        with open(environ['FITPATH'],'r') as fi:
+        with open(join(environ['FUNCTIONALS_ROOT'],'data/fitparams.csv'),'r') as fi:
             reader = DictReader(fi)
             for row in reader:
                 for k,v in vals.items(): v.append(row[k])
@@ -310,6 +327,7 @@ def io(mod : Model) -> None:
         Gen(name    = 'pop_fitparams',
             desc    = 'Looks in FITPATH for fitting specifications',
             funcs   = [pfpb],
+            tags    = ['fit'],
             actions = [Fitparams(insert = True,
                            **{x:pfpb[x] for x in fitcols})])
 
@@ -323,7 +341,7 @@ def io(mod : Model) -> None:
         Gen(name    = 'pop_fit',
             desc    = 'looks for completed fitting jobs - grabs identifying info',
             funcs   = [fpb],
-            tags    = ['io'],
+            tags    = ['io','fit'],
             actions = [Fit(insert = True,
                            msb    = fpb['msb'],
                            **{x:fpb[x] for x in fcols},

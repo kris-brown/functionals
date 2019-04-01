@@ -1,3 +1,6 @@
+# External
+from os import environ
+from os.path import join
 # Internal Modules
 from dbgen             import parser, ConnectInfo
 from functionals.model  import make_model
@@ -6,7 +9,7 @@ Run the model defined in /functionals/model
 """
 ################################################################################
 
-root = '/Users/ksb/Documents/JSON/'
+root = join(environ['FUNCTIONALS_ROOT'],'data/')
 
 def main(args:dict)->None:
     """

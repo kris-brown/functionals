@@ -2,6 +2,7 @@ from typing    import Dict as D, List as L
 from sys       import argv
 from csv       import DictWriter
 from os        import environ
+from os.path   import join
 from random    import choice
 from operator  import mul
 from functools import reduce
@@ -23,7 +24,7 @@ spec = dict(
 ) # type: D[str,L]
 
 def fits() -> None:
-    with open(environ['FITPATH'],'w') as f:
+    with open(join(environ['FUNCTIONALS_ROOT'],'data/fitparams.csv'),'w') as f:
         w = DictWriter(f,fieldnames=list(spec.keys()))
         w.writeheader()
         allfits(w)# randfits(w,n); varyfits(w)
@@ -38,9 +39,7 @@ def allfits(w : DictWriter)->None:
 #     '''Basically a global variable counter'''
 #     val = 0
 #     @classmethod
-#     def get(cls)->int:
-#         cls.val += 1
-#         return cls.val
+#     def get(cls)->int: cls.val += 1;  return cls.val
 
 # def varyfits(w : DictWriter)->None:
 #     '''Vary each parameter individually'''
@@ -60,13 +59,5 @@ def allfits(w : DictWriter)->None:
 #     print('Sampled {}/{} possible configs'.format(n,tot))
 
 
-#############################################################################
-#############################################################################
-#############################################################################
-def main() -> None:
-    func = globals()[argv[1]]
-    args = [] if len(argv) < 2 else argv[2:]
-    func(*args)
-
 if __name__=='__main__':
-    main()
+    fits()

@@ -1,3 +1,6 @@
+# External
+from os import environ
+from os.path import join
 # Internal Modules
 from dbplot.main  import main as plt, parser
 
@@ -12,5 +15,5 @@ def main(args:dict)->None:
 
 if __name__=='__main__':
     args = vars(parser.parse_args())
-    args['db'] = '/Users/ksb/Documents/JSON/functionals.json'
+    args['db'] = join(environ['FUNCTIONALS_ROOT'],'data/functionals.json')
     main(args)

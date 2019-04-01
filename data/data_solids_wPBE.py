@@ -55,7 +55,7 @@ sl20 = ['Li_bcc', 'Na_bcc', 'Ca_fcc', 'Sr_fcc', 'Ba_bcc',
 assert len(sl20) == 20
 
 # ZPAE (semi-empirical) corrected lattice parameters from Haas, Tran, Blaha, PRB 79, 085104 (2009)
-# and ZPAE (phonon) corrected lattice parameters + Debye temps + bulk moduli (GPa) from Hao et al., PRB 85, 014111 (2012)
+# and ZPAE (phonon) corrected lattice parameters + Debye temps + bulk moduli (GPa) from Hao et al., PRB 85, 014111 (2012) https://journals.aps.org/prb/pdf/10.1103/PhysRevB.85.014111
 # cohesive energies (at 0 K) and Debye temperatures from Kittel and Hao et al.
 data = {
 # Cubic pure solids

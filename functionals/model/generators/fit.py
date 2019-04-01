@@ -1,8 +1,9 @@
-from typing import Tuple as T, List as L, Optional as O
-from math   import log10
-from ast    import literal_eval
-from os     import environ
-from json   import loads
+from typing  import Tuple as T, List as L, Optional as O
+from math    import log10
+from ast     import literal_eval
+from os      import environ
+from os.path import join
+from json    import loads
 import numpy as np # type: ignore
 
 # Internal Modules
@@ -20,7 +21,7 @@ from functionals.scripts.fit.h_norm_const     import  one_time_function
 ################################################################################
 ################################################################################
 
-functionals_db = '/Users/ksb/Documents/JSON/functionals.json'
+functionals_db = join(environ['FUNCTIONALS_ROOT'],'data/functionals.json')
 
 ################################################################################
 
@@ -49,56 +50,6 @@ def fit(mod : Model) -> None:
                      m = Fit['msb']()))
 
     ############################################################################
-
-    resid_cols = ['r2_ce','r2_bm','r2_lat','c_viol']
-
-    f_env = defaultEnv + Env(Import('functionals.fit.fit',Fit='FitObj'))
-
-    def f_resid(db:str,x:str,c:int,d:int)->T[float,float,float,float]:
-        return FitObj.costs(db,x,c,d)
-
-    fc = JPath("calc", [fit__calc])
-    fp = JPath('fitparams',[fit__fitparams])
-
-    rq = Query(exprs = dict(f   = Fit.id(),
-                            x = Fit['result'](),
-                            c = Calc.id(fc),
-                            d = Fit['decay']()),
-                basis = ['fit'])
-    db = '/Users/ksb/Documents/JSON/functionals.json'
-    rpb = PyBlock(f_resid,
-                   env  = f_env,
-                   args = [Const(db),rq['x'],rq['c'],rq['d']],
-                   outnames = resid_cols)
-
-    resid =                                                                     \
-        Gen(name    = 'resid',
-            desc    = 'Computes metrics for a fit result',
-            query   = rq,
-            tags    = ['fit','parallel','DEP expt.coefs','DEP expt.expt_volume'],
-            funcs   = [rpb],
-            actions = [Fit(fit=rq['f'],
-                           **{x:rpb[x] for x in resid_cols})])
-
-    ########################################################################
-
-    def f_score(r2ce:float, r2bm:float, r2lat:float, cviol:float) -> float:
-        c,b,l,v = map(float,[r2ce,r2bm,r2lat,cviol])
-        return 2*c + b + l - v/5
-
-    # menv = Env(Import('math','log10'))
-
-    sq   = Query({'f':Fit.id(),
-                 **{x:Fit[x]() for x in resid_cols}})
-    spb  = PyBlock(f_score, args = [sq[x] for x in resid_cols])
-    score =                                                                     \
-        Gen(name    = 'score',
-            desc    = 'Computes Fit.score',
-            query   = sq,
-            funcs   = [spb],
-            tags    = ['fit'],
-            actions = [Fit(fit   = sq['f'],
-                           score = spb['out'])])
 
     ############################################################################
 
@@ -137,6 +88,58 @@ def fit(mod : Model) -> None:
             funcs   = [hvpb],
             tags    = ['fit','parallel'],
             actions = [Fit(fit = fbq['f'], h_viol = hvpb['out'])])
+
+    ########################################################################
+    resid_cols = ['mse_ce','mse_bm','mse_lat','r2_ce','r2_bm','r2_lat','c_viol']
+
+    f_env = defaultEnv + Env(Import('functionals.fit.fit',Fit='FitObj'))
+
+    def f_resid(db:str,x:str,c:int,d:int)->T[float,float,float,float,float,float,float]:
+        return FitObj.costs(db,x,c,d)
+
+    fc = JPath("calc", [fit__calc])
+    fp = JPath('fitparams',[fit__fitparams])
+
+    rq = Query(exprs = dict(f   = Fit.id(),
+                            x = Fit['result'](),
+                            c = Calc.id(fc),
+                            d = Fit['decay']()),
+               basis = ['fit'])
+
+    rpb = PyBlock(f_resid,
+                   env  = f_env,
+                   args = [Const(functionals_db),rq['x'],rq['c'],rq['d']],
+                   outnames = resid_cols)
+
+    resid =                                                                     \
+        Gen(name    = 'resid',
+            desc    = 'Computes metrics for a fit result',
+            query   = rq,
+            tags    = ['fit','parallel','DEP expt.coefs','DEP expt.expt_volume'],
+            funcs   = [rpb],
+            actions = [Fit(fit=rq['f'],
+                           **{x:rpb[x] for x in resid_cols})])
+
+    ########################################################################
+
+    def f_score(r2ce:float, r2bm:float, r2lat:float, cviol:float) -> float:
+        c,b,l,v = map(float,[r2ce,r2bm,r2lat,cviol])
+        return 2*c + b + l - v/5
+
+    # menv = Env(Import('math','log10'))
+
+    sq   = Query({'f':Fit.id(),
+                 **{x:Fit[x]() for x in resid_cols[-4:]}})
+    spb  = PyBlock(f_score, args = [sq[x] for x in resid_cols[-4:]])
+    score =                                                                     \
+        Gen(name    = 'score',
+            desc    = 'Computes Fit.score',
+            query   = sq,
+            funcs   = [spb],
+            tags    = ['fit'],
+            actions = [Fit(fit   = sq['f'],
+                           score = spb['out'])])
+
 
     ########################################################################
     ########################################################################

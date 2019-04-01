@@ -13,6 +13,7 @@ def eos_func(vols_:str,engs_:str,n_atoms:int) -> T[O[float],O[float],O[float],O[
     '''
     Use fancy equation of state fitter to series of vol,eng pairs
     '''
+    import warnings; warnings.filterwarnings("ignore")
     import matplotlib.pyplot as plt # type: ignore
 
     # Constants

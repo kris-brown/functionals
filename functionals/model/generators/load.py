@@ -153,6 +153,7 @@ def load(mod : Model) -> None:
 
     md_env = Env(Import('os', 'stat'),
                  Import('pwd', 'getpwuid'),
+                 Import('datetime','date'),
                  Import('os.path', 'getmtime')) + defaultEnv
 
     mdpb = PyBlock(metadata,
@@ -374,7 +375,7 @@ def load(mod : Model) -> None:
 
     ###########################################################################
 
-    spinb = PyBlock(lambda x: int('Spin-polarized calculation' in x),
+    spinb = PyBlock(lambda x: 'Spin-polarized calculation' in x,
                     args    =[logq['log']])
 
     spinpol =                                                               \
