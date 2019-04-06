@@ -58,7 +58,7 @@ def eng_gpaw(s:str)->float:
     return float(match[-1])
 
 def eng_vasp(s:str)->float:
-    '''Parse the result free energy from a GPAW logfile'''
+    '''Parse the result free energy from a VASP logfile'''
     from re import findall
     pat = r'TOTEN\s+=\s+([-+]?\d+\.\d+)'
     match = findall(pat, s); assert match

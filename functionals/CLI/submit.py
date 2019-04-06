@@ -59,19 +59,22 @@ class Calc(object):
                  kpts   : tuple = (1,1,1)
                 ) -> None:
         assert xc in ['PBE',"BEEF",'SCAN']
-        if not magmom: self.magmom = 'ISPIN = 1'
-        else:          self.magmom = 'ISPIN = 2\nMAGMOM = %f'%magmom
 
         self.pw    = pw;
         self.sigma = sigma
         self.econv = econv;
         self.kpts  = kpts
         self.xc    = xc
+        self.mag   = magmom
 
         # Hardcode these for now
         self.a11,self.a12,self.a13,self.a14,self.a15 = 2.,2.5,3.,4.5,6.
         self.msb = 4.
 
+    def magmom(self,atom:bool)->str:
+        if not self.mag: return 'ISPIN = 1'
+        elif atom:       return 'ISPIN = 2\nNUPDOWN = %f'%self.mag
+        else:            return 'ISPIN = 2\nMAGMOM = %f'%self.mag
 
 class Job(metaclass = ABCMeta):
     def __init__(self, calc : Calc, time : int = 1) -> None:
@@ -82,7 +85,7 @@ class Job(metaclass = ABCMeta):
     def __repr__(self)->str:
         return str(self)
 
-    def _submit_sunc(self, pth : str) -> None:
+    def _submit(self, pth : str) -> None:
         self.singlepoint(pth)
         sunc   = choice(['','','','2','3','3'])
         cd    = {'':8,'2':12,'3':16} # core-dict
@@ -170,7 +173,7 @@ class Atomic(Job):
             write(poscar,atoms)
             potcmd = 'cat %s/%s/POTCAR > %s'%(ppth,self.sym,potcar)
             system(potcmd) # write potcar
-            self._submit_sunc(pth)
+            self._submit(pth)
 
     def singlepoint(self,pth:str)->None:
         """ Write a singlepoint calculation to a file """
@@ -183,7 +186,7 @@ class Atomic(Job):
 
         for fname,f in files:
             incar = get_script('vasp/'+f)
-            incar_str = incar.format(Calc=self.calc)
+            incar_str = incar.format(Calc=self.calc,magmom=self.calc.magmom(atom=True))
             if self.calc.magmom is not None:
                 incar_str += str(self.calc.magmom)
             with open(join(pth,fname),'w') as g:
@@ -196,9 +199,9 @@ class Atomic(Job):
     @property
     def subsunc(self)->str:
         if self.calc.xc == 'SCAN':
-            return get_script('vasp/subvaspscan.sh')
+            return get_script('vasp/subVASPscan.sh')
         else:
-            return get_script('vasp/subVASPatom_suncat.sh')
+            return get_script('vasp/subVASPatom.sh')
 
     @staticmethod
     def enmasse(elems     : L[int], curr : S[str],
@@ -260,13 +263,13 @@ class Bulk(Job):
                 potcar = 'cat ' + ' '.join(['%s/%s/POTCAR'%(ppth,x) for x in elems]) + ' > ' + potcar
                 system(potcar) # write potcar
 
-                self._submit_sunc(spth)
+                self._submit(spth)
 
     def singlepoint(self,pth:str)->None:
         """ Write a singlepoint calculation to a file """
-        car = dict(PBE='PBE_CAR',BEEF='INCAR',SCAN='SCAN_CAR')
+        car   = dict(PBE='PBE_CAR',BEEF='INCAR',SCAN='SCAN_CAR')
         incar = get_script('vasp/' + car[self.calc.xc])
-        incar_str = incar.format(Calc=self.calc)
+        incar_str = incar.format(Calc=self.calc,magmom=self.calc.magmom(atom=False))
         if self.calc.magmom is not None:
             incar_str+=str(self.calc.magmom)
         with open(join(pth,'INCAR'),'w') as g:
@@ -277,7 +280,7 @@ class Bulk(Job):
 
     @property
     def subsunc(self)->str:
-        return get_script('vasp/sub%s.sh'%('vaspscan' if self.calc.xc=='SCAN' else 'VASP_suncat'))
+        return get_script('vasp/subVASP%s.sh'%('scan' if self.calc.xc=='SCAN' else ''))
 
     @staticmethod
     def enmasse(pth    : str, submitpth : str, curr : S[str],

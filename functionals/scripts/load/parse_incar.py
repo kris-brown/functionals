@@ -1,7 +1,7 @@
 from typing import Callable as C, Tuple as T
 
-def parse_incar(pth:str)->T[float,float,str,str,str,float,str,int,int,int,int,int,int,int,int,float,float,float,float,float,float,int]:
-
+def parse_incar(pth:str)->dict:
+    '''Turn path to INCAR into a dictionary'''
     with open(pth,'r') as f:
         pairs = [l.split('=') for l in f if len(l.split('=')) == 2]
 
@@ -37,7 +37,7 @@ def parse_incar(pth:str)->T[float,float,str,str,str,float,str,int,int,int,int,in
                 a14       = float,
                 a15       = float,
                 msb       = float,
-                magmom    = int)
+                magmom    = float)
     d = {x.strip().lower() : y.strip() for x,y in pairs}
 
-    return tuple([maybe(f)(d.get(k)) for k,f in keys.items()]) # type: ignore
+    return {k:maybe(f)(d.get(k)) for k,f in keys.items()} # type: ignore

@@ -13,7 +13,6 @@ LBEEFENS = .TRUE.
 ADDGRID = .TRUE.
 LASPH = .TRUE.
 LWAVE = .FALSE.
-{Calc.magmom}
 
 A11 = {Calc.a11}
 A12 = {Calc.a12}
@@ -21,3 +20,5 @@ A13 = {Calc.a13}
 A14 = {Calc.a14}
 A15 = {Calc.a15}
 MSB = {Calc.msb}
+
+{magmom}

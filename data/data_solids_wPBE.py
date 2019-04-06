@@ -12,7 +12,7 @@ qubic_solids_26 = ['Li_bcc','Na_bcc','K_bcc','Rb_bcc',
                    'Rh_fcc','Ir_fcc',
                    'Ni_fcc','Pd_fcc','Pt_fcc',
                    'Cu_fcc','Ag_fcc','Au_fcc',
-                   'Al_fcc','Pb_fcc',              #KRIS: WHY WERE Pb_fcc and Au_fcc commented out???
+                   'Al_fcc','Pb_fcc',
                    'C_diamond','Si_diamond','Ge_diamond','Sn_diamond']
 qubic_solids_27 = np.append(qubic_solids_26, 'V_bcc')
 
@@ -363,7 +363,7 @@ data = {
     'lattice parameter 2': 5.620,
     'revtpss_lp': 2.95057912237,
     'cohesive energy': 1.16,
-    'bulk modulus kittel': 46.7, # GPa
+    'bulk modulus': 46.7, # GPa
     'symbols': 'Cd',
     'latex name': "Cd",
     'structure':'hcp',
@@ -374,7 +374,7 @@ data = {
     'lattice parameter 2': 4.069,
     'revtpss_lp':  2.45918897125,
     'cohesive energy': 4.39,
-    'bulk modulus kittel': 191.4, # GPa
+    'bulk modulus': 191.4, # GPa
     'symbols': 'Co',
     'latex name': "Co",
     'structure':'hcp',
@@ -386,7 +386,7 @@ data = {
     'lattice parameter 2': 4.392,
     'revtpss_lp': 2.73044397786,
     'cohesive energy': 8.17,
-    'bulk modulus kittel': 418., # GPa
+    'bulk modulus': 418., # GPa
     'symbols': 'Os',
     'latex name': "Os",
     'structure':'hcp',
@@ -397,7 +397,7 @@ data = {
     'lattice parameter 2': 4.282,
     'revtpss_lp':  2.7191530774,
     'cohesive energy': 6.74,
-    'bulk modulus kittel': 320.8, # GPa
+    'bulk modulus': 320.8, # GPa
     'symbols': 'Ru',
     'latex name': "Ru",
     'structure':'hcp',
@@ -408,7 +408,7 @@ data = {
     'lattice parameter 2': 4.947,
     'revtpss_lp': 2.59872461224,
     'cohesive energy': 1.35,
-    'bulk modulus kittel': 59.8, # GPa
+    'bulk modulus': 59.8, # GPa
     'symbols': 'Zn',
     'latex name': "Zn",
     'structure':'hcp',
@@ -419,7 +419,7 @@ data = {
     'lattice parameter 2': 4.684,
     'revtpss_lp': 2.92208023815,
     'cohesive energy': 4.85,
-    'bulk modulus kittel': 105.1, # GPa
+    'bulk modulus': 105.1, # GPa
     'symbols': 'Ti',
     'latex name': "Ti",
     'structure':'hcp',
@@ -431,7 +431,7 @@ data = {
     'lattice parameter 2': 5.148,
     'revtpss_lp': 3.23504460776,
     'cohesive energy': 6.25,
-    'bulk modulus kittel': 83.3, # GPa
+    'bulk modulus': 83.3, # GPa
     'symbols': 'Zr',
     'latex name': "Zr",
     'structure':'hcp',
@@ -442,7 +442,7 @@ data = {
     'lattice parameter 2': 5.268,
     'revtpss_lp': 3.30710158266,
     'cohesive energy': 3.90,
-    'bulk modulus kittel': 43.5, # GPa
+    'bulk modulus': 43.5, # GPa
     'symbols': 'Sc',
     'latex name': "Sc",
     'structure':'hcp',
@@ -453,7 +453,7 @@ data = {
     'lattice parameter 2': 3.585,
     'revtpss_lp': 2.27878331698,
     'cohesive energy': 3.32,
-    'bulk modulus kittel': 100.3, # GPa
+    'bulk modulus': 100.3, # GPa
     'symbols': 'Be',
     'latex name': "Be",
     'structure':'hcp',
@@ -464,7 +464,7 @@ data = {
     'lattice parameter 2': 5.211,
     'revtpss_lp': 3.17456515719,
     'cohesive energy': 1.51,
-    'bulk modulus kittel': 35.4, # GPa
+    'bulk modulus': 35.4, # GPa
     'symbols': 'Mg',
     'latex name': "Mg",
     'structure':'hcp',
@@ -1050,6 +1050,7 @@ data = {
     'symbols': 'FeN',
     'latex name': "FeN",
     'structure':'rocksalt',
+    'bulk modulus' : None,
     'magmom': 1.3},
     #'gpaw_conv': [1.e-5, 1.e-4, 1.e-7]},
 'CoN_b1': {
