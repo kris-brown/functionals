@@ -5,13 +5,13 @@ from os.path     import join,exists
 from os          import chdir,system,mkdir,listdir,environ,getenv
 from os          import mkdir
 from subprocess  import check_output
-from argparse    import ArgumentParser
 from random      import random, choice
 
 from ase        import Atoms            # type: ignore
 from ase.io     import write,read       # type: ignore
 from ase.data   import chemical_symbols # type: ignore
 
+from functionals.CLI.submit_parser import parser
 """
 A CLI interface designed to submit atomic and bulk calculations en masse
 
@@ -45,9 +45,9 @@ def safeMkdir(pth:str) -> None:
 
 # Magnetic moments
 emag = {'Ni': 2, 'Rb': 1, 'Pt': 2, 'Ru': 4, 'S': 2, 'Na': 1, 'Nb': 5, 'Mg': 0, 'Li': 1, 'Pb': 2, 'Pd': 0, 'Ti': 2, 'Te': 2, 'Rh': 3, 'Ta': 3, 'Be': 0, 'Ba': 0, 'As': 3, 'Fe': 4, 'Br': 1, 'Sr': 0, 'Mo': 6, 'He': 0, 'C': 2, 'B': 1, 'P': 3, 'F': 1, 'I': 1, 'H': 1, 'K': 1, 'Mn': 5, 'O': 2, 'Ne': 0, 'Kr': 0, 'Si': 2, 'Sn': 2, 'W': 4, 'V': 3, 'Sc': 1, 'N': 3, 'Os': 4, 'Se': 2, 'Zn': 0, 'Co': 3, 'Ag': 1, 'Cl': 1, 'Ca': 0, 'Ir': 3, 'Al': 1, 'Cd': 0, 'Ge': 2, 'Ar': 0, 'Au': 1, 'Zr': 2, 'Ga': 1, 'In': 1, 'Cs': 1, 'Cr': 6, 'Cu': 1, 'Y' : 1, 'Tc' : 5, 'Sb':3,'Xe':0, 'Hf':2, 'Re':5,'Hg':0,'Tl':1}
+allelems = [chemical_symbols.index(x) for x in emag.keys()] # all atomic numbers in {emag}
 bmag = {'Li_bcc': None, 'Na_bcc': None, 'K_bcc': None, 'Rb_bcc': None, 'Ca_fcc': None, 'Sr_fcc': None, 'Ba_bcc': None, 'V_bcc': None, 'Nb_bcc': None, 'Ta_bcc': None, 'Mo_bcc': None, 'W_bcc': None, 'Fe_bcc': 2.22, 'Rh_fcc': None, 'Ir_fcc': None, 'Ni_fcc': 0.64, 'Pd_fcc': None, 'Pt_fcc': None, 'Cu_fcc': None, 'Ag_fcc': None, 'Au_fcc': None, 'Al_fcc': None, 'C_diamond': None, 'Si_diamond': None, 'Ge_diamond': None, 'Sn_diamond': None, 'Pb_fcc': None, 'Cd_hcp': None, 'Co_hcp': 1.72, 'Os_hcp': None, 'Ru_hcp': None, 'Zn_hcp': None, 'Ti_hcp': None, 'Zr_hcp': None, 'Sc_hcp': None, 'Be_hcp': None, 'Mg_hcp': None, 'LiH_b1': None, 'LiF_b1': None, 'LiCl_b1': None, 'NaF_b1': None, 'NaCl_b1': None, 'MgO_b1': None, 'MgS_b1': None, 'CaO_b1': None, 'TiC_b1': None, 'TiN_b1': None, 'ZrC_b1': None, 'ZrN_b1': None, 'VC_b1': None, 'VN_b1': None, 'NbC_b1': None, 'NbN_b1': None, 'FeAl_b2': 0.35, 'CoAl_b2': None, 'NiAl_b2': None, 'BN_b3': None, 'BP_b3': None, 'BAs_b3': None, 'AlN_b3': None, 'AlP_b3': None, 'AlAs_b3': None, 'GaN_b3': None, 'GaP_b3': None, 'GaAs_b3': None, 'InP_b3': None, 'InAs_b3': None, 'SiC_b3': None, 'KBr_b1': None, 'CaSe_b1': None, 'SeAs_b1': None, 'RbI_b1': None, 'LiI_b1': None, 'CsF_b1': None, 'CsI_b2': None, 'AgF_b1': None, 'AgCl_b1': None, 'AgBr_b1': None, 'CaS_b1': None, 'BaO_b1': None, 'BaSe_b1': None, 'CdO_b1': None, 'MnO_b1': 2.4, 'MnS_b1': 2.4, 'ScC_b1': None, 'CrC_b1': 0.6, 'MnC_b1': 1.2, 'FeC_b1': None, 'CoC_b1': None, 'NiC_b1': None, 'ScN_b1': None, 'CrN_b1': 1.3, 'MnN_b1': 1.6, 'FeN_b1': 1.3, 'CoN_b1': None, 'NiN_b1': None, 'MoC_b1': None, 'RuC_b1': None, 'RhC_b1': None, 'PdC_b1': None, 'MoN_b1': None, 'RuN_b1': None, 'RhN_b1': None, 'PdN_b1': None, 'LaC_b1': None, 'TaC_b1': None, 'WC_b1': None, 'OsC_b1': None, 'IrC_b1': None, 'PtC_b1': None, 'LaN_b1': None, 'TaN_b1': None, 'WN_b1': None, 'OsN_b1': None, 'IrN_b1': None, 'PtN_b1': None}
 
-allelems = [chemical_symbols.index(x) for x in emag.keys()] # all atomic numbers in {emag}
 
 class Calc(object):
     def __init__(self,
@@ -187,8 +187,6 @@ class Atomic(Job):
         for fname,f in files:
             incar = get_script('vasp/'+f)
             incar_str = incar.format(Calc=self.calc,magmom=self.calc.magmom(atom=True))
-            if self.calc.magmom is not None:
-                incar_str += str(self.calc.magmom)
             with open(join(pth,fname),'w') as g:
                 g.write(incar_str)
 
@@ -270,8 +268,6 @@ class Bulk(Job):
         car   = dict(PBE='PBE_CAR',BEEF='INCAR',SCAN='SCAN_CAR')
         incar = get_script('vasp/' + car[self.calc.xc])
         incar_str = incar.format(Calc=self.calc,magmom=self.calc.magmom(atom=False))
-        if self.calc.magmom is not None:
-            incar_str+=str(self.calc.magmom)
         with open(join(pth,'INCAR'),'w') as g:
             g.write(incar_str)
         kpts = get_script('vasp/KPOINTS')
@@ -289,80 +285,39 @@ class Bulk(Job):
                 time   : int   = 1,
                 sigma  : float = 0.01,
                 econv  : float = 1e-3,
-                strains: list  = list(range(-5,5)),
+                lo     : int   = 5,
+                hi     : int   = 5,
                 retry  : bool  = False
                 ) -> None:
         """ Create a bunch of bulks from a directory containing .traj files"""
+        bulkpaths = [pth] if pth[-5:]=='.traj' else listdir(pth)
+        assert all([p[-5:]=='.traj' for p in bulkpaths])
         bulks = [Bulk(bulk = join(pth,p), time = time, sigma = sigma, econv = econv,
-                      xc = xc, strains = strains)
-                    for p in listdir(pth) if p[-5:]=='.traj']
+                      xc = xc, strains = list(range(-lo,hi))) for p in bulkpaths]
+
         for b in bulks:
             b.submit(pth_=submitpth, retry=retry, curr = curr, sher=sher)
 
 
 #########################################
-# PARSER #
-def parse_elems(x : str) -> L[int]:
-    if x == 'all': return allelems
-    else:          return list(map(int, x.split()))
 
-parser = ArgumentParser(description  = 'Submit some jobs',
-                        allow_abbrev = True)
-
-parser.add_argument('--time',
-                    default = 1,
-                    type    = int,
-                    help    = 'Walltime for batch jobs')
-
-parser.add_argument('--sigma',
-                    default = 0.01,
-                    type    = float,
-                    help    = 'Fermi temperature')
-
-parser.add_argument('--econv',
-                    default = 0.001,
-                    type    = float,
-                    help    = 'Energy convergence criterion ')
-
-parser.add_argument('--src',
-                    default = '',
-                    type    = str,
-                    help    = 'Path to bulk .traj files')
-
-parser.add_argument('--target',
-                    default = '',
-                    type    = str,
-                    help    = 'Path to where jobs will be submitted from')
-
-parser.add_argument('--elems',
-                    default = '',
-                    type    = parse_elems,
-                    help    = 'Either "all" or space separated list of positive integers')
-
-parser.add_argument('--xc',
-                    default = 'BEEF',
-                    help    = 'Copies a file into the working directory as BEEFoftheDay.txt')
-
-
-def main()->None:
+def main() -> None:
     '''Submit either bulk or element singlepoint calculations'''
     args = parser.parse_args()
     assert bool(args.src) ^ bool(args.elems), "Must be submiting Bulk or Atomic jobs"
     assert args.target,                       "Need a target location to submit jobs"
 
-    calc = dict(sigma=args.sigma)
-
-
     currstr = 'squeue -u ksb -o "%Z"' if sher else 'bjobs -o "job_name" -noheader'
 
-    curr = set(check_output(currstr, encoding='UTF-8',shell=True).split())
+    curr   = set(check_output(currstr, encoding='UTF-8',shell=True).split())
     common = dict(submitpth = args.target, xc = args.xc, curr = curr,
-                  time = args.time)
+                  time = args.time, sigma = args.sigma )
 
     if args.elems:
-        Atomic.enmasse(**{**common,**calc,**dict(sher=sher,elems=args.elems)})
+        Atomic.enmasse(**{**common,**dict(sher=sher,elems=args.elems)})
     elif args.src:
-        Bulk.enmasse(**{**common,**calc,**dict(sher=sher,pth=args.src)})
+        Bulk.enmasse(**{**common,**dict(sher = sher, pth = args.src,
+                                        lo = args.lo, hi = args.hi)})
     else:
         raise ValueError("Must be submiting Bulk or Atomic jobs")
 

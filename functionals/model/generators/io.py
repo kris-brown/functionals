@@ -69,6 +69,7 @@ def io(mod : Model) -> None:
     ifun  = Fx(insert = True, data   = papb['fx'])
 
     ijob  = Job(insert  = True,
+                runtime = papb['runtime'],
                 calc    = Calc(insert     = True,
                                pw         = papb['pw'],
                                econv      = papb['econv'],
@@ -88,7 +89,7 @@ def io(mod : Model) -> None:
     ############################################################################
 
     bcols  = ['contribs','energies','volumes','n_atoms','n_elems','composition','img',
-              'eosbm', 'lattice','completed','success']
+              'eosbm', 'lattice','strain_low','strain_hi','incomplete','success']
     bpth   = '/Users/ksb/scp_tmp/vauto/bulks'
     pbcols = jcols + bcols
     pbpb   = PyBlock(parse_bulks, args = [Const(bpth)], outnames = pbcols)
@@ -96,10 +97,11 @@ def io(mod : Model) -> None:
     ifun_  = Fx(insert = True, data   = pbpb['fx'])
 
     ijob_  = Job(insert  = True,
-                 calc    = Calc(insert     = True,
-                               pw         = pbpb['pw'],
-                               econv      = pbpb['econv'],
-                               functional = ifun_),
+                 runtime    = pbpb['runtime'],
+                 calc    = Calc(insert    = True,
+                                pw         = pbpb['pw'],
+                                econv      = pbpb['econv'],
+                                functional = ifun_),
                  stordir = pbpb['stordir'])
 
     pop_bulks =                                                                 \

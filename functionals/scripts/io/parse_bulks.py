@@ -1,13 +1,15 @@
 from typing import List as L, Tuple as T
 from json import load,dumps
 
-def parse_bulks(root:str)->T[L[str],L[str],L[int],L[int],L[float],L[str],L[str],L[str],
-                             L[str],L[int],L[int],L[str],L[str],L[float],L[float],
-                             L[str],L[bool]]:
-    from os      import listdir, environ, remove
-    from os.path import join, exists
-    from re      import findall
-    from ase.io import read  # type: ignore
+def parse_bulks(root:str)->T[L[str],L[str],L[int],L[int],L[float],L[str],
+                             L[str],L[str],L[str],L[int],L[int],
+                             L[str],L[str],L[float],L[float],
+                             L[int],L[int],L[str],L[bool]]:
+
+    from os        import listdir, environ, remove
+    from os.path   import join, exists
+    from re        import findall
+    from ase.io    import read  # type: ignore
     from string    import ascii_lowercase
     from random    import choices
 
@@ -15,8 +17,8 @@ def parse_bulks(root:str)->T[L[str],L[str],L[int],L[int],L[float],L[str],L[str],
     from ase.eos   import EquationOfState   # type: ignore
     from ase.units import kJ                # type: ignore
 
-    from numpy     import polyfit,poly1d,mean,std,array # type: ignore
-    from numpy.linalg import norm # type: ignore
+    from   numpy        import polyfit,poly1d,mean,std,array # type: ignore
+    from   numpy.linalg import norm # type: ignore
     import warnings; warnings.filterwarnings("ignore")
     import matplotlib.pyplot as plt # type: ignore
 
@@ -28,8 +30,11 @@ def parse_bulks(root:str)->T[L[str],L[str],L[int],L[int],L[float],L[str],L[str],
         # INITIALIZE VARS
         funroot  = environ['FUNCTIONALS_ROOT']
 
-        pths,names,rts,pws,econvs,fxs,contribs,engs,vols,n_atoms,n_elems,comps,figs,eosbms,lats,coms,sucs \
-            = [],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[]
+        pths,names,rts,pws,econvs,fxs, \
+        contribs,engs,vols,n_atoms,n_elems,\
+        comps,figs,eosbms,lats,\
+        sls,shs,incs,sucs \
+            = [],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[]
 
         randroot = environ['HOME']
         suffix   = 'tmp_'+''.join(choices(ascii_lowercase,k=8))+'.png'
@@ -50,17 +55,19 @@ def parse_bulks(root:str)->T[L[str],L[str],L[int],L[int],L[float],L[str],L[str],
                 s_vols     = [] # complete vector of volumes
                 s_contribs = [] # complete vector of xc contributions
                 s_lats     = [] # complete vector of lattice constants
-                s_coms     = [] # list of strains that have completed
-                rt         = 0
+                s_coms     = set() # list of strains that have completed
+                rt,lo,hi   = 0,10000,-10000
                 # Things to do for every strain
                 for strain in strains:
-                    dir = join(pth,strain)
+                    dir       = join(pth,strain)
+                    strainval = int(strain.split('_')[-1])
+                    lo = min(lo,strainval); hi = max(hi,strainval)
 
                     # Verify job completed successfully
                     if exists(join(dir,'OUTCAR')):
 
                         with open(join(dir,'OUTCAR'),'r')  as f: outcar = f.read()
-                        with open(join(dir,'OSZICAR'),'r') as f: nsteps = sum(1 for _ in f)
+                        with open(join(dir,'OSZICAR'),'r') as f: nsteps = sum(1 for _ in f) # counts # of lines in file
                     else: outcar=''
 
                     if 'General timing' in outcar and nsteps < 800: # completed
@@ -73,7 +80,7 @@ def parse_bulks(root:str)->T[L[str],L[str],L[int],L[int],L[float],L[str],L[str],
                         match = findall(pat, outcar); assert match
                         s_engs.append(float(match[-1]))
 
-                        s_coms.append(int(strain.split('_')[-1]))
+                        s_coms.add(strainval)
 
                         # GET CONTRIBS
                         try:    s_contribs.append(parse_contribs_vasp(outcar))
@@ -85,33 +92,27 @@ def parse_bulks(root:str)->T[L[str],L[str],L[int],L[int],L[float],L[str],L[str],
                         match = findall(patt, outcar);
                         if match: rt = int(float(match[-1])/60.)
 
-                coms.append(' '.join(map(str,sorted(s_coms))))
-
-                rts.append(rt)
+                all = set(range(lo,hi+1)) # all strains
+                incs.append(' '.join(map(str,sorted(all - s_coms))) or None)
+                sls.append(lo); shs.append(hi); rts.append(rt)
 
                 if len(s_vols) < 6:
                     inds,eos_vol = [0],0
                 else:
+
                     # Analysis of vectors
                     #--------------------
-
-                    # Remove any outliers
-                    p      = poly1d(polyfit(s_vols,s_engs,2))
-                    resid  = [abs(p(v)-e) for v,e in zip(s_vols,s_engs)]
-                    maxres = mean(resid)+std(resid)
-                    inds   = [i for i,r in enumerate(resid) if r < maxres]
-
-                    f_vols,f_engs,f_contribs,f_lats = [[x[i] for i in inds]
-                                                for x in [s_vols,s_engs,s_contribs,s_lats]] # filtered
-
-                    eos = EquationOfState(f_vols,f_engs) # type: ignore
+                    eos = EquationOfState(s_vols,s_engs) # type: ignore
 
                     try:
                         eosvol,eoseng,eosbm = eos.fit() # type: T[float,float,float]
                     except:
                         eosvol,eoseng,eosbm = 0.,0.,0.
 
-                    if len(inds) > 5 and eosvol > 0: # our bulk is truly complete, start adding to results
+                    minind = s_engs.index(min(s_engs))
+                    centered = (minind > 2) and (len(s_engs) - minind > 3)
+
+                    if len(inds) > 5 and centered and eosvol > 0: # our bulk is truly complete, start adding to results
 
                         sucs.append(True)
 
@@ -121,10 +122,10 @@ def parse_bulks(root:str)->T[L[str],L[str],L[int],L[int],L[float],L[str],L[str],
                         figs.append(encoded); remove(randpth); plt.clf()
 
                         # Isolate the best 5 jobs,Convert vectors into strings
-                        min_inds = [f_engs.index(x) for x in sorted(f_engs)[:5]]
-                        lats.append(f_lats[min_inds[0]])
+                        min_inds = [s_engs.index(x) for x in sorted(s_engs)[:5]]
+                        lats.append(s_lats[min_inds[0]])
                         m_vols,m_engs,m_contribs = [[x[i] for i in min_inds]
-                                                    for x in [f_vols,f_engs,f_contribs]] # filtered
+                                                    for x in [s_vols,s_engs,s_contribs]] # filtered
                         vols.append(dumps(m_vols));engs.append(dumps(m_engs));
                         contribs.append(dumps(m_contribs))
 
@@ -161,8 +162,8 @@ def parse_bulks(root:str)->T[L[str],L[str],L[int],L[int],L[float],L[str],L[str],
                     lats.append(None)
 
 
-        return (pths,names,rts,pws,econvs,fxs,contribs,engs,vols,n_atoms,n_elems,
-                comps,figs,eosbms,lats,coms,sucs)
+        return (pths,names,rts,pws,econvs,fxs,contribs,engs,vols,n_atoms,n_elems, # type: ignore
+                comps,figs,eosbms,lats,sls,shs,incs,sucs)
 
     except Exception as e:
         import traceback,pdb

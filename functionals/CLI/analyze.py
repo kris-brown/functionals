@@ -106,7 +106,6 @@ def r2tradeoff()->None:
 #                              textposition = 'bottom center')])
 #         annotations.append(dict(x=xs[-1],y=ys[-1],xref='x',yref='y',text='x',))
 #
-#
 #     layout = Layout(title= 'Trajectory of constrained optimization', hovermode= 'closest',
 #                     xaxis= dict(title= 'Log10(Constraint Violation)', ticklen= 5, zeroline= False, gridwidth= 2),
 #                     yaxis= dict(title= 'Average R2 value', ticklen= 5, gridwidth= 2,),
@@ -116,9 +115,25 @@ def r2tradeoff()->None:
 #
 #     plot(fig,filename='temp0.html')
 
+def remove()->None:
+    '''Prints bash statements to remove directories with incompleete jobs'''
+    atomq = 'SELECT stordir FROM atoms JOIN job ON job=job_id '\
+            'WHERE not int_occupation or abs(true_mag - mag) > 0.05 '
+
+    bulkq = 'SELECT stordir,incomplete FROM bulks JOIN job ON job=job_id '\
+            'WHERE incomplete IS NOT NULL'
+
+    for dir, in sqlselect(default.connect(),atomq):
+        reldir = dir[25:]
+        print('rm -rf '+reldir)
+        #import pdb;pdb.set_trace()
+    for dir,inc in sqlselect(default.connect(),bulkq):
+        reldir = dir[25:]
+        for i in map(int,inc.split()):
+            print('rm -rf %s/strain_%d'%(reldir,i))
 
 
-funcs = set(['viz','unconverged','fxfiz','fxtraj','r2tradeoff'])
+funcs = set(['viz','unconverged','fxfiz','fxtraj','r2tradeoff','remove'])
 
 
 ################################################################################

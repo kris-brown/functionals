@@ -6,50 +6,70 @@ import numpy as np # type: ignore
 
 # Internal Modules
 from dbgen import (Model, Gen, Query, PyBlock, AND, Env, defaultEnv, Import,
-                     Literal as Lit,  EQ, JPath, Constraint, LEFT, One, SUM,
-                     LIKE, CONCAT, LT, ABS, GROUP_CONCAT, NOT, NULL, Const)
+                  Literal as Lit,  EQ, JPath, Constraint, LEFT, One, SUM, GT,
+                  LIKE, CONCAT, LT, ABS, GROUP_CONCAT, NOT, NULL, Const, MAX,
+                  RIGHT, AVG, R2)
+
 ################################################################################
 ################################################################################
 ################################################################################
 # Constants
 allspecies = \
-    ['Li_bcc','Na_bcc','K_bcc','Rb_bcc',
-                       'Ca_fcc','Sr_fcc','Ba_bcc',
-                       'Nb_bcc','Ta_bcc',
-                       'Mo_bcc','W_bcc','Fe_bcc',
-                       'Rh_fcc','Ir_fcc',
-                       'Ni_fcc','Pd_fcc','Pt_fcc',
-                       'Cu_fcc','Ag_fcc','Au_fcc',
-                       'Al_fcc','Pb_fcc',
-                       'C_diamond','Si_diamond','Ge_diamond','Sn_diamond'] +\
+    ['Li_bcc','Na_bcc','K_bcc','Rb_bcc', 'Ca_fcc','Sr_fcc','Ba_bcc',
+       'Nb_bcc','Ta_bcc', 'Mo_bcc','W_bcc','Fe_bcc',
+       'Rh_fcc','Ir_fcc','Ni_fcc','Pd_fcc','Pt_fcc',
+       'Cu_fcc','Ag_fcc','Au_fcc',  'Al_fcc','Pb_fcc',
+       'C_diamond','Si_diamond','Ge_diamond','Sn_diamond'] +\
     ['Cd_hcp', 'Co_hcp', 'Os_hcp', 'Ru_hcp', 'Zn_hcp',
-                 'Zr_hcp', 'Sc_hcp', 'Be_hcp', 'Mg_hcp', 'Ti_hcp'] +\
+     'Zr_hcp', 'Sc_hcp', 'Be_hcp', 'Mg_hcp', 'Ti_hcp'] +\
     ['LiH_b1', 'LiF_b1', 'LiCl_b1', 'NaF_b1', 'NaCl_b1',
-                          'MgO_b1', 'MgS_b1', 'CaO_b1', 'TiC_b1', 'TiN_b1',
-                          'ZrC_b1', 'ZrN_b1', 'NbC_b1', 'NbN_b1',
-                          'FeAl_b2', 'CoAl_b2', 'NiAl_b2', 'BN_b3', 'BP_b3',
-                          'AlN_b3', 'AlP_b3', 'AlAs_b3', 'GaN_b3',
-                          'GaP_b3', 'GaAs_b3', 'InP_b3', 'InAs_b3', 'SiC_b3'] +\
+      'MgO_b1', 'MgS_b1', 'CaO_b1', 'TiC_b1', 'TiN_b1',
+      'ZrC_b1', 'ZrN_b1', 'NbC_b1', 'NbN_b1',
+      'FeAl_b2', 'CoAl_b2', 'NiAl_b2', 'BN_b3', 'BP_b3',
+      'AlN_b3', 'AlP_b3', 'AlAs_b3', 'GaN_b3',
+      'GaP_b3', 'GaAs_b3', 'InP_b3', 'InAs_b3', 'SiC_b3'] +\
     ['KBr_b1', 'CaSe_b1', 'SeAs_b1', 'LiI_b1',
-                            'CsF_b1', 'CsI_b2', 'AgF_b1', 'AgCl_b1', 'AgBr_b1',
-                            'CaS_b1', 'BaO_b1', 'BaSe_b1', 'CdO_b1', 'MnO_b1',
-                            'MnS_b1', 'RbI_b1',] + \
+        'CsF_b1', 'CsI_b2', 'AgF_b1', 'AgCl_b1', 'AgBr_b1',
+        'CaS_b1', 'BaO_b1', 'BaSe_b1', 'CdO_b1', 'MnO_b1',
+        'MnS_b1', 'RbI_b1',] + \
    ['ScC_b1', 'MnC_b1', 'FeC_b1', 'CoC_b1', 'NiC_b1',
-                        'ScN_b1', 'CrN_b1', 'MnN_b1', 'CoN_b1', 'NiN_b1',
-                        'MoC_b1', 'CrC_b1', 'RuC_b1', 'RhC_b1', 'PdC_b1',
-                        'MoN_b1', 'RuN_b1', 'RhN_b1', 'PdN_b1',
-                        'LaC_b1', 'TaC_b1', 'WC_b1', 'OsC_b1', 'IrC_b1',  'PtC_b1',
-                        'LaN_b1', 'TaN_b1', 'WN_b1', 'OsN_b1', 'IrN_b1',  'PtN_b1', 'FeN_b1']
+    'ScN_b1', 'CrN_b1', 'MnN_b1', 'CoN_b1', 'NiN_b1',
+    'MoC_b1', 'CrC_b1', 'RuC_b1', 'RhC_b1', 'PdC_b1',
+    'MoN_b1', 'RuN_b1', 'RhN_b1', 'PdN_b1',
+    'LaC_b1', 'TaC_b1', 'WC_b1', 'OsC_b1', 'IrC_b1',  'PtC_b1',
+    'LaN_b1', 'TaN_b1', 'WN_b1', 'OsN_b1', 'IrN_b1',  'PtN_b1', 'FeN_b1']
+
+
+
+from functionals.scripts.fit.a_ce import a_ce
+from functionals.scripts.fit.a_bm import a_bm
+
 def analysis(mod : Model) -> None:
     # Extract tables
     tabs = ['Functional','Beef','Bulks','Atoms','Refs','Job','Calc']
     Fx,Beef,Bulks,Atoms,Refs,Job,Calc = map(mod.get,tabs)
 
-    refs__atoms, refs__bulks,job__calc,bulks__job,atoms__job = \
+    refs__atoms, refs__bulks,job__calc,bulks__job,atoms__job, beef__functional,\
+    calc__functional = \
         map(mod.get_rel,[Refs.r('atoms'),Refs.r('bulks'),Job.r('calc'),
-                         Bulks.r('job'),Atoms.r('job')])
+                         Bulks.r('job'),Atoms.r('job'),Beef.r('functional'),
+                         Calc.r('functional')])
     ########################################################################
     ########################################################################
+    ########################################################################
+    xvq = Query(dict(b = Bulks.id(),
+                     n = RIGHT(Bulks['name'](),Lit(3)),
+                     l = Bulks['expt_l']()))
+
+    xvpb=PyBlock(lambda n,l: float(l)**2 * (1.633 if n=='hcp' else float(l)),
+                 args = [xvq[x] for x in 'nl'])
+
+    xvol = Gen(name='xvol',
+               desc = 'Computes the experimental volume, given a lattice '
+                      'constant + crystal structure',
+               query = xvq,
+               funcs = [xvpb],
+               actions = [Bulks(bulks=xvq['b'],expt_vol=xvpb['out'])])
     ########################################################################
     ibq = Query(dict(f = Fx.id(),
                      b = LEFT(Fx['data'](), One) |EQ| Lit('[')))
@@ -82,13 +102,13 @@ def analysis(mod : Model) -> None:
                             **{x:bpb[x] for x in bcols})])
     ############################################################################
     name  = CONCAT(Lit('%'),Atoms['name'](),Lit('%'))
-    p1,p2 = [JPath('calc',[job__calc,x]) for x in [bulks__job,atoms__job]]
+    bcalc,acalc = [JPath('calc',[job__calc,x]) for x in [bulks__job,atoms__job]]
 
     erq = Query(exprs = dict(b = Bulks.id(), a = Atoms.id(),
                              c = Bulks['composition'](),
                              n = Atoms['num']()),
                 basis  = [Bulks,Atoms],
-                constr = EQ(Calc.id(p1),Calc.id(p2))
+                constr = EQ(Calc.id(bcalc),Calc.id(acalc))
                             |AND| LIKE(Bulks['name'](),name)
                             |AND| Atoms['int_occupation']()
                             |AND| LT(ABS(Atoms['true_mag']()-Atoms['mag']()),Lit(0.05)))
@@ -110,16 +130,10 @@ def analysis(mod : Model) -> None:
     ########################################################################
     # Paths
     refpth =  JPath("refs", [refs__bulks])
-    apth   =  JPath('atoms',[refs__atoms, refs__bulks])
-
-    # Attributes
-    Num    = Refs['num'](refpth)
-    Eng    = Atoms['energy'](apth)
-    Norm   = SUM(Eng * Num)
 
     eq = Query(exprs    = dict(b = Bulks.id(),
                                e = Bulks['energies'](),
-                               r = Norm),
+                               r = SUM(Refs['energy'](refpth))),
                 aggcols = [Bulks.id()],
                 basis   = [Bulks])
 
@@ -150,11 +164,11 @@ def analysis(mod : Model) -> None:
     bmq = Query(exprs = dict(b = Bulks.id(),
                              v = Bulks['volumes'](),
                              e = Bulks['energies']()))
-
+    uconv       = (10**-9) * (1.602 * 10**-19) * (10**10)**3
     doc         = '\nConvert eV/A³ to GPa or GJ/m³'
     bmpb1,bmpb2 = [PyBlock(lambda x: loads(x),args = [bmq[x]]) for x in 've']
-    bmpb3 = PyBlock(lambda xs,ys: 2 * xs[0] * np.polyfit(xs,ys,2)[0] * (10**-9) * (1.602 * 10**-19) * (10**10)**3,
-                   args = [x['out'] for x in [bmpb1,bmpb2]])
+    bmpb3 = PyBlock(lambda xs,ys,conv: 2 * xs[0] * np.polyfit(xs,ys,2)[0] * conv,
+                   args = [bmpb1['out'],bmpb2['out'],Const(uconv)])
     bm =                                                                        \
         Gen(name    = 'bulkmod',
             desc    = 'Calculates bulk modulus given the 5 minimum energy jobs'+doc,
@@ -201,9 +215,120 @@ def analysis(mod : Model) -> None:
             actions = [Calc(calc=dq2['c'],missing_bulk=dqpb3['out'])])
 
     ########################################################################
+    refatom = JPath('atoms', [refs__atoms])
+
+    rcq = Query(exprs = dict(r = Refs.id(),
+                             c = Atoms['contribs'](refatom),
+                             n = Refs['num'](),
+                             e = Refs['num']()*Atoms['energy'](refatom)),
+                basis = [Refs])
+
+    rcpb = PyBlock(lambda c,n: dumps((n*np.array(loads(c))).tolist()),
+                   args = [rcq[x] for x in 'cn'])
+
+    refcontribs =                                                               \
+        Gen(name    = 'refcontribs',
+            desc    = 'Takes atomic contribs and multiplies by stoichiometry',
+            query   = rcq,
+            funcs   = [rcpb],
+            actions = [Refs(refs     = rcq['r'],
+                            energy   = rcq['e'],
+                            contribs = rcpb['out'])])
+    ########################################################################
+    beefpth = JPath('beef',[beef__functional,calc__functional,job__calc,bulks__job])
+    aceq = Query(exprs=dict(b = Bulks.id(),
+                            r = GROUP_CONCAT(Refs['energy'](refpth)),
+                            c = GROUP_CONCAT(Refs['contribs'](refpth),delim='$'),
+                            x = Bulks['contribs'](),
+                            e = Bulks['energies'](),
+                            n = Bulks['n_atoms'](),
+                            f = MAX(Beef['data'](beefpth))),
+                 aggcols = [Bulks.id()],
+                 basis   = [Bulks])
+
+    acepb = PyBlock(a_ce,
+                    env  = defaultEnv + Env(Import('functools','reduce')),
+                    args = [aceq[x] for x in 'rcexnf'],
+                    outnames = ['a','b'])
+
+    ace =                                                                       \
+        Gen(name    = 'ace',
+            desc    = 'Computes A matrix vectors to yield cohesive energy',
+            query   =  aceq,
+            funcs   = [acepb],
+            actions = [Bulks(bulks=aceq['b'],a_ce=acepb['a'],b_ce=acepb['b'])])
+
+    ########################################################################
+
+    abmq = Query(exprs=dict(b = Bulks.id(),
+                            x = Bulks['expt_bm'](),
+                            c = Bulks['contribs'](),
+                            e = Bulks['energies'](),
+                            v = Bulks['volumes'](),
+                            f = Beef['data'](beefpth)),
+                 basis   = [Bulks])
+
+    bmout = ['a_bm','b_bm','a_l','b_l']
+    abmpb = PyBlock(a_bm,
+                    env      = defaultEnv + Env(Import('numpy.linalg','inv')),
+                    args     = [abmq[x] for x in 'evcfx'],
+                    outnames = bmout)
+
+    abm =                                                                       \
+        Gen(name    = 'abm',
+            desc    = 'Computes A matrix vectors to yield cohesive energy',
+            query   =  abmq,
+            funcs   = [abmpb],
+            actions = [Bulks(bulks=aceq['b'],**{x:abmpb[x] for x in bmout})])
+
+    ########################################################################
+    diff = Bulks['expt_bm']() - Bulks['bulkmod']()
+
+    iq = Query(dict(b=Bulks.id(),i = GT(ABS(diff)/Bulks['expt_bm'](),
+                                          Lit(0.1))))
+    irreg =                                                                     \
+        Gen(name = 'irreg',
+            desc = 'Populates Bulks.irregular',
+            query= iq,
+            actions=[Bulks(bulks=iq['b'],irregular=iq['i'])])
+
+
+    ########################################################################
+    cols = dict(ce=('ce','expt_ce'),bm=('bulkmod','expt_bm'),lat=('lattice','expt_l'))
+    cbp  = JPath('bulks',[bulks__job,job__calc])
+    msegens = []
+    for k,(x_,y_) in cols.items():
+        x = Bulks.get(x_)(cbp); y = Bulks.get(y_)(cbp)
+        mseq = Query(exprs   = dict(c = Calc.id(), m = AVG((x-y)**Lit(2))),
+                     basis   = [Calc],
+                     constr  = Calc['done'](),
+                     aggcols = [Calc.id()])
+        msegens.append(Gen(name='mse_'+k,
+                           query=mseq,
+                           actions=[Calc(calc=mseq['c'],
+                                          **{'mse_'+k:mseq['m']})]))
+    msec,mseb,msel = msegens
+    ########################################################################
+    r2gens = []
+    for k,(x_,y_) in cols.items():
+        x = Bulks.get(x_)(cbp); y = Bulks.get(y_)(cbp)
+        r2q = Query(exprs   = dict(c = Calc.id(), r = R2(x,y)),
+                     basis   = [Calc],
+                     constr  = Calc['done'](),
+                     aggcols = [Calc.id()])
+        r2gens.append(Gen(name='r2_'+k,
+                           query=mseq,
+                           actions=[Calc(calc=mseq['c'],
+                                          **{'r2_'+k:r2q['r']})]))
+    r2c,r2b,r2l = r2gens
+    ########################################################################
+
+
+    ########################################################################
     ########################################################################
     ########################################################################
 
-    gens = [isbeef,beef,exptref,eform,ce,bm,done,done2]
+    gens = [xvol,isbeef,beef,exptref,eform,ce,bm,done,done2,refcontribs,ace,abm,
+            irreg,msec,mseb,msel,r2c,r2b,r2l]
 
     mod.add(gens)

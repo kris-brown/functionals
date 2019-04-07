@@ -58,9 +58,9 @@ calc = Obj(
     desc  = 'Calculator details',
     attrs = [Attr('pw',                id = True, desc = 'Planewave cutoff, eV'),
              Attr('econv',  Decimal(), id = True, desc = 'Energy convergance criterion'),
-             Attr('done',   Boolean(),               desc = 'Whether or not all calculations have been finished'),
-             Attr('missing',Text(),            desc = 'Materials not yet finished (bulk or atom related)'),
-             Attr('missing_bulk',Text(),        desc = 'Materials for which not enough bulk calculations have finished')]
+             Attr('done',   Boolean(),            desc = 'Whether or not all calculations have been finished'),
+             Attr('missing',Text(),               desc = 'Materials not yet finished (bulk or atom related)'),
+             Attr('missing_bulk',Text(),          desc = 'Materials for which not enough bulk calculations have finished')]
            +[Attr(m, Decimal(), desc = 'Only fills out if results in for all materials')
                 for m in funmetrics])
 
@@ -125,8 +125,10 @@ bulks = Obj(
             Attr('n_elems',     id=True,        desc = 'Number of distinct chemical species'),
 
             # Figuring out if job is complete
-            Attr('completed', Text(),           desc='List of strains that have completed'),
-            Attr('success',   Boolean(),        desc='We have enough calculations to do an EOS'),
+            Attr('strain_low', Int(),     desc = 'Lowest strain with a directory for calculation'),
+            Attr('strain_hi',  Int(),     desc = 'Highest strain with a directory for calculation'),
+            Attr('incomplete', Text(),    desc = 'List of strains that have completed'),
+            Attr('success',    Boolean(), desc = 'We have enough calculations to do an EOS'),
 
             # Properties when enough jobs have completed
             Attr('volumes',     Text('long'),   desc = 'volumes of the 5 most optimal jobs'),
@@ -142,17 +144,24 @@ bulks = Obj(
             Attr('bulkmod',     Decimal(),      desc = 'Bulk modulus, GPa'),
             Attr('lattice',     Decimal(),      desc = 'Conventional unit cell lattice (optimized)'),
             # Analysis from ase.eos
-            Attr('eosbm',     Decimal(),      desc='Bulk modulus, GPa'),
+            Attr('eosbm',       Decimal(),      desc='Bulk modulus, GPa'),
+            Attr('irregular',   Boolean(),      desc='Whether discrete BM differs significantly from EOS BM'),
+
             # Experimental results
             Attr('expt_ce',    Decimal(),   desc = 'Experimental cohesive energy, eV'),
             Attr('expt_bm',    Decimal(),   desc = 'Experimental bulk modulus, GPa'),
-            Attr('expt_l',     Decimal(),   desc = 'Experimental volume of reference stoichiometry, A'),
+            Attr('expt_l',     Decimal(),   desc = 'Experimental lattice parameter of reference stoichiometry, A'),
+            Attr('expt_vol',     Decimal(),   desc = 'Experimental volume of reference stoichiometry, A^3'),
             Attr('expt_mag',   Decimal(),   desc = 'Experimental magnetic moment, bohr'),
 
             # Fitting inputs
-            Attr('a_ce', Text(), desc = 'Vector, when dotted w/ BEEF coef gives formation energy in eV'),
-            Attr('a_bm', Text(), desc = 'Vector, when dotted w/ BEEF coef gives bulk modulus in GPa'),
-            Attr('a_l', Text(),  desc = 'Vector, when dotted w/ BEEF coef gives conventional lattice constant in A'),
+            Attr('a_ce', Text(), desc = '5 vectors (for each a1 value), when dotted w/ BEEF coef + offset gives formation energy in eV'),
+            Attr('a_bm', Text(), desc = '5 vectors (for each a1 value), when dotted w/ BEEF coef + offset gives bulk modulus in GPa'),
+            Attr('a_l',  Text(), desc = '5 vectors (for each a1 value), when dotted w/ BEEF coef + offset gives conventional lattice constant in A'),
+
+            Attr('b_ce', Text(), desc = '5 offsets (for each a1 value), eV'),
+            Attr('b_bm', Text(), desc = '5 offsets (for each a1 value), GPa'),
+            Attr('b_l',  Text(), desc = '5 offsets (for each a1 value), A'),
 
             ])
 
@@ -165,7 +174,9 @@ bulks_rels = [Rel('job','bulks',id=True)]
 expt_refs = Obj(
     name = 'refs',
     desc = 'Mapping table between bulk and relevant atomic calculations',
-    attrs = [Attr('num',Int(),desc='Stoichiometric coefficient')])
+    attrs = [Attr('num',     Int(), desc='Stoichiometric coefficient'),
+             Attr('energy',     Decimal(),desc='Energy of atom, weighted by stoichiometry'),
+             Attr('contribs',Text(),desc='Exchange contributions of atom, weighted by stoichiometry')])
 
 ea_rels = [Rel('bulks', 'refs', id=True),
            Rel('atoms', 'refs', id=True)]
