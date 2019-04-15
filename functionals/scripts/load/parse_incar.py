@@ -14,30 +14,15 @@ def parse_incar(pth:str)->dict:
     def maybe(f : C) -> C:
         return lambda x: x if x is None else f(x)
 
-    keys = dict(encut     = float,
-                sigma     = float,
-                metagga   = str,
-                gga       = str,
-                prec      = str,
-                ediff     = float,
-                algo      = str,
-                ismear    = int,
-                npar      = int,
-                nelm      = int,
-                ispin     = int,
-                ibrion    = int,
-                lcharg    = boolean,
-                lbeefens  = boolean,
-                addgrid   = boolean,
-                lasph     = boolean,
-                lwave     = boolean,
-                a11       = float,
-                a12       = float,
-                a13       = float,
-                a14       = float,
-                a15       = float,
-                msb       = float,
-                magmom    = float)
+    strs = ['metagga','gga','prec','magmom']
+    floats = ['encut','ediff','sigma','a11','a12','a13','a14','a15','msb','nupdown']
+    ints = ['ismear','npar','nelm','ispin','ibrion']
+    bools = ['lcharg','lbeefens','addgrid','lasph','lwave']
+    keys = dict(**{k:str for k in strs},**{k:float for k in floats},
+                **{k:int for k in ints},**{k:bool  for k in bools})
     d = {x.strip().lower() : y.strip() for x,y in pairs}
 
-    return {k:maybe(f)(d.get(k)) for k,f in keys.items()} # type: ignore
+    out = {k:maybe(f)(d.get(k)) for k,f in keys.items()} # type: ignore
+    if   out['magmom']: out['magmom']=float(out['magmom'].split()[0])
+    elif out['nupdown']: out['magmom'] = out['nupdown']
+    return out

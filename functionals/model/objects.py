@@ -5,45 +5,6 @@ from typing import Any, Type
 from dbgen import Model, Obj, Attr, Rel, Int, Varchar, Text, Decimal, Boolean, Date, PathEQ, Path
 
 
-####################
-# VASP INPUT FILES # --- curently no real need to parse these?
-####################
-
-################################################################################
-# potcar = Obj(
-#     name  = 'potcar',
-#     desc  = 'POTCAR pseudopotential file',
-#     attrs = [Attr('titel', Varchar(),   desc='title? [sic]', id = True),
-#               Attr('lultra',Boolean(),  desc='use ultrasoft pp'),
-#               Attr('iunscr',Int(),      desc='unscreen: 0-lin, 1-nonlin, 2-no'),
-#               Attr('rpacor',Decimal(),  desc='partial core radius'),
-#               Attr('pomass',Decimal(),  desc='mass'),
-#               Attr('zval',  Decimal(),  desc='valence'),
-#               Attr('rcore', Decimal(),  desc='outmost cutoff radius'),
-#               Attr('rwigs', Decimal(),  desc='wigner-seitz radius (au A)'),
-#               Attr('enmax', Decimal()),
-#               Attr('enmin', Decimal()),
-#               Attr('lcor',  Boolean(),  desc='correct aug charges'),
-#               Attr('lpaw',  Boolean(),  desc='paw pp'),
-#               Attr('eaug',  Decimal()),
-#               Attr('rmax',  Decimal(),  desc='core radius for proj-oper'),
-#               Attr('raug',  Decimal(),  desc='factor for augmentation sphere'),
-#               Attr('rdep',  Decimal(),  desc='radius for radial grids'),
-#               Attr('rdept', Decimal(),  desc='core radius for aug-charge')])
-################################################################################
-ams = ['a1'+x for x in '12345']+ ['msb']
-
-# idecs = ['ediff','encut','sigma','magmom'] + ams
-# iints = ['ismear','npar','nelm','ispin','ibrion']
-# ibool = ['lbeefens','addgrid','lasph','lwave']
-# ivars = ['metagga','gga','prec','algo']
-# idict = {Decimal() : idecs, Int() : iints, Boolean() : ibool, Varchar() : ivars}
-#
-# incar = Obj(
-#     name = 'incar',
-#     desc  = 'VASP input file',
-#     attrs = [Attr(x,dt) for dt,xs in idict.items() for x in xs])
-################################################################################
 
 #################
 # INPUT SUMMARY #
@@ -60,6 +21,7 @@ calc = Obj(
              Attr('econv',  Decimal(), id = True, desc = 'Energy convergance criterion'),
              Attr('done',   Boolean(),            desc = 'Whether or not all calculations have been finished'),
              Attr('missing',Text(),               desc = 'Materials not yet finished (bulk or atom related)'),
+             Attr('n_missing',Int(),              desc = 'Materials not yet finished (bulk or atom related)'),
              Attr('missing_bulk',Text(),          desc = 'Materials for which not enough bulk calculations have finished')]
            +[Attr(m, Decimal(), desc = 'Only fills out if results in for all materials')
                 for m in funmetrics])
@@ -74,6 +36,7 @@ functional = Obj(
     attrs = [Attr('data',Text(),id=True), Attr('beef',Boolean())])
 
 ################################################################################
+ams = ['a1'+x for x in '12345']+ ['msb']
 
 beeffunc = Obj(
     name  = 'beef',
@@ -121,13 +84,14 @@ bulks = Obj(
    name  = 'bulks',
    desc  = 'Set of singlepoints on a particular material under strain',
    attrs = [Attr('name',            Varchar(),  desc = 'Species nickname'),
-            Attr('n_atoms',     id=True,        desc = 'Number of atoms in unit cell'),
-            Attr('n_elems',     id=True,        desc = 'Number of distinct chemical species'),
+            Attr('n_atoms',         desc = 'Number of atoms in unit cell'),
+            Attr('n_elems',         desc = 'Number of distinct chemical species'),
 
             # Figuring out if job is complete
             Attr('strain_low', Int(),     desc = 'Lowest strain with a directory for calculation'),
             Attr('strain_hi',  Int(),     desc = 'Highest strain with a directory for calculation'),
             Attr('incomplete', Text(),    desc = 'List of strains that have completed'),
+            Attr('morejobs',   Int(),     desc = '-1 = needs more jobs at lower strain, +1 more at higher strain'),
             Attr('success',    Boolean(), desc = 'We have enough calculations to do an EOS'),
 
             # Properties when enough jobs have completed
@@ -148,9 +112,9 @@ bulks = Obj(
             Attr('irregular',   Boolean(),      desc='Whether discrete BM differs significantly from EOS BM'),
 
             # Experimental results
-            Attr('expt_ce',    Decimal(),   desc = 'Experimental cohesive energy, eV'),
-            Attr('expt_bm',    Decimal(),   desc = 'Experimental bulk modulus, GPa'),
-            Attr('expt_l',     Decimal(),   desc = 'Experimental lattice parameter of reference stoichiometry, A'),
+            Attr('expt_ce',    Decimal(15,3),   desc = 'Experimental cohesive energy, eV'),
+            Attr('expt_bm',    Decimal(15,3),   desc = 'Experimental bulk modulus, GPa'),
+            Attr('expt_l',     Decimal(15,6),   desc = 'Experimental lattice parameter of reference stoichiometry, A'),
             Attr('expt_vol',     Decimal(),   desc = 'Experimental volume of reference stoichiometry, A^3'),
             Attr('expt_mag',   Decimal(),   desc = 'Experimental magnetic moment, bohr'),
 
@@ -193,51 +157,49 @@ fitparams = Obj(
     desc = 'Input parameters to a fit',
     attrs = [Attr('bm_weight',    Decimal(),  id = True, desc = 'Relative weight of bulk-modulus data to cohesive energy'),
              Attr('lat_weight',   Decimal(),  id = True, desc = 'Relative weight of lattice data to cohesive energy'),
-             Attr('constden',                 id = True, desc = 'Number of s or alpha points linearly constrained between logscale(-2,2)'),
              Attr('consts',       Text(),     id = True, desc = 'Ordered (by importance) list linear constraints to be included'),
              Attr('reg',          Decimal(),  id = True, desc = 'Regularization penalty') ])
 
 fit = Obj(
     name  = 'fit',
     desc  = 'A constrained fit to some subset of cohesive/BM/lattice data',
-    attrs = [Attr('name',Varchar(),id=True), Attr('pth',Varchar(),desc='Location of fit job'),
-             Attr('a1', Decimal(), id=True,desc='Which value of a1 contribs was used'),
-             Attr('msb',Decimal(),desc='Which value of msb was used'),
-             Attr('decay',                  desc = '1-5'),
+    attrs = [Attr('name',Varchar(),id=True),
+             Attr('pth',Varchar(),desc='Location of fit job'),
              # Result params
-             Attr('nsteps',                  desc = 'Number of steps'),
-             Attr('steps',      Text('long'), desc = 'JSON of trajectory data'),
-             Attr('timestamp',  Date(),      desc = 'Timestamp of fitting'),
-             Attr('runtime',    Decimal(),   desc = 'Duration of fitting, s'),
-             Attr('score',      Decimal(),   desc = "Arbitrary combination of R2's and c_viol"),
-             Attr('result',     Text(),      desc = 'Flattened NxN fitted coefficients'),
+             Attr('timestamp',  Date(),       desc = 'Timestamp of fitting'),
+
              # Analysis of results
+             Attr('opt',        Varchar(),   desc = '5 indices referring to optimal r2 c_viol tradeoff'),
+             Attr('score',      Decimal(),   desc = "Arbitrary combination of R2's and c_viol"),
+             Attr('result',     Text(),      desc = '5 Flattened NxN fitted coefficients'),
+
+             Attr('decaycosts',     Text(),  desc = 'JSONd list of 5 avg R2 values'),
              Attr('c_viol',     Decimal(),   desc = 'Constraint violation'),
-             Attr('lda_viol',   Decimal(),   desc = 'Degree to which LDA Limit was violated'),
-             Attr('h_viol',     Decimal(),   desc = 'Degree to which hydrogen energy was violated'),
-             ]+[Attr(m,Decimal()) for m in funmetrics])
+             #Attr('lda_viol',   Decimal(),   desc = 'Degree to which LDA Limit was violated'),
+             #Attr('h_viol',     Decimal(),   desc = 'Degree to which hydrogen energy was violated'),
+             ]+[Attr(m,Decimal(20,6)) for m in funmetrics])
 
 fit_rels = [Rel('fitparams','fit', id = True), Rel('calc','fit')]
 
 ################################################################################
 
-const = Obj(
-    name  = 'const',
-    desc  ='Constrain Fx(s,a)',
-    attrs = [Attr('const_name',  Varchar(),  id  = True),
-             Attr('description', Text(),     desc='Description of constraint'),
-             Attr('val',         Decimal(),  desc='Value of Fx(s,alpha)'),
-             Attr('kind',        Varchar(),  desc='GT/LT/EQ'),
-             Attr('s',           Decimal(),  desc='If valid only for particular s, else None'),
-             Attr('alpha',       Decimal(),  desc='If valid only for particular alpha, else None')])
-
+# const = Obj(
+#     name  = 'const',
+#     desc  ='Constrain Fx(s,a)',
+#     attrs = [Attr('const_name',  Varchar(),  id  = True),
+#              Attr('description', Text(),     desc='Description of constraint'),
+#              Attr('val',         Decimal(),  desc='Value of Fx(s,alpha)'),
+#              Attr('kind',        Varchar(),  desc='GT/LT/EQ'),
+#              Attr('s',           Decimal(),  desc='If valid only for particular s, else None'),
+#              Attr('alpha',       Decimal(),  desc='If valid only for particular alpha, else None')])
+#
 
 ################################################################################
 ################################################################################
 ################################################################################
 
 objs = [calc,functional,beeffunc,job,atoms,bulks,expt_refs,
-        fitparams,fit,const]
+        fitparams,fit]
 
 rels =  calc_rels + bf_rels + job_rels + atoms_rels + bulks_rels + ea_rels \
         + fit_rels

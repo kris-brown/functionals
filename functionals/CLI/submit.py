@@ -48,7 +48,6 @@ emag = {'Ni': 2, 'Rb': 1, 'Pt': 2, 'Ru': 4, 'S': 2, 'Na': 1, 'Nb': 5, 'Mg': 0, '
 allelems = [chemical_symbols.index(x) for x in emag.keys()] # all atomic numbers in {emag}
 bmag = {'Li_bcc': None, 'Na_bcc': None, 'K_bcc': None, 'Rb_bcc': None, 'Ca_fcc': None, 'Sr_fcc': None, 'Ba_bcc': None, 'V_bcc': None, 'Nb_bcc': None, 'Ta_bcc': None, 'Mo_bcc': None, 'W_bcc': None, 'Fe_bcc': 2.22, 'Rh_fcc': None, 'Ir_fcc': None, 'Ni_fcc': 0.64, 'Pd_fcc': None, 'Pt_fcc': None, 'Cu_fcc': None, 'Ag_fcc': None, 'Au_fcc': None, 'Al_fcc': None, 'C_diamond': None, 'Si_diamond': None, 'Ge_diamond': None, 'Sn_diamond': None, 'Pb_fcc': None, 'Cd_hcp': None, 'Co_hcp': 1.72, 'Os_hcp': None, 'Ru_hcp': None, 'Zn_hcp': None, 'Ti_hcp': None, 'Zr_hcp': None, 'Sc_hcp': None, 'Be_hcp': None, 'Mg_hcp': None, 'LiH_b1': None, 'LiF_b1': None, 'LiCl_b1': None, 'NaF_b1': None, 'NaCl_b1': None, 'MgO_b1': None, 'MgS_b1': None, 'CaO_b1': None, 'TiC_b1': None, 'TiN_b1': None, 'ZrC_b1': None, 'ZrN_b1': None, 'VC_b1': None, 'VN_b1': None, 'NbC_b1': None, 'NbN_b1': None, 'FeAl_b2': 0.35, 'CoAl_b2': None, 'NiAl_b2': None, 'BN_b3': None, 'BP_b3': None, 'BAs_b3': None, 'AlN_b3': None, 'AlP_b3': None, 'AlAs_b3': None, 'GaN_b3': None, 'GaP_b3': None, 'GaAs_b3': None, 'InP_b3': None, 'InAs_b3': None, 'SiC_b3': None, 'KBr_b1': None, 'CaSe_b1': None, 'SeAs_b1': None, 'RbI_b1': None, 'LiI_b1': None, 'CsF_b1': None, 'CsI_b2': None, 'AgF_b1': None, 'AgCl_b1': None, 'AgBr_b1': None, 'CaS_b1': None, 'BaO_b1': None, 'BaSe_b1': None, 'CdO_b1': None, 'MnO_b1': 2.4, 'MnS_b1': 2.4, 'ScC_b1': None, 'CrC_b1': 0.6, 'MnC_b1': 1.2, 'FeC_b1': None, 'CoC_b1': None, 'NiC_b1': None, 'ScN_b1': None, 'CrN_b1': 1.3, 'MnN_b1': 1.6, 'FeN_b1': 1.3, 'CoN_b1': None, 'NiN_b1': None, 'MoC_b1': None, 'RuC_b1': None, 'RhC_b1': None, 'PdC_b1': None, 'MoN_b1': None, 'RuN_b1': None, 'RhN_b1': None, 'PdN_b1': None, 'LaC_b1': None, 'TaC_b1': None, 'WC_b1': None, 'OsC_b1': None, 'IrC_b1': None, 'PtC_b1': None, 'LaN_b1': None, 'TaN_b1': None, 'WN_b1': None, 'OsN_b1': None, 'IrN_b1': None, 'PtN_b1': None}
 
-
 class Calc(object):
     def __init__(self,
                  xc     : str,
@@ -71,10 +70,10 @@ class Calc(object):
         self.a11,self.a12,self.a13,self.a14,self.a15 = 2.,2.5,3.,4.5,6.
         self.msb = 4.
 
-    def magmom(self,atom:bool)->str:
+    def magmom(self,n_atoms : int) -> str:
         if not self.mag: return 'ISPIN = 1'
-        elif atom:       return 'ISPIN = 2\nNUPDOWN = %f'%self.mag
-        else:            return 'ISPIN = 2\nMAGMOM = %f'%self.mag
+        elif n_atoms==1: return 'ISPIN = 2\nNUPDOWN = %f'%self.mag
+        else:            return 'ISPIN = 2\nMAGMOM = '+ ' '.join(n_atoms * [('%s' % self.mag)])
 
 class Job(metaclass = ABCMeta):
     def __init__(self, calc : Calc, time : int = 1) -> None:
@@ -87,7 +86,7 @@ class Job(metaclass = ABCMeta):
 
     def _submit(self, pth : str) -> None:
         self.singlepoint(pth)
-        sunc   = choice(['','','','2','3','3'])
+        sunc   = choice(['','','','2','3'])
         cd    = {'':8,'2':12,'3':16} # core-dict
         cores = cd[sunc]
         bash = join(pth,'subVASP.sh')
@@ -117,7 +116,6 @@ class Job(metaclass = ABCMeta):
 
     @abstractmethod
     def submit(self,
-               pth_  : str,
                sher  : bool ,
                retry : bool   = False,
                curr  : S[str] = set()
@@ -149,14 +147,14 @@ class Atomic(Job):
         return 'Atoms<%d>'%(chemical_symbols[self.elem])
 
     def submit(self,
-               pth_  : str,
                sher  : bool ,
                retry : bool   = False,
                curr  : S[str] = set()
               ) -> None:
         '''Creates VASP input files'''
+        root = '/nfs/slac/g/suncatfs/ksb/beefjobs/atoms/%s/'%self.calc.xc.lower()
 
-        pth = join(pth_,self.sym)
+        pth = join(root,self.sym)
         safeMkdir(pth)
         seen = pth in curr
         done = self.done(pth)
@@ -186,7 +184,7 @@ class Atomic(Job):
 
         for fname,f in files:
             incar = get_script('vasp/'+f)
-            incar_str = incar.format(Calc=self.calc,magmom=self.calc.magmom(atom=True))
+            incar_str = incar.format(Calc=self.calc,magmom=self.calc.magmom(n_atoms=1))
             with open(join(pth,fname),'w') as g:
                 g.write(incar_str)
 
@@ -203,7 +201,6 @@ class Atomic(Job):
 
     @staticmethod
     def enmasse(elems     : L[int], curr : S[str],
-                submitpth : str,
                 xc        : str   = '',
                 time      : int   = 10,
                 sigma     : float = 0.01,
@@ -212,7 +209,7 @@ class Atomic(Job):
         """Submit many atomic jobs with the same parameters"""
         es = [Atomic(elem=e,xc=xc,time=time,sigma=sigma) for e in elems]
         for e in es:
-            e.submit(submitpth,sher=sher,curr=curr)
+            e.submit(sher=sher,curr=curr)
 
 class Bulk(Job):
     """
@@ -237,12 +234,12 @@ class Bulk(Job):
         return 'Bulk<%s>'%self.name
 
     def submit(self,
-               pth_  : str,
                sher  : bool ,
                retry : bool   = False,
                curr  : S[str] = set()
               ) -> None:
-        pth = join(pth_,self.name)
+        root = '/nfs/slac/g/suncatfs/ksb/beefjobs/bulks/%s/'%self.calc.xc.lower()
+        pth = join(root,self.name)
         safeMkdir(pth)
 
         opt_cell = self.atoms.get_cell()
@@ -267,7 +264,7 @@ class Bulk(Job):
         """ Write a singlepoint calculation to a file """
         car   = dict(PBE='PBE_CAR',BEEF='INCAR',SCAN='SCAN_CAR')
         incar = get_script('vasp/' + car[self.calc.xc])
-        incar_str = incar.format(Calc=self.calc,magmom=self.calc.magmom(atom=False))
+        incar_str = incar.format(Calc=self.calc,magmom=self.calc.magmom(n_atoms = len(self.atoms)))
         with open(join(pth,'INCAR'),'w') as g:
             g.write(incar_str)
         kpts = get_script('vasp/KPOINTS')
@@ -279,7 +276,7 @@ class Bulk(Job):
         return get_script('vasp/subVASP%s.sh'%('scan' if self.calc.xc=='SCAN' else ''))
 
     @staticmethod
-    def enmasse(pth    : str, submitpth : str, curr : S[str],
+    def enmasse(pth    : str, curr : S[str],
                 xc     : str,
                 sher   : bool  = False,
                 time   : int   = 1,
@@ -296,7 +293,7 @@ class Bulk(Job):
                       xc = xc, strains = list(range(-lo,hi))) for p in bulkpaths]
 
         for b in bulks:
-            b.submit(pth_=submitpth, retry=retry, curr = curr, sher=sher)
+            b.submit(retry=retry, curr = curr, sher=sher)
 
 
 #########################################
@@ -305,12 +302,12 @@ def main() -> None:
     '''Submit either bulk or element singlepoint calculations'''
     args = parser.parse_args()
     assert bool(args.src) ^ bool(args.elems), "Must be submiting Bulk or Atomic jobs"
-    assert args.target,                       "Need a target location to submit jobs"
+    #assert args.target,                       "Need a target location to submit jobs"
 
     currstr = 'squeue -u ksb -o "%Z"' if sher else 'bjobs -o "job_name" -noheader'
 
     curr   = set(check_output(currstr, encoding='UTF-8',shell=True).split())
-    common = dict(submitpth = args.target, xc = args.xc, curr = curr,
+    common = dict(xc = args.xc, curr = curr,
                   time = args.time, sigma = args.sigma )
 
     if args.elems:

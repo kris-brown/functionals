@@ -1,4 +1,0 @@
-lda,LDA limit,0,1,1,eq
-liebox,The Lieb Oxford bound,,,1.804,lt
-scan11,Tighter L.O. bound when alpha=0 (Eq 11),,0,1.174,lt
-pos,Make Fx never negative,,,0,gt

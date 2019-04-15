@@ -23,15 +23,16 @@ home = environ['FUNCTIONALS_ROOT']
 # Queries
 #------------
 q1 = 'SELECT fitparams_id  FROM fitparams'
-q2 = '''SELECT DISTINCT E.calc FROM expt E JOIN calc C on E.calc=C.calc_id
-         JOIN functional F ON C.functional = F.functional_id WHERE F.beef'''
+q2 = '''SELECT calc_id FROM calc
+         JOIN functional ON functional = functional_id WHERE beef''' # also need to add WHERE calc.done once we have all the data
 
-def main(db_ : str, pth : str) -> None:
+
+def main(db_ : str, sub: bool, retry:bool) -> None:
     '''
     For every completed "expt" and every single set of fitting parameters,
     set up 5 fitting jobs
     '''
-
+    pth  = join(home, 'data/fit')
 
     with open(db_,'r') as f:
         kwargs = load(f)
@@ -40,23 +41,28 @@ def main(db_ : str, pth : str) -> None:
 
     params,calcs = [sqlselect(conn,x) for x in [q1,q2]]
 
-    for (fp,),(calc,) in prod(params,calcs):
-        for decay in range(5):
-            fit = Fit.from_db(db=db_,fp_id=fp,calc_id=calc,decay=decay)
-            root = join(pth,fit.uid()[:10],str(decay))
-            Path(root).mkdir(parents=True, exist_ok=True)
-            fit.write(root)
+    for (fp,),(calc,) in list(prod(params,calcs)):
+        print('\n',fp,calc)
+        if fp!=7: continue
+        fit = Fit.from_db(db=db_,fp_id=fp,calc_id=calc)
+        root = join(pth,fit.metadata()['uid'][:10])
+        Path(root).mkdir(parents=True, exist_ok=True)
+        fit.write(root)
+        if sub and (retry or not exists(join(root,'result.json'))):
+            act   = 'python runfit.py'
+            cmd   = 'cd {}; '.format(root) + act
+            system(cmd)
 
-def sub(pth : str, time : int, retry : bool, local : bool) -> None:
+def sub(time : int, retry : bool, local : bool) -> None:
+    pth  = join(home, 'data/fit')
     dirs = listdir(pth)
     for d in dirs:
-        for dd in listdir(join(pth,d)):
-            dir   = join(pth,d,dd)
-            if retry or not exists(join(dir,'result.json')):
-                sunc  = choice(['','','','2','2','3'])
-                act   = 'python runfit.py' if local else 'bsub -n 1 -W{}:09 -q suncat{} subfit.sh'.format(time,sunc)
-                cmd   = 'cd {}; '.format(dir) + act
-                system(cmd)
+        dir   = join(pth,d)
+        if retry or not exists(join(dir,'result.json')):
+            sunc  = choice(['','','','','2','2','3'])
+            act   = 'python runfit.py' if local else 'bsub -n 1 -W{}:30 -q suncat{} subfit.sh'.format(time,sunc)
+            cmd   = 'cd {}; '.format(dir) + act
+            system(cmd)
 
 
 # Parser
@@ -68,15 +74,14 @@ parser.add_argument('--db', type = str,
                     default = join(home, 'data/functionals.json'),
                     help    = 'Path to JSON with DB connection info')
 
-parser.add_argument('--pth', type = str,
-                    default = join(home, 'data/fit'),
-                    help    = 'Path to where fitting jobs will be performed')
+parser.add_argument('--sub',default=False,
+                    help='Add anything to do submit command instead')
 
-parser.add_argument('--sub',
+parser.add_argument('--create',default=False,
                     help='Add anything to do submit command instead')
 
 parser.add_argument('--time', type    = int,
-                    default = 1,
+                    default = 0,
                     help    = 'Walltime for batch jobs')
 
 parser.add_argument('--retry', type    = bool,
@@ -87,9 +92,24 @@ parser.add_argument('--local', type    = bool,
                     default = False,
                     help    = 'Walltime for batch jobs')
 
+parser.add_argument('--move', type    = bool,
+                    default = False,
+                    help    = 'Move jobs from scp_tmp/vauto/fit to /functionals/data/fit')
+
+def move()->None:
+    r= '/Users/ksb/'
+    r1,r2=[r+x for x in ['scp_tmp/vauto/fit','functionals/data/fit']]
+    dirs = set( listdir(r2))
+    for dir in listdir(r1):
+        res = join(r1,dir,'result.json')
+        if dir in dirs and exists(res):
+            copyfile(res,join(r2,dir,'result.json'))
+
 if __name__ == '__main__':
     args = parser.parse_args()
-    if args.sub:
-        sub(args.pth,args.time,args.retry,args.local)
-    else:
-        main(args.db,args.pth)
+    if args.create:
+        main(args.db,args.sub,args.retry)
+    elif args.sub:
+        sub(args.time,args.retry,args.local)
+    elif args.move:
+        move()

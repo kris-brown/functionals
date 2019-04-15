@@ -20,14 +20,14 @@ def root(x:str)->str: return join(environ['FUNCTIONALS_ROOT'],x)
 def io(mod : Model) -> None:
 
     # Extract tables
-    tabs = ['Fitparams','Const','Atoms','Functional',"Job","Calc","Bulks",'Fit']
-    Fitparams,Cnst, Atoms,Fx, Job, Calc, Bulks, Fit = map(mod.get,tabs)
+    tabs = ['Fitparams','Atoms','Functional',"Job","Calc","Bulks",'Fit']
+    Fitparams, Atoms,Fx, Job, Calc, Bulks, Fit = map(mod.get,tabs)
 
     ################################################################################
     ################################################################################
     ################################################################################
 
-    fitcols = ['constden','consts','reg', 'bm_weight','lat_weight']
+    fitcols = ['consts','reg', 'bm_weight','lat_weight']
 
     parampth = root('data/fitparams.csv')
 
@@ -45,17 +45,17 @@ def io(mod : Model) -> None:
 
     ################################################################################
 
-    constpth = root('data/constraints.csv')
-    constcols = ['const_name','description','s','alpha','val','kind']
-
-    pcpb      = PyBlock(parse_const, args = [Const(constpth)], outnames = constcols)
-
-    pop_constraint =                                                            \
-        Gen(name    = 'pop_constraint',
-            desc    = 'populate constraints',
-            funcs   = [pcpb],
-            tags    = ['fit'],
-            actions = [Cnst(insert = True, **{x:pcpb[x] for x in constcols})])
+    # constpth = root('data/constraints.csv')
+    # constcols = ['const_name','description','s','alpha','val','kind']
+    #
+    # pcpb      = PyBlock(parse_const, args = [Const(constpth)], outnames = constcols)
+    #
+    # pop_constraint =                                                            \
+    #     Gen(name    = 'pop_constraint',
+    #         desc    = 'populate constraints',
+    #         funcs   = [pcpb],
+    #         tags    = ['fit'],
+    #         actions = [Cnst(insert = True, **{x:pcpb[x] for x in constcols})])
 
 
     ############################################################################
@@ -80,7 +80,7 @@ def io(mod : Model) -> None:
         Gen(name    = 'pop_atoms',
             desc    = 'populate Atoms',
             funcs   = [papb],
-            tags    = ['io'],
+            tags    = [],#['io'],
             actions = [Atoms(insert=True,
                              job   = ijob,
                              name  = papb['name'],
@@ -89,7 +89,7 @@ def io(mod : Model) -> None:
     ############################################################################
 
     bcols  = ['contribs','energies','volumes','n_atoms','n_elems','composition','img',
-              'eosbm', 'lattice','strain_low','strain_hi','incomplete','success']
+              'eosbm', 'lattice','strain_low','strain_hi','morejobs','incomplete','success']
     bpth   = '/Users/ksb/scp_tmp/vauto/bulks'
     pbcols = jcols + bcols
     pbpb   = PyBlock(parse_bulks, args = [Const(bpth)], outnames = pbcols)
@@ -108,7 +108,7 @@ def io(mod : Model) -> None:
         Gen(name = 'pop_bulks',
             desc = 'populates Bulks',
             funcs = [pbpb],
-            tags  = ['io'],
+            tags  = [],#['io'],
             actions = [Bulks(insert=True,job=ijob_,name=pbpb['name'],
                             **{x:pbpb[x] for x in bcols})])
 
@@ -132,13 +132,13 @@ def io(mod : Model) -> None:
     ############################################################################
     #a1msb = ['a11','a12','a13','a14','a15','msb']
 
-    fcols = ['name','a1','pth','timestamp','decay','nsteps','steps','result','runtime']
+    fcols = ['name','pth','timestamp']
 
-    fitpth   = join(environ['HOME'],'scp_tmp/fitresult')
+    fitpth   = join(environ['FUNCTIONALS_ROOT'],'data/fit')
 
     fpb = PyBlock(parse_fit,
                   args     = [Const(fitpth)],
-                  outnames = fcols + ['pw','econv','data'] + fitcols)
+                  outnames = fcols + ['pw','econv','fdata'] + fitcols)
 
     pop_fit =                                                                   \
         Gen(name    = 'pop_fit',
@@ -150,7 +150,7 @@ def io(mod : Model) -> None:
                            calc   = Calc(insert = True,
                                         **{x:fpb[x] for x in ['pw','econv']},
                                         functional = Fx(insert = True,
-                                                        data   = fpb['data'])),
+                                                        data   = fpb['fdata'])),
                            fitparams = Fitparams(insert=True,
                                                  **{x:fpb[x] for x in fitcols}))])
 
@@ -160,6 +160,6 @@ def io(mod : Model) -> None:
     ############################################################################
     ############################################################################
 
-    gens = [pop_fitparams,pop_constraint,pop_atoms,pop_bulks,pop_expt,pop_fit]
+    gens = [pop_fitparams,pop_atoms,pop_bulks,pop_expt,pop_fit]
 
     mod.add(gens)

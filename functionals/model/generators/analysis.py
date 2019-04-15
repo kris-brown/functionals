@@ -3,6 +3,8 @@ from typing import Tuple as T
 from json   import loads,dumps
 from ast    import literal_eval
 import numpy as np # type: ignore
+from scipy.stats import linregress         # type: ignore
+
 
 # Internal Modules
 from dbgen import (Model, Gen, Query, PyBlock, AND, Env, defaultEnv, Import,
@@ -151,7 +153,7 @@ def analysis(mod : Model) -> None:
     ########################################################################
 
     ceq = Query(exprs    = dict(b = Bulks.id(),
-                                ce = Bulks['eform']()/Bulks['n_atoms']()))
+                                ce = Lit(-1)*Bulks['eform']()/Bulks['n_atoms']()))
     ce =                                                                     \
         Gen(name    = 'ce',
             desc    = 'Difference between a relaxed energy (per atom) and '     \
@@ -197,7 +199,9 @@ def analysis(mod : Model) -> None:
             actions = [Calc(calc=dq['c'],missing=dqpb['out'],done=dqpb2['out'])])
 
     ############################################################################
-
+    def missbulk(s:str,all:str)->T[int,str]:
+        miss = set(all.split(','))-set(s.split(','))
+        return len(miss),','.join(miss)
 
     dq2 = Query(exprs   = dict(c = Calc.id(),
                               t = GROUP_CONCAT(Bulks['name'](bpth))),
@@ -205,14 +209,17 @@ def analysis(mod : Model) -> None:
                constr  = Bulks['success'](bpth),
                aggcols = [Calc.id()])
 
-    dqpb3 = PyBlock(lambda s,all: ','.join(set(all.split(','))-set(s.split(','))),
-                   args = [dq['t'],Const(all)])
+    dqpb3 = PyBlock(missbulk,
+                   args = [dq['t'],Const(all)],
+                   outnames = ['n','s'])
     done2 =                                                                      \
         Gen(name    = 'done2',
             desc    = 'Determines if calculator is ready for fitting (has all data)',
             query   = dq2,
             funcs   = [dqpb3],
-            actions = [Calc(calc=dq2['c'],missing_bulk=dqpb3['out'])])
+            actions = [Calc(calc         = dq2['c'],
+                            n_missing    = dqpb3['n'],
+                            missing_bulk = dqpb3['s'])])
 
     ########################################################################
     refatom = JPath('atoms', [refs__atoms])
@@ -301,7 +308,7 @@ def analysis(mod : Model) -> None:
         x = Bulks.get(x_)(cbp); y = Bulks.get(y_)(cbp)
         mseq = Query(exprs   = dict(c = Calc.id(), m = AVG((x-y)**Lit(2))),
                      basis   = [Calc],
-                     constr  = Calc['done'](),
+                     #constr  = Calc['done'](),
                      aggcols = [Calc.id()])
         msegens.append(Gen(name='mse_'+k,
                            query=mseq,
@@ -310,16 +317,29 @@ def analysis(mod : Model) -> None:
     msec,mseb,msel = msegens
     ########################################################################
     r2gens = []
+
+    def fx(x:str,y:str)->float:
+        x_,y_ = [loads('[%s]'%z) for z in [x,y]]
+        #print(sorted(list(zip(y_,x_))))
+        out = linregress(x_,y_)[2]**2
+        return out
+
     for k,(x_,y_) in cols.items():
         x = Bulks.get(x_)(cbp); y = Bulks.get(y_)(cbp)
-        r2q = Query(exprs   = dict(c = Calc.id(), r = R2(x,y)),
+        r2q = Query(exprs   = dict(c = Calc.id(),
+                                   x = GROUP_CONCAT(x),
+                                   y = GROUP_CONCAT(y)),
                      basis   = [Calc],
-                     constr  = Calc['done'](),
+                     #constr  = Fx['beef'](JPath('functional',[calc__functional])), #delete this
                      aggcols = [Calc.id()])
+        r2 = PyBlock(fx,
+            env = Env(Import('scipy.stats','linregress'))+defaultEnv,
+            args = [r2q['x'],r2q['y']])
+
         r2gens.append(Gen(name='r2_'+k,
-                           query=mseq,
+                           query=r2q, funcs=[r2],
                            actions=[Calc(calc=mseq['c'],
-                                          **{'r2_'+k:r2q['r']})]))
+                                          **{'r2_'+k:r2['out']})]))
     r2c,r2b,r2l = r2gens
     ########################################################################
 

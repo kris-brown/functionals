@@ -7,6 +7,7 @@ from random    import choice
 from operator  import mul
 from functools import reduce
 from itertools import product as prod
+
 '''
 Scripts to do misc things
 '''
@@ -15,12 +16,11 @@ Scripts to do misc things
 def product(xs : L[int]) -> int: return reduce(mul,xs,1)
 
 spec = dict(
-    constden   = [3,5,7],
-    consts     = ['lda liebox pos','lda pos', 'lda',''],
-    reg        = [1,10,100],
-    dataconst  = ['.'], #'.' = True, '$a' = False, '^[A-Z][a-z]?_' = single elements
-    bm_weight  = [0.1,1,10],
-    lat_weight = [0.1,1,10]
+    constden   = [10],
+    consts     = ['lda hnorm pos liebox scan11','lda hnorm pos', 'lda pos',''],
+    reg        = [0,1],
+    bm_weight  = [0],
+    lat_weight = [0]
 ) # type: D[str,L]
 
 def fits() -> None:

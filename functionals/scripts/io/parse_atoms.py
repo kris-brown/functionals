@@ -45,7 +45,7 @@ def parse_atoms(root:str)->T[L[str],L[str],L[int],L[int],L[float],L[str],L[str],
                         contribs.append(parse_contribs_vasp(outcar))
                     else:
                         contribs.append(None) # type: ignore
-                        if incar['metagga'] == 'SCAN+rVV10':
+                        if incar['metagga'] == 'SCAN':
                             fxs.append("SCAN")
                         elif incar['metagga'] is None and incar['gga']=='PE':
                             fxs.append('PBE')
