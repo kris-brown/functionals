@@ -172,11 +172,8 @@ fit = Obj(
              Attr('opt',        Varchar(),   desc = '5 indices referring to optimal r2 c_viol tradeoff'),
              Attr('score',      Decimal(),   desc = "Arbitrary combination of R2's and c_viol"),
              Attr('result',     Text(),      desc = '5 Flattened NxN fitted coefficients'),
-
-             Attr('decaycosts',     Text(),  desc = 'JSONd list of 5 avg R2 values'),
-             Attr('c_viol',     Decimal(),   desc = 'Constraint violation'),
-             #Attr('lda_viol',   Decimal(),   desc = 'Degree to which LDA Limit was violated'),
-             #Attr('h_viol',     Decimal(),   desc = 'Degree to which hydrogen energy was violated'),
+             Attr('decaycosts', Text(),      desc = 'JSONd list of 5 avg R2 values'),
+             Attr('c_viol',     Text(),      desc = 'Constraint violations'),
              ]+[Attr(m,Decimal(20,6)) for m in funmetrics])
 
 fit_rels = [Rel('fitparams','fit', id = True), Rel('calc','fit')]

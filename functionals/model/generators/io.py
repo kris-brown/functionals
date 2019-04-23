@@ -39,7 +39,7 @@ def io(mod : Model) -> None:
         Gen(name    = 'pop_fitparams',
             desc    = 'Looks in FITPATH for fitting specifications',
             funcs   = [pfpb],
-            tags    = ['fit'],
+            tags    = ['fit','io'],
             actions = [Fitparams(insert = True,
                            **{x:pfpb[x] for x in fitcols})])
 

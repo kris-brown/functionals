@@ -3,7 +3,8 @@ from typing import Callable as C, List as L, Dict as D, Tuple as T
 from abc    import ABCMeta, abstractmethod
 from json   import load, loads
 from os     import environ
-from os.path import join 
+from hashlib import sha224
+from os.path import join
 from numpy  import inf,vstack,array,sum,multiply,heaviside,exp,arange,concatenate as concat # type: ignore
 from plotly.graph_objs import Figure,Layout,Scatter        # type: ignore
 from plotly.offline    import plot # type: ignore
@@ -47,22 +48,20 @@ class Functional(object, metaclass = ABCMeta):
 
     @staticmethod
     def plots(ps : L['Functional']) -> None:
-        data   = flatten([p.plot() for p in ps])
+        assert len(ps)<7
+        cs     = colors = ['rgb(255,0,0)', 'rgb(0,255,0)', 'rgb(0,0,255)', 'rgb(153,0,153)', 'rgb(0,0,0)', 'rgb(255,255,0)']
+        data   = flatten([p.plot(color=c) for p,c in zip(ps,cs)])
         layout = Layout(title = 'Functionals',
                       xaxis = dict(title = 's'),
                       yaxis = dict(title = 'Fx'))
         fig = Figure(data = data, layout = layout)
         plot(fig,filename='temp0.html')
 
-    def plot(self) -> L[dict]:
+    def plot(self,color:str) -> L[dict]:
         ss     = arange(0.,5,0.1)
         alphas = array([0,1]) if self.mgga else [1]
         styles = ['solid','dot','dash','dashdot']
 
-        def str2int(lst : str) -> int:
-            return sum(array(list(map(ord,lst))))**3+10000000000
-
-        color  = '#'+hex(str2int(self.name))[-6:]
 
         out    = []
         for sty,a in zip(styles,alphas):
@@ -71,8 +70,8 @@ class Functional(object, metaclass = ABCMeta):
                         y       = [self.apply(s,a) for s in ss],
                         mode    = 'lines',
                         name    = lab,
-                        line    = dict(color   = color,
-                                       dash    = sty,
+                        line    = dict(dash    = sty,
+                                       color   = color,
                                        shape   = 'spline')))
         return out
 

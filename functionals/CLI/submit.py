@@ -51,7 +51,6 @@ bmag = {'Li_bcc': None, 'Na_bcc': None, 'K_bcc': None, 'Rb_bcc': None, 'Ca_fcc':
 class Calc(object):
     def __init__(self,
                  xc     : str,
-                 pw     : int   = 1000,
                  sigma  : float = 0.05,
                  econv  : float = 5e-3,
                  magmom : float = None,
@@ -59,7 +58,7 @@ class Calc(object):
                 ) -> None:
         assert xc in ['PBE',"BEEF",'SCAN']
 
-        self.pw    = pw;
+        self.pw    = 900 if xc == 'SCAN' else 1000;
         self.sigma = sigma
         self.econv = econv;
         self.kpts  = kpts

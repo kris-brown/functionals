@@ -83,7 +83,7 @@ def fxviz(name:str,stepnum : str = None)->None:
                 x = array(load(fi)[2][step][0])
             fx = FromMatrix(x,float(a1),float(msb),name+'[%s]'%cs)
     Functional.plots([fx,PBE,BEEF,SCAN])
-    import pdb;pdb.set_trace()
+    #import pdb;pdb.set_trace()
 def r2tradeoff()->None:
     q = '''SELECT name,r2_ce,r2_bm,r2_lat,c_viol FROM fit
             WHERE r2_ce{0}AND r2_bm{0}AND r2_lat{0}AND c_viol{0}'''.format(' IS NOT NULL ')
@@ -98,46 +98,65 @@ def r2tradeoff()->None:
 
     plot(fig,filename='temp0.html')
 
-def cviols(*fitnames:str)->None:
-    q = '''SELECT data FROM fit WHERE name = %s'''
-    for fn in fitnames:
-        d = sqlselect(default.connect(),q,[fn])
-        import pdb;pdb.set_trace()
+def mses()->None:
+    q = '''SELECT name,  mse_ce,mse_bm,False as x   from fit join fitparams on fitparams_id=fitparams UNION
+           SELECT 'BEEF',mse_ce,mse_bm,True as x from calc join functional on functional=functional_id WHERE beef
+           ORDER BY x
+        '''
+    fns,mces,mbms,_ = map(list,zip(*sqlselect(default.connect(),q)))
+    d    = {k:(x,y) for k,x,y in zip(fns,mces,mbms)} # type: dict
+    data = [Scatter(x = mces, y = mbms, mode = 'markers',text = fns, hoverinfo = 'text')]
+    annotations = [dict(x=d['BEEF'][0], y=d['BEEF'][1], xref='x',yref='y',text='BEEF')]
 
-def fxtraj(*fitnames:str)->None:
+    layout = Layout(title= 'MSE of fits ', hovermode= 'closest',
+                    xaxis= dict(title= 'MSE CE, eV', ticklen= 5, zeroline= False, gridwidth= 2),
+                    yaxis= dict(title= 'MSE BM error, GPa', ticklen= 5, gridwidth= 2,),
+                    annotations = annotations)
+    fig = Figure(data=data,layout=layout)
+    plot(fig,filename='temp0.html')
+
+def fxtraj(fitname:str,metric_:str=None)->None:
     '''
     Visualize the cost function and constraint violations over the iterations
     of a single fit
     '''
-    print('Only doing mse_ce')
+    metric = int(metric_) if metric_ is not None else None
+    mets = ['MSE CE Error, EV','MSE BM Error, GPA','MSE Vol Error, A^3', 'r2 CE','r2 BM','r2 Vol']
+
     q = '''SELECT pth,opt FROM fit WHERE name = %s '''
     dx = 10
     annotations,data = [],[]
-    for fitname in fitnames:
-        pth,opt_ = sqlselect(default.connect(),q,[fitname])[0]
-        fit = Fit.from_json(pth)
-        with open(pth+'/result.json','r') as fi: steps = load(fi)[2]
-        ox_,_,ox = steps[loads(opt_)[2]]
-        oy = fit.midcosts([ox_]*5)[0]
-        #costs = [fit.midcosts(dumps([step]*5)) for step in steps[2]]
-        #xs,ys = zip(*[(c,(msec+0+0)/1) for i,(msec,_,_,rc,rb,rl,c) in enumerate(costs) if i%1==0])
-        xs,ys = zip(*[(cviol,fit.midcosts([x]*5)[0])
-                        for i,(x,_,cviol) in enumerate(steps)])
-        data.extend([Scatter(x=xs,y=ys,name=fitname,mode='markers',
-                             text = [str(x) for x in range(len(xs))],
-                             hoverinfo = 'text')])
-        annotations.extend([dict(x=xs[0], y=ys[0], xref='x',yref='y',text='beef'),
-                            dict(x=ox,    y=oy   , xref ='x',yref='y',text='opt')])
+
+    pth,opt_ = sqlselect(default.connect(),q,[fitname])[0]
+    fit = Fit.from_json(pth)
+    with open(pth+'/result.json','r') as fi: steps = load(fi)[2]
+
+    ox_,oy_,ox = steps[loads(opt_)[2]]
+
+    if metric is not None:
+        met = mets[metric]
+        oy = fit.midcosts([ox_]*5)[metric]
+        xs,ys = zip(*[(cviol,fit.midcosts([x]*5)[metric]) for x,_,cviol in steps])
+    else:
+        met = 'Loss function (weighted R2 value)'
+        oy = oy_
+        xs,ys = zip(*[(x,y) for (_,y,x) in steps])
+
+    data.extend([Scatter(x=xs,y=ys,name=fitname,mode='markers',
+                         text = [str(x) for x in range(len(xs))],
+                         hoverinfo = 'text')])
+    annotations.extend([dict(x=xs[0], y=ys[0], xref='x',yref='y',text='beef'),
+                        dict(x=ox,    y=oy   , xref ='x',yref='y',text='opt')])
 
     layout = Layout(title= 'Trajectory of constrained optimization', hovermode= 'closest',
                     xaxis= dict(title= 'Constraint Violation', ticklen= 5, zeroline= False, gridwidth= 2),
-                    yaxis= dict(title= 'MSE CE error, eV', ticklen= 5, gridwidth= 2,),
+                    yaxis= dict(title= met, ticklen= 5, gridwidth= 2,),
                     annotations = annotations)
 
     fig = Figure(data=data,layout=layout)
 
     plot(fig,filename='temp0.html')
-    import pdb;pdb.set_trace()
+    #import pdb;pdb.set_trace()
 
 ################################################################################
 ######################

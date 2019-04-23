@@ -41,13 +41,14 @@ def main(db_ : str, sub: bool, retry:bool) -> None:
 
     params,calcs = [sqlselect(conn,x) for x in [q1,q2]]
 
-    for (fp,),(calc,) in list(prod(params,calcs)):
-        print('\n',fp,calc)
-        if fp!=7: continue
+    for (fp,),(calc,) in sorted(list(prod(params,calcs))):
+        print(fp,calc)
+        #if fp!=3: continue
         fit = Fit.from_db(db=db_,fp_id=fp,calc_id=calc)
         root = join(pth,fit.metadata()['uid'][:10])
         Path(root).mkdir(parents=True, exist_ok=True)
         fit.write(root)
+        #print('\n\t',fit.metadata()['uid'][:10])
         if sub and (retry or not exists(join(root,'result.json'))):
             act   = 'python runfit.py'
             cmd   = 'cd {}; '.format(root) + act
@@ -58,9 +59,8 @@ def sub(time : int, retry : bool, local : bool) -> None:
     dirs = listdir(pth)
     for d in dirs:
         dir   = join(pth,d)
-        if retry or not exists(join(dir,'result.json')):
-            sunc  = choice(['','','','','2','2','3'])
-            act   = 'python runfit.py' if local else 'bsub -n 1 -W{}:30 -q suncat{} subfit.sh'.format(time,sunc)
+        if retry or not exists(join(pth,dir,'result.json')):
+            act   = 'python runfit.py' if local else 'bsub -n 1 -W{}:30 -q suncat subfit.sh'.format(time)
             cmd   = 'cd {}; '.format(dir) + act
             system(cmd)
 

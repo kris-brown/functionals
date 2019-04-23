@@ -185,18 +185,20 @@ def analysis(mod : Model) -> None:
     dq = Query(exprs   = dict(c = Calc.id(),
                               t = GROUP_CONCAT(Bulks['name'](bpth))),
                basis   = [Calc],
-               constr  = NOT(NULL(Bulks['ce'](bpth))),
+               #constr  = NOT(NULL(Bulks['ce'](bpth))),
                aggcols = [Calc.id()])
 
     dqpb = PyBlock(lambda s,all: ','.join(set(all.split(','))-set(s.split(','))),
                    args = [dq['t'],Const(all)])
+
     dqpb2 = PyBlock(lambda s: s=='',args=[dqpb['out']])
+
     done =                                                                      \
         Gen(name    = 'done',
             desc    = 'Determines if calculator is ready for fitting (has all data)',
             query   = dq,
             funcs   = [dqpb,dqpb2],
-            actions = [Calc(calc=dq['c'],missing=dqpb['out'],done=dqpb2['out'])])
+            actions = [Calc(calc=dq['c'], missing = dqpb['out'],done=dqpb2['out'])])
 
     ############################################################################
     def missbulk(s:str,all:str)->T[int,str]:
@@ -289,13 +291,13 @@ def analysis(mod : Model) -> None:
             actions = [Bulks(bulks=aceq['b'],**{x:abmpb[x] for x in bmout})])
 
     ########################################################################
-    diff = Bulks['expt_bm']() - Bulks['bulkmod']()
+    diff = Bulks['eosbm']() - Bulks['bulkmod']()
 
     iq = Query(dict(b=Bulks.id(),i = GT(ABS(diff)/Bulks['expt_bm'](),
                                           Lit(0.1))))
     irreg =                                                                     \
         Gen(name = 'irreg',
-            desc = 'Populates Bulks.irregular',
+            desc = 'Sets Bulks.irregular to TRUE if ASE eos bulkmod differs from discrete by too much',
             query= iq,
             actions=[Bulks(bulks=iq['b'],irregular=iq['i'])])
 

@@ -3,6 +3,7 @@ from typing       import Dict as D, List as L, Tuple as T, Any, Optional as O, C
 from ast          import literal_eval
 from time         import time
 from os.path      import join
+from copy         import deepcopy
 from sys          import stdout
 from shutil       import copyfile
 from os           import system, environ
@@ -26,16 +27,14 @@ from scipy.stats import linregress         # type: ignore
 from psycopg2    import connect # type: ignore
 
 # Internal
-from functionals.fit.utilities            import LegendreProduct
+from functionals.fit.constraint           import Constraint,lda,liebox,scan11,pos,hnorm
 from functionals.fit.data                 import process_data,weight
-from functionals.scripts.fit.h_norm_const import intkernel,quad
 
 Connection = Any
 Arrs       = L[array]
 ################################################################################
 # Helper functions
 #-----------------
-def flatten(lol:list)->list: return [item for sublist in lol for item in sublist]
 
 def sqlselect(conn : Connection, q : str, binds : list = []) -> L[tuple]:
     with conn.cursor() as cxn: # type: ignore
@@ -44,21 +43,10 @@ def sqlselect(conn : Connection, q : str, binds : list = []) -> L[tuple]:
 
 def hash_(x : Any)->str: return sha512(str(x).encode()).hexdigest()[:10]
 
-def h_norm_vec(a1 : float, msb : float) -> array:
-    return [quad(intkernel(i,j,a1,msb), 0., inf)[0] for j in range(8) for i in range(8)]
 
 bias = array([10**(x%8 + x//8) for x in range(64)]) # unequally weigh matrix elements
 
 def safeLoad(x:Any)->Any: return x if x is None else loads(x)
-
-# class ComplexEncoder(JSONEncoder):
-#     def default(self, obj:object)->str:
-#         if isinstance(obj, ndarray):
-#             return obj.tolist()
-#             # Let the base class default method raise the TypeError
-#         return JSONEncoder.default(self, obj)
-#
-# SQL
 
 q2 = '''SELECT bm_weight,lat_weight,reg,consts
         FROM fitparams WHERE fitparams_id=%s'''
@@ -116,35 +104,33 @@ class Fit(object):
                            loss     = 'linear',
                            max_nfev = 50000,
                            verbose  = 0) # type: dict
-    def __eq__(self,other:object)->bool:
-        if isinstance(other,Fit):
-            return all([self.calc                           == other.calc,
-                        self.cons                           == other.cons,
-                        self.bmw                            == other.bmw,
-                        self.lw                             == other.lw,
-                        self.lam_reg                        == other.lam_reg,
-                        self.pre_ce                         == other.pre_ce,
-                        self.pre_bm                         == other.pre_bm,
-                        self.pre_l                          == other.pre_l,
-                        self.ceY.tolist()                   == other.ceY.tolist(),
-                        self.bmY.tolist()                   == other.bmY.tolist(),
-                        self.lY.tolist()                    == other.lY.tolist(),
-                        array_equal(self.ceX,other.ceX),
-                        array_equal(self.bmX,other.bmX),
-                        array_equal(self.lX,other.lX),
-                        array_equal(self.ceB,other.ceB),
-                        array_equal(self.bmB,other.bmB),
-                        array_equal(self.lB,other.lB),
-                        array_equal(self.c_A_eq,other.c_A_eq),
-                        array_equal(self.c_A_lt,other.c_A_lt),
-                        array_equal(self.C_A_eq,other.C_A_eq),
-                        array_equal(self.C_A_lt,other.C_A_lt),
-                        array_equal(self.Y,other.Y),
-                        array_equal(self.X,other.X),
-                        ])
-        else: return False
 
-    constden = 20
+
+    def __eq__(self, other : object) -> bool:
+        return False if not isinstance(other,Fit) else \
+             all([self.calc         == other.calc,
+                  self.cons         == other.cons,
+                  self.bmw          == other.bmw,
+                  self.lw           == other.lw,
+                  self.lam_reg      == other.lam_reg,
+                  self.pre_ce       == other.pre_ce,
+                  self.pre_bm       == other.pre_bm,
+                  self.pre_l        == other.pre_l,
+                  array_equal(self.ceY, other.ceY),
+                  array_equal(self.bmY, other.bmY),
+                  array_equal(self.lY, other.lY),
+                  array_equal(self.ceX,other.ceX),
+                  array_equal(self.bmX,other.bmX),
+                  array_equal(self.lX,other.lX),
+                  array_equal(self.ceB,other.ceB),
+                  array_equal(self.bmB,other.bmB),
+                  array_equal(self.lB,other.lB),
+                  array_equal(self.c_A_eq,other.c_A_eq),
+                  array_equal(self.c_A_lt,other.c_A_lt),
+                  array_equal(self.C_A_eq,other.C_A_eq),
+                  array_equal(self.C_A_lt,other.C_A_lt),
+                  array_equal(self.Y,other.Y),
+                  array_equal(self.X,other.X)])
 
     @property
     def beef(self)->array:
@@ -158,10 +144,16 @@ class Fit(object):
             -5.54173599e-06,-5.14204676e-05,6.68980219e-09,-2.16860568e-08,9.12223751e-09,-1.38472194e-08,6.94482484e-09,-7.74224962e-09,
             7.36062570e-07,-9.40351563e-06,-2.23014657e-09,6.74910119e-09,-4.93824365e-09,8.50272392e-09,-6.91592964e-09,8.88525527e-09])
 
-    all_cons = dict(lda    = dict(weight =100, s = 0,    alpha = 1,    kind = 'eq', val = 1.),
-                    liebox = dict(weight = 1,  s = None, alpha = None, kind = 'lt', val = 1.804),
-                    scan11 = dict(weight = 1,  s = None, alpha = 0.0,  kind = 'lt', val = 1.174),
-                    pos    = dict(weight = 100,s = None, alpha = None, kind = 'gt', val = 0.0)) # type: dict
+    all_cons = dict(lda    = lda,
+                    liebox = liebox,
+                    scan11 = scan11,
+                    pos    = pos,
+                    hnorm  = hnorm) # type: D[str,Constraint]
+
+    @property
+    def constraints(self)->L[Constraint]:
+        return [self.all_cons[x] for x in self.cons]
+
     ###############
     # MAIN METHOD #
     ###############
@@ -173,8 +165,8 @@ class Fit(object):
         allsols    = []
 
         for i in range(5):
-            print('\n\ti = %d'%i,end='')
-            x0         = array([1]+[0]*63) #lstsq(self.X[i],self.Y[i],rcond=None)[0] #
+            #print('\n\ti = %d'%i,end='')
+            x0         = lstsq(self.X[i],self.Y[i],rcond=None)[0] #array([1]+[0]*63) #
             dx         = float('inf')
             c_reg      = self.lam_reg/10000 # initial regularization penalty = 1/1000 of final
             constr     = 1e-10               # negligible constraints initially
@@ -183,9 +175,7 @@ class Fit(object):
 
             # main loop - break when constraints are high AND negligible change in x
             while (constr < 1e5) or (dx > self.kwargs['xtol']):
-                print('.',end=''); stdout.flush()
                 # Do fitting
-
                 kwargs = dict(constr=constr,c_reg=c_reg)
                 res = least_squares(self.cost(i), x0, jac = self.dcost(i), bounds=bounds, kwargs = kwargs,**self.kwargs)#try: except LinAlgError:
                 # Do updates
@@ -194,13 +184,12 @@ class Fit(object):
                 x0      = res.x                       # overwrite previous solution
                 c_reg  += (self.lam_reg - c_reg) / 5 # asymptotically increase regularization
                 constr *= 1.01                           # increase constraints
-                if i!=2: print('skipping i!=2');break
             allsols.append(sols)
         tottime = time() - start_time # currently do nothing with this
         assert len(allsols)==5
         return allsols
 
-    def costs(self, x : Arrs) -> T[L[float],L[float],L[float],L[float],L[float],L[float],L[float]]:
+    def costs(self, x : Arrs) -> T[L[float],L[float],L[float],L[float],L[float],L[float]]:
         '''Returns the following metrics: MSE - cohesive (eV), bulkmod (GPa), lattice (A), three r2 values, and constraint violation'''
         from numpy.linalg import norm
 
@@ -212,41 +201,38 @@ class Fit(object):
                                            [average((y_ - y)**2)    for y_ in yy_])
                                             for yy_,y in yys]
 
-        c_viols = [norm(self.c_loss(X,i,all=True),1) for i,X in enumerate(x)]
+        return ces,bms,ls,rces,rbms,rls
 
-        return ces,bms,ls,rces,rbms,rls,c_viols
 
-    def midcosts(self, x : Arrs) -> T[float,float,float,float,float,float,float]:
+    def midcosts(self, x : Arrs) -> T[float,float,float,float,float,float]:
         '''Returns the cost metrics but only for the central functional (a1 = a13)'''
-        ce,bm,l,rce,rbm,rl,c_viol = [x[2] for x in self.costs(x)]
-        return ce,bm,l,rce,rbm,rl,c_viol
+        ce,bm,l,rce,rbm,rl = [x[2] for x in self.costs(x)]
+        return ce,bm,l,rce,rbm,rl
 
     def decaycosts(self,  x : str) -> T[float,float,float,float,float]:
         '''Avg R2 value for the 5 decays'''
         x_ = [array(y) for y in loads(x)]
-        _,_,_,rce,rbm,rl,_ = self.costs(x_)
+        _,_,_,rce,rbm,rl = self.costs(x_)
         x1,x2,x3,x4,x5 = [(r1+r2+r3)/3 for r1,r2,r3 in zip(rce,rbm,rl)]
         return x1,x2,x3,x4,x5
 
-    def allcosts(self, x : str) -> T[str,float,float,float,float,float,float,float]:
+    def allcosts(self, x : str) -> T[str,float,float,float,float,float,float]:
         '''Combine midcosts and decay costs information'''
         x_ = [array(y) for y in loads(x)]
-        ces,bms,ls,rces,rbms,rls,c_viols = self.costs(x_)
+        ces,bms,ls,rces,rbms,rls = self.costs(x_)
         x1,x2,x3,x4,x5 = [(r1+r2+r3)/3 for r1,r2,r3 in zip(rces,rbms,rls)]
-        ce,bm,l,rce,rbm,rl,c_viol = [min(x[2],10**13) for x in [ces,bms,ls,rces,rbms,rls,c_viols]]
-        return dumps([x1,x2,x3,x4,x5]),ce,bm,l,rce,rbm,rl,c_viol
+        ce,bm,l,rce,rbm,rl = [min(x[2],10**13) for x in [ces,bms,ls,rces,rbms,rls]]
+        return dumps([x1,x2,x3,x4,x5]),ce,bm,l,rce,rbm,rl
 
-    @classmethod
-    def allviols(cls, x : array, decay : float, msb: float) -> D[str,float]:
+    def allviols(self, x : array, decay : int) -> D[str,float]:
         '''Report all constraint violation magnitudes'''
         out = dict(tot=0.)
-        for k,v in cls.all_cons.items():
-            eq,A,b = cls._linconst(v,[decay],msb)
-            if eq: val = norm(A @ x - b,1)
-            else:  val = norm(cls.relu(A@x-b),1)
-            out[k]     = val
-            out['tot']+=val
+        for k,v in self.all_cons.items():
+            out[k]  = v.viol(x,self.calc['decays'][decay],self.calc['msb'])
+            if k in self.cons:
+                out['tot']       += out[k] * v.weight
         return out
+
     ################
     # CONSTRUCTORS #
     ################
@@ -274,8 +260,8 @@ class Fit(object):
         # Extract fitted data
         ceX,bmX,lX,ceB,bmB,lB,ceY,bmY,lY,pre_ce,pre_bm,pre_l = cls.data_xy(db=conn,calc=calc_id,fx=calc['fx'],bmw=bmw,lw=lw)
 
-        c_A_eq,c_b_eq, c_A_lt,c_b_lt = cls.const_xy(msb,calc['decays'],constraints)
-        C_A_eq,C_b_eq,C_A_lt,C_b_lt = cls.const_xy(msb,calc['decays'])
+        c_A_eq,c_b_eq, c_A_lt,c_b_lt = Constraint.const_xy([cls.all_cons[x] for x in constraints],msb,calc['decays'])
+        C_A_eq,C_b_eq,C_A_lt,C_b_lt = Constraint.const_xy(list(cls.all_cons.values()),msb,calc['decays'])
 
         X = [vstack((pre_ce * array(xc),
                      pre_bm * array(xb),
@@ -325,8 +311,10 @@ class Fit(object):
         else:   return self.c_A_eq[i] @ x - self.c_b_eq
     def jc_eq_loss(self,_ : array, i : int) -> array: return self.c_A_eq[i]
 
-    def c_loss(self,x  : array, i : int, all : bool = False) -> array: return concat((self.c_lt_loss(x,i,all),  self.c_eq_loss(x,i,all)))
-    def dc_loss(self,x : array, i : int) -> array: return vstack((self.jc_lt_loss(x,i),self.jc_eq_loss(x,i)))
+    def c_loss(self,x  : array, i : int, all : bool = False) -> array:
+        return concat((self.c_lt_loss(x,i,all),  self.c_eq_loss(x,i,all)))
+    def dc_loss(self,x : array, i : int) -> array:
+        return vstack((self.jc_lt_loss(x,i),self.jc_eq_loss(x,i)))
 
     # Regularization
     @staticmethod
@@ -362,82 +350,16 @@ class Fit(object):
     ##########
     # HELPER #
     ##########
-    @classmethod
-    def _linconst(cls,const : dict, decays:L[float], msb:float) -> T[bool,Arrs,array]:
-        '''
-        Turns a linear constraint into an Ax = b (or Ax < b) matrix
-
-        values in A are dependent on decay parameter, so returned as a list of 5 arrays
-        '''
-        w,s_, a_ = [const[x] for x in ['weight','s','alpha']]
-
-        assert w > 0
-        grid = linspace(0,5,cls.constden).tolist()
-
-        val = float(const['val'])
-
-        if   const['kind'] == 'eq':  eq = True  ; sign = 1
-        elif const['kind'] == 'lt':  eq = False ; sign = 1
-        elif const['kind'] == 'gt':  eq = False ; sign = -1
-        else: raise ValueError
-
-
-        srange = [float(s_)] if s_ is not None else grid
-        arange = [float(a_)] if a_ is not None else grid
-        card   = len(srange) * len(arange)
-        w      = w / card # reduce weight if many data points
-        vals   = [val for _ in range(card)]
-        c_As   = []
-
-        for decay in decays:
-            c_A    = [flatten([[LegendreProduct(s,a,decay,msb,i,j)
-                                for j in range(8)] for i in range(8)])
-                            for s in srange for a in arange]
-            c_As.append(array(c_A)*sign)
-
-        return eq, c_As, w * array(vals) * sign
-
-    @classmethod
-    def const_xy(cls,msb:float,decays:list, active:L[str] = None) -> T[L[list],list,L[list],array]:
-        '''
-        Convert constraint dictionaries into matrices (add analytic H solution, too)
-        '''
-        c_A_eq,c_b_eq,c_A_lt,c_b_lt = [empty((0,64))]*5,empty(0),[empty((0,64))]*5,empty(0)
-
-        def f(d:dict)->bool: return (active is None) or (d['name'] in active) # filter
-
-        if active and 'hnorm' in active:
-            active.remove('hnorm')
-            hnorm = True
-        else: hnorm = False
-
-        for const in [cls.all_cons[x] for x in (active or [])]:
-                eq,A,b = cls._linconst(const,decays,msb)
-                if eq:
-                    for i in range(5):
-                        c_A_eq[i] = vstack((c_A_eq[i],A[i]))
-                    c_b_eq = concat((c_b_eq,b))
-                else:
-                    for i in range(5):
-                        c_A_lt[i] = vstack((c_A_lt[i],A[i]))
-                    c_b_lt = concat((c_b_lt,b))
-
-        # Add H norm if in constraints
-        c_A_eq = [vstack((caeq,h_norm_vec(decay,msb) if hnorm else empty((0,64)))).tolist()
-                    for caeq,decay in zip(c_A_eq,decays)]
-        c_b_eq = concat((c_b_eq,[-.3125] if hnorm else [])).tolist()
-
-        c_A_lt = [x.tolist() for x in c_A_lt]
-        c_b_lt = c_b_lt.tolist()
-        return c_A_eq, c_b_eq, c_A_lt, c_b_lt
 
     def metadata(self) -> dict:
         '''Summary of parameters used to determine fit inputs'''
+        uid = hash_([self.calc[x] for x in ['pw','econv','decays','msb','fx']]+
+                    [self.bmw,self.lw,self.lam_reg,self.cons])
         md = dict(calc   = self.calc,
                   params = dict(bmw=self.bmw,lw=self.lw,
                                 reg=self.lam_reg,pre_ce=self.pre_ce,c = self.cons,
-                                pre_bm=self.pre_bm,pre_l=self.pre_l),)
-        md['uid'] = hash_(md)# type: ignore
+                                pre_bm=self.pre_bm,pre_l=self.pre_l),
+                  uid = uid)
         return md
 
     @classmethod

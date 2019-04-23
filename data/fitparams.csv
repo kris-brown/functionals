@@ -1,8 +1,61 @@
 consts,reg,bm_weight,lat_weight
-lda hnorm pos liebox scan11,0,0,0
-pos liebox,0,0,0
-lda pos liebox,0,0,0
 ,0,0,0
-lda hnorm pos,0,0,0
+,0,0,1
+,0,1,0
+,0,1,1
+,0.1,0,0
+,0.1,0,1
+,0.1,1,0
+,0.1,1,1
+,0.01,0,0
+,0.01,0,1
+,0.01,1,0
+,0.01,1,1
+hnorm pos,0,0,0
+hnorm pos,0,0,1
+hnorm pos,0,1,0
+hnorm pos,0,1,1
+hnorm pos,0.1,0,0
+hnorm pos,0.1,0,1
+hnorm pos,0.1,1,0
+hnorm pos,0.1,1,1
+hnorm pos,0.01,0,0
+hnorm pos,0.01,0,1
+hnorm pos,0.01,1,0
+hnorm pos,0.01,1,1
 lda pos,0,0,0
-lda,0,0,0
+lda pos,0,0,1
+lda pos,0,1,0
+lda pos,0,1,1
+lda pos,0.1,0,0
+lda pos,0.1,0,1
+lda pos,0.1,1,0
+lda pos,0.1,1,1
+lda pos,0.01,0,0
+lda pos,0.01,0,1
+lda pos,0.01,1,0
+lda pos,0.01,1,1
+lda hnorm pos liebox scan11,0,0,0
+lda hnorm pos liebox scan11,0,0,1
+lda hnorm pos liebox scan11,0,1,0
+lda hnorm pos liebox scan11,0,1,1
+lda hnorm pos liebox scan11,0.1,0,0
+lda hnorm pos liebox scan11,0.1,0,1
+lda hnorm pos liebox scan11,0.1,1,0
+lda hnorm pos liebox scan11,0.1,1,1
+lda hnorm pos liebox scan11,0.01,0,0
+lda hnorm pos liebox scan11,0.01,0,1
+lda hnorm pos liebox scan11,0.01,1,0
+lda hnorm pos liebox scan11,0.01,1,1
+lda hnorm pos,0,0,0
+lda hnorm pos,0,0,1
+lda hnorm pos,0,1,0
+lda hnorm pos,0,1,1
+lda hnorm pos,0.1,0,0
+lda hnorm pos,0.1,0,1
+lda hnorm pos,0.1,1,0
+lda hnorm pos,0.1,1,1
+lda hnorm pos,0.01,0,0
+lda hnorm pos,0.01,0,1
+lda hnorm pos,0.01,1,0
+lda hnorm pos,0.01,1,1

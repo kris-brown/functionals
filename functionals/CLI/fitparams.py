@@ -16,11 +16,10 @@ Scripts to do misc things
 def product(xs : L[int]) -> int: return reduce(mul,xs,1)
 
 spec = dict(
-    constden   = [10],
-    consts     = ['lda hnorm pos liebox scan11','lda hnorm pos', 'lda pos',''],
-    reg        = [0,1],
-    bm_weight  = [0],
-    lat_weight = [0]
+    consts     = ['lda hnorm pos liebox scan11','lda pos','hnorm pos','lda hnorm pos', 'lda pos',''],
+    reg        = [0,0.01,0.1],
+    bm_weight  = [0,1],
+    lat_weight = [0,1]
 ) # type: D[str,L]
 
 def fits() -> None:

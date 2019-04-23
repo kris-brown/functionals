@@ -28,18 +28,10 @@ def fit(mod : Model) -> None:
     # Extract rels
     beef__functional,calc__functional,fit__calc = map(mod.get_rel,
         [BEEF.r('functional'),Calc.r('functional'),Fit.r('calc')])
-    # Common queries
-    bpth = JPath('beef',[beef__functional,calc__functional,fit__calc])
-    fbq = Query(exprs = dict(f = Fit.id(),
-                             r = Fit['result'](),
-                             a = BEEF['a13'](bpth),
-                             m = BEEF['msb'](bpth),
-                             ),
-                 basis = [Fit])
     ############################################################################
     ############################################################################
     ############################################################################
-    resid_cols = ['decaycosts','mse_ce','mse_bm','mse_lat','r2_ce','r2_bm','r2_lat','c_viol']
+    resid_cols = ['decaycosts','mse_ce','mse_bm','mse_lat','r2_ce','r2_bm','r2_lat']
     f_env      = defaultEnv + Env(Import('functionals.fit.fit',Fit='FitObj'))
 
     # def f_resid(db:str,x:str,c:int)->T[str,float,float,float,float,float,float,float]:
@@ -53,7 +45,7 @@ def fit(mod : Model) -> None:
                 #constr = Fit['name']() |EQ| Lit('test'),
                basis = ['fit'])
 
-    def rf(p : str, x : str) -> T[str,float,float,float,float,float,float,float,]:
+    def rf(p : str, x : str) -> T[str,float,float,float,float,float,float,]:
         return FitObj.from_json(p).allcosts(x)
 
     rpb = PyBlock(rf,
@@ -83,6 +75,22 @@ def fit(mod : Model) -> None:
                            opt = opb['opt'],result=opb['result'])])
 
     ########################################################################
+    # Common queries
+
+    def cf(p : str, x : str) -> str:
+        x_ = np.array(loads(x)[2])
+        return dumps(FitObj.from_json(p).allviols(x_,2))
+
+    cvpb = PyBlock(cf, env  = f_env, args=[rq[x] for x in 'px'])
+
+    cviol =                                                                     \
+        Gen(name    = 'cviol',
+            query   = rq,
+            funcs   = [cvpb],
+            tags    = ['fit'],
+            actions = [Fit(fit = rq['f'], c_viol = cvpb['out'])])
+
+    ########################################################################
     def f_score(r2ce:float, r2bm:float, r2lat:float, cviol:float) -> float:
         c,b,l,v = map(float,[r2ce,r2bm,r2lat,cviol])
         return 2*c + b + l - v/5
@@ -100,46 +108,8 @@ def fit(mod : Model) -> None:
                            score = spb['out'])])
     ############################################################################
 
-    fm_env = defaultEnv + Env(Import('functionals','FromMatrix'))
-    #
-    # def get_lda_viol(x : str, a1: float, msb: float) -> float:
-    #     out = abs(1 - FromMatrix(np.array(loads(x)[2]),
-    #                              float(a1),float(msb)).apply(s=0,a=1))
-    #     return out
-    #
-    # lvpb = PyBlock(get_lda_viol,
-    #                env  = fm_env,
-    #                args = [fbq[x] for x in 'ram'])
-    #
-    # lda_viol =                                                                 \
-    #     Gen(name    = 'lda_viol',
-    #         desc    = 'Computes Fit.lda_viol',
-    #         query   = fbq,
-    #         funcs   = [lvpb],
-    #         tags    = ['fit'],
-    #         actions = [Fit(fit=fbq['f'],lda_viol=lvpb['out'])])
-    ############################################################################
-    #
-    # def get_h_viol(x : str, a1: float, msb: float) -> float:
-    #     hvec = one_time_function(float(a1),float(msb))
-    #     return abs(.3125 + hvec @ np.array(loads(x)[2]))
-    #
-    # ot = Env(Import('functionals.scripts.fit.h_norm_const','one_time_function'))
-    #
-    # hvpb = PyBlock(get_h_viol,
-    #                env  = fm_env+ot,
-    #                args = [fbq[x] for x in 'ram'])
-    #
-    # h_viol =                                                                 \
-    #     Gen(name    = 'h_viol',
-    #         desc    = 'Computes Fit.h_viol',
-    #         query   = fbq,
-    #         funcs   = [hvpb],
-    #         tags    = ['fit','parallel'],
-    #         actions = [Fit(fit = fbq['f'], h_viol = hvpb['out'])])
-
     ############################################################################
     ############################################################################
     ############################################################################
-    gens = [optg,score,resid] # h_viol,lda_viol
+    gens = [optg,score,resid,cviol]
     mod.add(gens)
