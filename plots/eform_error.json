@@ -1,10 +1,9 @@
 {
  "type" : "bar",
- "query": "SELECT S.nickname,ABS(E.eform+SDE.value) AS err ,C.xc AS xc FROM expt E JOIN species S ON E.expt__species=S.species_id JOIN species_dataset_element SDE ON SDE.species_dataset_element__species=S.species_id JOIN calc C ON C.calc_id = E.expt__calc WHERE SDE.property='cohesive energy' AND SDE.value IS NOT NULL and E.eform IS NOT NULL",
+ "query": "Select name,case when left(data,1)='[' THEN 'BEEF' ELSE data END AS xc,ce-expt_ce as err from bulks join job on job=job_id join calc on calc=calc_id join functional on functional=functional_id where expt_ce-ce is not null ",
  "xcols": "err",
- "gcols": "nickname",
- "glfunc": "lambda x: x[:x.find('_')] if x else None",
- "spcols": "xc",
+ "gcols": "xc",
+ "spcols": "name",
  "title": "Cohesive energy errors",
  "xlab" : "Species"
 }

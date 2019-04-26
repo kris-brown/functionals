@@ -6,7 +6,6 @@ from base64  import decodebytes
 from os      import environ
 from os.path import join
 from json    import loads, dumps, load
-from math    import log10
 from numpy   import array # type: ignore
 from plotly.offline import plot # type: ignore
 from plotly.graph_objs import Scatter, Figure, Layout # type: ignore
@@ -157,6 +156,33 @@ def fxtraj(fitname:str,metric_:str=None)->None:
 
     plot(fig,filename='temp0.html')
     #import pdb;pdb.set_trace()
+
+def dcosts()->None:
+    q = sqlselect(default.connect(),'SELECT name,decaycosts,a11,a12,a13,a14,a15 FROM fit JOIN calc ON calc=calc_id JOIN functional ON calc.functional=functional_id JOIN beef ON beef.functional=functional_id')
+    data = [] # type: list
+    for n,d_,a1,a2,a3,a4,a5 in q:
+        d = loads(d_)
+        data.append(Scatter(x=[a1,a2,a3,a4,a5],y=[dd-d[2] for dd in d],name=n))
+    layout = Layout(title= 'Decay parameter optimization', hovermode= 'closest',
+                    xaxis= dict(title= 'Decay parameter'),
+                    yaxis= dict(title= 'Relative weighted average R2 of fit'))
+    fig = Figure(data=data,layout=layout);     plot(fig,filename='temp0.html')
+
+def dhviols()->None:
+    q = sqlselect(default.connect(),"SELECT pth,name,result FROM fit JOIN fitparams ON fitparams = fitparams_id WHERE consts not like '%%hnorm%%'")
+    data = []
+    for p,n,xs_ in q:
+        xs = loads(xs_)
+        f  = Fit.from_json(p)
+        ds = f.calc['decays']
+        ys = [f.all_cons['hnorm'].viol(x,d,f.calc['msb']) for x,d in zip(xs,ds)]
+        data.append(Scatter(x=ds,y=[y-ys[2] for y in ys],name=n))
+    layout = Layout(title= 'Decay parameter optimization', hovermode= 'closest',
+                    xaxis= dict(title= 'Decay parameter'),
+                    yaxis= dict(title= 'Hviol'))
+    fig = Figure(data=data,layout=layout);     plot(fig,filename='temp0.html')
+
+
 
 ################################################################################
 ######################

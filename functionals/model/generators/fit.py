@@ -42,7 +42,6 @@ def fit(mod : Model) -> None:
     rq = Query(exprs = dict(f = Fit.id(),
                             p = Fit['pth'](),
                             x = Fit['result']()),
-                #constr = Fit['name']() |EQ| Lit('test'),
                basis = ['fit'])
 
     def rf(p : str, x : str) -> T[str,float,float,float,float,float,float,]:

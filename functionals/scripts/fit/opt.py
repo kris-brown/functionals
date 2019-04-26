@@ -3,7 +3,6 @@ from typing import List as L, Tuple as T
 import numpy as np # type: ignore
 
 def opt(pth:str)->T[str,str]:
-    import numpy as np
     np.warnings.filterwarnings('ignore')
 
     with open(pth+'/result.json','r') as fi: steps = load(fi)
@@ -21,9 +20,8 @@ def opt(pth:str)->T[str,str]:
         return p_frontX, p_frontY
 
     def f(l : L[T[list,float,float]])->int:
-        if len(l)<=startup: return 0
-
-        import matplotlib.pyplot as plt # type: ignore
+        if len(l) <= startup: return 0
+        #import matplotlib.pyplot as plt # type: ignore
         dic = {c:startup+i for i,(_,_,c) in enumerate(l[startup:])} # remove duplicates
         _,losses,cviols = zip(*l[startup:])
 

@@ -4,14 +4,16 @@ def parse_eigenval(fi:str)->T[bool,float]:
     '''Parse Vasp EIGENVAL - check if all bands have integer occupation'''
     magmom = 0.
     lines  = fi.split('\n')
-    splitlines = filter(None,[x.split() for x in reversed(lines)])
+    splitlines = list(filter(None,[x.split() for x in reversed(lines)]))
+    if len(splitlines[0]) == 3:
+        return True, 0. # spin unpolarized!
+
     ints  = True
     for l in splitlines:
-        if   len(l) == 3: vals = [float(l[-1])]              # spin unpolarized
-        elif len(l) == 5: vals = [float(l[-2]),float(l[-1])] # spin polarized
-        else: raise ValueError(l)
+        assert len(l) == 5
+        vals = [float(l[-2]),float(l[-1])] # spin polarized
         nonints = [round(a,0) != round(a,2) for a in vals]
-        magmom += vals[0] if (len(vals)==1) else abs(vals[0] - vals[1])
+        magmom +=  abs(vals[0] - vals[1])
 
         if any(nonints): ints = False # flip flag if at any point this is true
 

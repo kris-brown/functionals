@@ -10,7 +10,7 @@ from scipy.stats import linregress         # type: ignore
 from dbgen import (Model, Gen, Query, PyBlock, AND, Env, defaultEnv, Import,
                   Literal as Lit,  EQ, JPath, Constraint, LEFT, One, SUM, GT,
                   LIKE, CONCAT, LT, ABS, GROUP_CONCAT, NOT, NULL, Const, MAX,
-                  RIGHT, AVG, R2)
+                  RIGHT, AVG, R2, COUNT)
 
 ################################################################################
 ################################################################################
@@ -137,7 +137,8 @@ def analysis(mod : Model) -> None:
                                e = Bulks['energies'](),
                                r = SUM(Refs['energy'](refpth))),
                 aggcols = [Bulks.id()],
-                basis   = [Bulks])
+                basis   = [Bulks],
+                aconstr = SUM(Refs['num'](refpth)) |EQ| Bulks['n_atoms']())
 
     epb = PyBlock(lambda engs,refeng: loads(engs)[0] - float(refeng),
                   args  = [eq[x] for x in 'er'])
@@ -230,9 +231,10 @@ def analysis(mod : Model) -> None:
                              c = Atoms['contribs'](refatom),
                              n = Refs['num'](),
                              e = Refs['num']()*Atoms['energy'](refatom)),
-                basis = [Refs])
+                basis  = [Refs],
+                opt_attr = [Atoms['contribs'](refatom)])
 
-    rcpb = PyBlock(lambda c,n: dumps((n*np.array(loads(c))).tolist()),
+    rcpb = PyBlock(lambda c,n: dumps((n*np.array(loads(c))).tolist()) if c else None,
                    args = [rcq[x] for x in 'cn'])
 
     refcontribs =                                                               \

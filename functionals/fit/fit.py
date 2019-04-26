@@ -13,15 +13,14 @@ from contextlib   import redirect_stdout
 from traceback    import format_exc
 from contextlib   import contextmanager
 from hashlib      import sha512
+from random       import shuffle
 
 from numpy          import (ndarray,average,empty,tile,eye,sum,ones,array,linspace,inf,  # type: ignore
                             zeros,inf,vstack,concatenate as concat,diag, multiply,
-                            stack, array_equal)
+                            stack, array_equal, all as npall, gradient,warnings)
 from numpy.linalg   import lstsq,norm,inv,LinAlgError      # type: ignore
 
-from scipy.optimize import least_squares # type: ignore
-
-#import warnings; warnings.filterwarnings("ignore")
+from scipy.optimize import least_squares                   # type: ignore
 
 from scipy.stats import linregress         # type: ignore
 from psycopg2    import connect # type: ignore
@@ -44,7 +43,7 @@ def sqlselect(conn : Connection, q : str, binds : list = []) -> L[tuple]:
 def hash_(x : Any)->str: return sha512(str(x).encode()).hexdigest()[:10]
 
 
-bias = array([10**(x%8 + x//8) for x in range(64)]) # unequally weigh matrix elements
+bias = array([2**(x%8 + x//8) for x in range(64)]) # unequally weigh matrix elements
 
 def safeLoad(x:Any)->Any: return x if x is None else loads(x)
 
@@ -89,10 +88,15 @@ class Fit(object):
             = map(array, [ceY, bmY, lY,c_b_eq,c_b_lt,C_b_eq,C_b_lt])
 
         self.ceX, self.bmX, self.lX, self.ceB, self.bmB, self.lB, \
-        self.X,self.Y \
+        X,Y \
           = [[array(x[i]) for i in range(5)] for x in
             [ceX, bmX, lX, ceB, bmB, lB,
              X,Y]]
+
+        self.X,self.Y = [],[] # type: T[list,list]
+        for i in range(5):
+            zeros = npall(X[i]==0,axis=1)
+            self.X.append(X[i][~zeros,:]); self.Y.append(Y[i][~zeros])
 
         self.c_A_eq, self.c_A_lt, self.C_A_eq, self.C_A_lt,\
           = [[array(x[i]) if x[i] else empty((0,64)) for i in range(5)] for x in
@@ -105,6 +109,14 @@ class Fit(object):
                            max_nfev = 50000,
                            verbose  = 0) # type: dict
 
+
+        # Validate X and Y #
+        ### DON'T DO THIS IF WE FILTER OUT ZEROS!
+        # ce_avg,bm_avg,l_avg = [abs(average(x)) for x in [self.ceY,self.bmY,self.lY]]
+        # pre = [1 /  ce_avg,  self.bmw * ce_avg / bm_avg, self.lw * ce_avg / l_avg]
+        # for i in range(5):
+        #     X = vstack([a[i]*b for a,b in zip([self.ceX,self.bmX,self.lX],pre)])
+        #     assert array_equal(self.X[i],X)
 
     def __eq__(self, other : object) -> bool:
         return False if not isinstance(other,Fit) else \
@@ -157,27 +169,56 @@ class Fit(object):
     ###############
     # MAIN METHOD #
     ###############
-    def fit(self)->list:
-        '''Returns: trajectory of solutions until convergence'''
+    def cv(self, n : int = 30) -> L[float]:
+        '''Cross validate on 30 random 50/50 splits of the data'''
+        result  = []
+        nx      = len(self.X[0])
+        allinds = list(range(nx))
+        for i in range(n):
+            print('cv %d'%i)
+            shuffle(allinds)
+            traininds,testinds = allinds[:nx//2],allinds[nx//2:]
+            fitresult = self.fit(traininds)[2] # care about last step of i=2
+            optfit    = self.opt([(r,c) for _,r,c in fitresult])
+            opt_x     = fitresult[optfit][0]
+            testX,testY = self.X[2][testinds,:], self.Y[2][testinds]
+            result.append(self.r2avg(opt_x,2))
+
+        return result
+
+    def fit(self,traininds : L[int] = None)->list:
+        '''
+        Returns: trajectory of solutions until convergence [(coefs,r2,constr)]
+        trainfrac - which subset of the training data to use (default: All of it)
+        '''
 
         # initialize
         start_time = time()
         allsols    = []
-
         for i in range(5):
-            #print('\n\ti = %d'%i,end='')
-            x0         = lstsq(self.X[i],self.Y[i],rcond=None)[0] #array([1]+[0]*63) #
+            beefsols = [self.beef.tolist(),
+                        self.r2avg(self.beef,i),
+                        norm(self.c_loss(self.beef,i))]
+
+            if traininds:
+                if i != 2: allsols.append([beefsols]); continue # we only do training on i == 2
+                X = self.X[i][traininds,:]
+                Y = self.Y[i][traininds]
+            else:
+                X,Y = self.X[i], self.Y[i]
+
+            x0         = lstsq(X,Y,rcond=None)[0]
             dx         = float('inf')
             c_reg      = self.lam_reg/10000 # initial regularization penalty = 1/1000 of final
             constr     = 1e-10               # negligible constraints initially
-            sols       = [[self.beef.tolist(), self.r2avg(self.beef,i),norm(self.c_loss(self.beef,i))]]
+            sols       = [beefsols]
             bounds     = ([-dx]*64,[dx]*64)#([-2.]+[-0.5] * 63, [2.]+[0.5]* 63)
 
             # main loop - break when constraints are high AND negligible change in x
             while (constr < 1e5) or (dx > self.kwargs['xtol']):
                 # Do fitting
-                kwargs = dict(constr=constr,c_reg=c_reg)
-                res = least_squares(self.cost(i), x0, jac = self.dcost(i), bounds=bounds, kwargs = kwargs,**self.kwargs)#try: except LinAlgError:
+                kwargs = dict(Xmat = X, Y = Y, constr = constr, c_reg = c_reg, i = i)
+                res = least_squares(self.cost, x0, jac = self.dcost, bounds=bounds, kwargs = kwargs,**self.kwargs)#try: except LinAlgError:
                 # Do updates
                 sols.append([x0.tolist(),self.r2avg(x0,i),norm(self.c_loss(x0,i))])
                 dx      = norm(res.x - x0)            # how much has solution changed
@@ -190,7 +231,8 @@ class Fit(object):
         return allsols
 
     def costs(self, x : Arrs) -> T[L[float],L[float],L[float],L[float],L[float],L[float]]:
-        '''Returns the following metrics: MSE - cohesive (eV), bulkmod (GPa), lattice (A), three r2 values, and constraint violation'''
+        '''Returns the following metrics: MSE - cohesive (eV), bulkmod (GPa),
+          lattice (A), three r2 values, and constraint violation'''
         from numpy.linalg import norm
 
         yys = [([ce@X+b for X,b,ce in zip(x,self.ceB,self.ceX)],   self.ceY),
@@ -203,17 +245,15 @@ class Fit(object):
 
         return ces,bms,ls,rces,rbms,rls
 
-
     def midcosts(self, x : Arrs) -> T[float,float,float,float,float,float]:
         '''Returns the cost metrics but only for the central functional (a1 = a13)'''
         ce,bm,l,rce,rbm,rl = [x[2] for x in self.costs(x)]
         return ce,bm,l,rce,rbm,rl
 
     def decaycosts(self,  x : str) -> T[float,float,float,float,float]:
-        '''Avg R2 value for the 5 decays'''
+        '''Weighted average R2 value for the 5 decays'''
         x_ = [array(y) for y in loads(x)]
-        _,_,_,rce,rbm,rl = self.costs(x_)
-        x1,x2,x3,x4,x5 = [(r1+r2+r3)/3 for r1,r2,r3 in zip(rce,rbm,rl)]
+        x1,x2,x3,x4,x5 = [self.r2avg(x__,i) for i,x__ in enumerate(x_)]
         return x1,x2,x3,x4,x5
 
     def allcosts(self, x : str) -> T[str,float,float,float,float,float,float]:
@@ -273,9 +313,9 @@ class Fit(object):
                      pre_l  * (array(lY)  - array(bl)))).tolist()
              for bc,bb,bl in zip(ceB,bmB,lB)]
 
-        return cls(cons= constraints, calc=calc, bmw=bmw, lw=lw,
-                   reg=reg, ceX=ceX, bmX=bmX, lX=lX,ceB=ceB, bmB=bmB, lB=lB,
-                   ceY=ceY,bmY=bmY,lY=lY,
+        return cls(cons = constraints, calc=calc, bmw=bmw, lw=lw,
+                   reg = reg, ceX=ceX, bmX=bmX, lX=lX, ceB=ceB, bmB=bmB, lB=lB,
+                   ceY = ceY,bmY=bmY,lY = lY,
                    pre_ce=pre_ce, pre_bm=pre_bm, pre_l=pre_l,
                    c_A_eq=c_A_eq, c_b_eq=c_b_eq, c_A_lt=c_A_lt,c_b_lt=c_b_lt,
                    C_A_eq=C_A_eq, C_b_eq=C_b_eq, C_A_lt=C_A_lt,C_b_lt=C_b_lt,
@@ -318,34 +358,38 @@ class Fit(object):
 
     # Regularization
     @staticmethod
-    def reg(x  : array, _ : int) -> array: return multiply(bias,x)
+    def reg(x  : array) -> array: return multiply(bias,x)
     @staticmethod
-    def dreg(_ : array, __ : int) -> array: return diag(bias)
+    def dreg(_ : array) -> array: return diag(bias)
 
     # Data
-    def loss(self,x  : array, i : int) -> array: return self.X[i] @ x - self.Y[i]
-    def dloss(self,_ : array, i : int) -> array: return self.X[i]
+    def loss(self, x : array, X : array, Y : array) -> array: return X @ x - Y
+    def dloss(self,X : array) -> array: return X
 
     # All together: data, regularization, constraints
-    def cost(self, i : int) -> C:
-        def f(x : array, constr : float, c_reg : float) -> array:
-            return concat((self.loss(x, i), constr * self.c_loss(x, i), c_reg * self.reg(x, i)))
-        return f
+    def cost(self, x:array,Xmat : array, Y : array, i : int,  constr : float, c_reg : float) -> array:
+        return concat((self.loss(x, Xmat, Y), constr * self.c_loss(x, i), c_reg * self.reg(x)))
 
-    def dcost(self, i : int) -> C :
-        def f(x : array, constr : float, c_reg : float) -> array:
-            return vstack((self.dloss(x, i), constr * self.dc_loss(x, i), c_reg * self.dreg(x, i)))
-        return f
+    def dcost(self, x:array, Xmat : array, Y : array, i : int, constr : float, c_reg : float) -> array:
+        return vstack((self.dloss(Xmat), constr * self.dc_loss(x, i), c_reg * self.dreg(x)))
 
     # Data
-    def r2avg(self,x  : array, i : int) -> array:
+    def r2avg(self, x  : array, i : int) -> array:
         '''Weighted average R2 value for an arbitrary BEEF vector'''
         ys = [(self.ceX[i]@x + self.ceB[i], self.ceY),
               (self.bmX[i]@x + self.bmB[i], self.bmY),
-              ((self.lX[i]@x + self.lB[i]), self.lY)] # convert volume -> lattice constant
+              ((self.lX[i]@x + self.lB[i]), self.lY)]
         r2c,r2b,r2l = [linregress(y_,y)[2]**2  for y_,y in ys]
-        norm = 1. + self.bmw + self.lw
-        return  (r2c + self.bmw*r2b + self.lw*r2l)/norm
+
+        ce_avg,bm_avg,l_avg = [abs(average(x)) for x in [self.ceY,self.bmY,self.lY]]
+        pre_c = 1 /  ce_avg
+        pre_l = self.lw * ce_avg / l_avg
+        pre_b = self.bmw * ce_avg / bm_avg
+
+        norm = pre_c + pre_l + pre_b
+
+        return  (pre_c*r2c + pre_b*r2b + pre_l*r2l)/norm
+
 
     ##########
     # HELPER #
@@ -364,11 +408,11 @@ class Fit(object):
 
     @classmethod
     def data_xy(cls,
-                db          : Connection,
-                calc        : int,
-                fx          : array,
-                bmw         : float,
-                lw          : float
+                db    : Connection,
+                calc  : int,
+                fx    : array,
+                bmw   : float,
+                lw    : float
                ) -> T[Arrs,Arrs,Arrs,Arrs,Arrs,Arrs,list,list,list,float,float,float]:
         '''
         Assemble X,Y matrices given a database connection
@@ -395,7 +439,7 @@ class Fit(object):
         ceBs,bmBs,lBs = [[x[:,i].tolist()    for i in range(5)] for x in  Bs]
 
         ce_avg,bm_avg,l_avg = [abs(average(x)) for x in [ceY,bmY,lY]]
-        pre_c = 1 /  ce_avg
+        pre_c = 1 / ce_avg
         pre_l = lw * ce_avg / l_avg
         pre_b = bmw * ce_avg / bm_avg
 
@@ -430,6 +474,43 @@ class Fit(object):
         copyfile(root+'subfit.sh',join(pth,'subfit.sh'))
         system('chmod 755 '+join(pth,'subfit.sh'))
 
+    @classmethod
+    def opt(cls, steps:L[T[float,float]])->int:
+        '''Input - pairs of (R2,C_viol). Identify an optimum value for this tradeoff'''
+        warnings.filterwarnings('ignore')
+
+        threshold = 1e-1
+        startup   = 10
+
+        if len(steps) <= startup: return 0
+
+        dic = {c : startup + i for i,(_,c) in enumerate(steps[startup:])} # remove duplicates
+        r2s, cviols = [list(x) for x in zip(*steps[startup:])]
+
+        cv, r2 = cls.pareto_frontier(cviols,r2s)
+        if len(cv)==1: return dic[cv[0]]
+
+        dr2s = gradient(r2,cv)
+
+        for c,dr2 in reversed(list(zip(cv,dr2s))):
+            if dr2 > threshold: break
+
+        #import matplotlib.pyplot as plt # type: ignore
+        #print(c);plt.scatter(cv,r2); plt.show();import pdb;pdb.set_trace()
+
+        return dic[c]
+
+    @staticmethod
+    def pareto_frontier(Xs:list, Ys:list, maxX:bool = False, maxY:bool = True) -> T[list,list]:
+        myList = sorted([[Xs[i], Ys[i]] for i in range(len(Xs))], reverse = maxX)
+        p_front = [myList[0]]
+        for pair in myList[1:]:
+            if maxY:
+                if pair[1] >= p_front[-1][1]: p_front.append(pair)
+            else:
+                if pair[1] <= p_front[-1][1]: p_front.append(pair)
+        p_frontX,p_frontY = zip(*p_front)
+        return p_frontX, p_frontY
 
 """
 BONUS
