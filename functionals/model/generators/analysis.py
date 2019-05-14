@@ -10,7 +10,7 @@ from scipy.stats import linregress         # type: ignore
 from dbgen import (Model, Gen, Query, PyBlock, AND, Env, defaultEnv, Import,
                   Literal as Lit,  EQ, JPath, Constraint, LEFT, One, SUM, GT,
                   LIKE, CONCAT, LT, ABS, GROUP_CONCAT, NOT, NULL, Const, MAX,
-                  RIGHT, AVG, R2, COUNT)
+                  RIGHT, AVG, R2, COUNT, CASE, OR, LIKE)
 
 ################################################################################
 ################################################################################
@@ -346,13 +346,31 @@ def analysis(mod : Model) -> None:
                                           **{'r2_'+k:r2['out']})]))
     r2c,r2b,r2l = r2gens
     ########################################################################
+    cd   = dict(Hydride=['H'],III=['Al'],IV=['C','Se','As'],V=['N','V','P'],
+                VI=['S','O'],VII=['I','F','Br'])
+
+    case = CASE({OR(*[LIKE(Bulks['name'](),
+                           Lit('_%{}%'.format(v))) for v in vs]
+                   ) : Lit(k)
+                    for k,vs in cd.items()},
+                Lit('Metal'))
+
+    aq = Query(dict(b=Bulks.id(),k=case))
+
+    alloy = Gen(
+        name    = 'alloy',
+        desc    = 'Populates bulks.alloy',
+        query   = aq,
+        actions = [Bulks(bulks=aq['b'],alloy=aq['k'])]
+    )
+
 
 
     ########################################################################
     ########################################################################
     ########################################################################
 
-    gens = [xvol,isbeef,beef,exptref,eform,ce,bm,done,done2,refcontribs,ace,abm,
+    gens = [alloy,xvol,isbeef,beef,exptref,eform,ce,bm,done,done2,refcontribs,ace,abm,
             irreg,msec,mseb,msel,r2c,r2b,r2l]
 
     mod.add(gens)

@@ -83,10 +83,10 @@ atoms_rels = [Rel('job','atoms',id=True)] # Rel('potcar','atoms'),
 bulks = Obj(
    name  = 'bulks',
    desc  = 'Set of singlepoints on a particular material under strain',
-   attrs = [Attr('name',            Varchar(),  desc = 'Species nickname'),
-            Attr('n_atoms',         desc = 'Number of atoms in unit cell'),
-            Attr('n_elems',         desc = 'Number of distinct chemical species'),
-
+   attrs = [Attr('name',       Varchar(), desc = 'Species nickname'),
+            Attr('n_atoms',               desc = 'Number of atoms in unit cell'),
+            Attr('n_elems',               desc = 'Number of distinct chemical species'),
+            Attr('alloy',      Varchar(), desc = 'What type of alloy it is, if any'),
             # Figuring out if job is complete
             Attr('strain_low', Int(),     desc = 'Lowest strain with a directory for calculation'),
             Attr('strain_hi',  Int(),     desc = 'Highest strain with a directory for calculation'),
