@@ -68,8 +68,7 @@ class Functional(object, metaclass = ABCMeta):
             lab = self.name + r' ($\alpha$=%d)'%a if self.mgga else self.name
             out.append(Scatter(x   = ss,
                         y       = [self.apply(s,a) for s in ss],
-                        mode    = 'lines',
-                        name    = lab,
+                        mode    = 'lines', name    = lab,
                         line    = dict(dash    = sty,
                                        color   = color,
                                        shape   = 'spline')))
@@ -134,38 +133,6 @@ class FromMatrix(Functional):
     def mkPlots(a1:float,msb:float,**ps : str) -> None:
         Functional.plots([FromMatrix(loads(p) if isinstance(p,str) else p,a1,msb,n)
                             for n,p in ps.items()])
-
-    # def costs(self,dbpth:str,calc:int,decay:int) -> T[float,float,float,float]:
-    #     '''Returns r2_ce, r2_bm, r2_lat, and c_viol'''
-    #     with open(dbpth,'r') as f: conn = connect(**load(f),  autocommit  = True)
-    #
-    #     constraints = {n:1 for (n,) in sqlselect(conn,'SELECT name FROM const')}
-    #     fit = Fit.from_db(db=dbpth,constraints=constraints,calc_id=calc,decay=decay,dataconstr='.',bmw=0,lw=0,reg=0,cd=0)
-    #     ceX,bmX,lX,ceY,bmY,lY = fit.data
-    #     p = fit.metadata()['params']
-    #     c_A_eq,c_b_eq,c_A_lt,c_b_lt = fit.const_xy()
-    #
-    #     def relu(x : array) -> array: return x * (x > 0)
-    #     def c_lt_loss(x : array) -> float: return relu(c_A_lt @ x - c_b_lt)
-    #     def c_eq_loss(x  : array) -> float: return c_A_eq @ x - c_b_eq
-    #     def c_loss(x : array) -> float: return concat((c_lt_loss(x), c_eq_loss(x)))
-    #
-    #     rc,rb,rl =  [LinReg().fit(a @ self.x, b).score(a @ self.x, b) for a,b in
-    #                     [(ceX,ceY),(bmX,bmY),(lX,lY)]]
-    #     return rc,rb,rl,c_loss(self.x)
-
-    # def spaghetti(self)->np.array:
-    #     #Effective number of degrees of freedom gives a scale of the ensemble
-    #     #temperature T something to play with, controls the Spaghetti spread
-    #     #----------------------------------------------------------------------
-    #     Ndeg = 2.5                          # Equation 8 (for actual formula)
-    #     min_cost = 0.5 * np.sum(self.functional().resid(self.data)[0]**2)     # Equation 9
-    #     T   = 2. * min_cost / Ndeg          # Equation 11b
-    #     A   = np.dot(self.data.x.T,self.data.x) / T
-    #     l,U = np.linalg.eigh(A)
-    #     L   = np.diag(1./np.sqrt(l))
-    #     M   = np.dot(U,L)  # ensemble information
-    #     return M
 
 ################################################################################
 ################################################################################
@@ -239,7 +206,7 @@ MS2 = FromFunc('MS2',fxMS2)
 
 # From data
 #----------
-with open(join(environ['FUNCTIONALS_ROOT'],'data/beef.json'),'r') as f:
+with open(join(environ['FUNCTIONALS_ROOT'],'data/beefs/beef.json'),'r') as f:
     beefcoeff = array(load(f))
 
 BEEF = FromMatrix(beefcoeff.reshape(8,8),a1=float('inf'),msb=1,name='beef')

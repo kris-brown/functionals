@@ -1,0 +1,25 @@
+ENCUT = {Calc.pw}.000000
+SIGMA = {Calc.sigma}
+METAGGA = {Calc.xcshow}
+PREC = ACCURATE
+EDIFF=1E-6
+ALGO = A
+ISMEAR = 0
+NPAR = 1
+NELM = 800
+IBRION = -1
+ISTART = 1
+LCHARG = .TRUE.
+LBEEFENS = .TRUE.
+ADDGRID = .TRUE.
+LASPH = .TRUE.
+LWAVE = .FALSE.
+
+A11 = {Calc.a11}
+A12 = {Calc.a12}
+A13 = {Calc.a13}
+A14 = {Calc.a14}
+A15 = {Calc.a15}
+MSB = {Calc.msb}
+
+{magmom}

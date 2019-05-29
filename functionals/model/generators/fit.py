@@ -6,12 +6,13 @@ from os.path import join
 
 # Internal Modules
 from dbgen import (Model, Gen, Query, PyBlock, Expr, Literal as Lit, REGEXP, BINARY,
-                    GROUP_CONCAT as GC, CONCAT as C, COALESCE, COUNT, EQ,
-                    flatten, Env, Import, defaultEnv, Const, Constraint, JPath)
+                    GROUP_CONCAT as GC, CONCAT as C, COALESCE, COUNT, EQ, CONVERT, Text,
+                    flatten, Env, Import, defaultEnv, Const, Constraint, JPath,
+                    GROUP_CONCAT)
 
-from functionals.fit import Fit as FitObj , FromMatrix #Functional,BEEF
 from functionals.scripts.fit.h_norm_const     import  one_time_function
 from functionals.scripts.fit.opt              import  opt
+from functionals.scripts.fit.db_data          import  db_data
 
 ############################################################################
 ############################################################################
@@ -22,34 +23,58 @@ def fit(mod : Model) -> None:
     # Extract tables
 
     # Extract tables
-    tabs = ['fit','calc','fitparams','beef']
-    Fit, Calc, Fitparams,BEEF = map(mod.get, tabs) # type: ignore
+    tabs = ['fit','job','calc','fitparams','functional','beef','bulks']
+    Fit, Job,Calc, Fitparams,Fx,BEEF,Bulks = map(mod.get, tabs) # type: ignore
 
     # Extract rels
-    beef__functional,calc__functional,fit__calc = map(mod.get_rel,
-        [BEEF.r('functional'),Calc.r('functional'),Fit.r('calc')])
+    beef__functional,calc__functional,fit__calc,bulks__job,job__calc = map(mod.get_rel,
+        [BEEF.r('functional'),Calc.r('functional'),Fit.r('calc'),Bulks.r("job"),Job.r('calc')])
     ############################################################################
     ############################################################################
     ############################################################################
-    resid_cols = ['decaycosts','mse_ce','mse_bm','mse_lat','r2_ce','r2_bm','r2_lat']
-    f_env      = defaultEnv + Env(Import('functionals.fit.fit',Fit='FitObj'))
+    fxpth = JPath('functional',[calc__functional])
+    bpth = JPath('bulks',[bulks__job,job__calc])
+    fdgbs = dict(zip('abcdefghijk',['a_ce','a_bm','a_l','b_ce','b_bm','b_l',
+                                    'expt_ce','expt_bm','expt_vol','name','ce']))
+    fddict = {k:GROUP_CONCAT(COALESCE(CONVERT(Bulks[v](bpth),Text()),Lit('')),delim='$')
+                for k,v in fdgbs.items()}
+    fdq = Query(exprs = dict(z=Calc.id(),**fddict),
+                basis = [Calc],
+                aggcols= [Calc.id()],
+                opt_attr = [Bulks[v](bpth) for v in fdgbs.values()],
+                constr = Fx['beef'](fxpth))
+    fdpb = PyBlock(db_data,args=[fdq[x] for x in 'abcdefghijk'])
+    fitdata = Gen(
+        name = 'fitdata',
+        desc = 'Assembles all BEEF data into objects for fitting',
+        query = fdq,
+        funcs = [fdpb],
+        actions = [Calc(calc=fdq['z'],fitdata=fdpb['out'])]
+    )
+    ############################################################################
+    resid_cols = ['result','decaycosts','c_viol','mse_ce','mse_bm','mse_lat']
 
-    # def f_resid(db:str,x:str,c:int)->T[str,float,float,float,float,float,float,float]:
-    #     return db=db,x=x,calc=c)
 
-    fc = JPath("calc", [fit__calc])
+    rq = Query(dict(f = Fit.id(),
+                    **{'t%d'%i : Fit['traj%d'%i]() for i in range(5)}))
 
-    rq = Query(exprs = dict(f = Fit.id(),
-                            p = Fit['pth'](),
-                            x = Fit['result']()),
-               basis = ['fit'])
 
-    def rf(p : str, x : str) -> T[str,float,float,float,float,float,float,]:
-        return FitObj.from_json(p).allcosts(x)
+    def rf(*ts:str) -> T[str,str,float,float,float,float]:
+        res,dc = [],[]
+        for i,t in enumerate(map(loads,ts)):
+            o = t['opt']
+            res.append(t['x'][o])
+            dc.append(t['cost'][o])
+            if i == 2:
+                cviol = t['cviol_all'][o]
+                msece = t['ce'][o]
+                msebm = t['bm'][o]
+                mselc = t['lc'][o]
+        return dumps(res),dumps(dc),cviol,msece,msebm,mselc
 
     rpb = PyBlock(rf,
-                   env  = f_env,
-                   args = [rq['p'],rq['x']],
+                  # env  = f_env,
+                   args = [rq['t%d'%i] for i in range(5)],
                    outnames = resid_cols)
 
     resid =                                                                     \
@@ -61,54 +86,9 @@ def fit(mod : Model) -> None:
             actions = [Fit(fit=rq['f'],
                            **{x:rpb[x] for x in resid_cols})])
 
-    ########################################################################
-    oq = Query(exprs = dict(f = Fit.id(),
-                            p = Fit['pth']()))
-    opb = PyBlock(opt,args=[oq['p']],outnames=['opt','result'])
-    optg =                                                                     \
-        Gen(name    = 'opt',
-            query   = oq,
-            funcs   = [opb],
-            tags    = ['fit'],
-            actions = [Fit(fit   = oq['f'],
-                           opt = opb['opt'],result=opb['result'])])
-
-    ########################################################################
-    # Common queries
-
-    def cf(p : str, x : str) -> str:
-        x_ = np.array(loads(x)[2])
-        return dumps(FitObj.from_json(p).allviols(x_,2))
-
-    cvpb = PyBlock(cf, env  = f_env, args=[rq[x] for x in 'px'])
-
-    cviol =                                                                     \
-        Gen(name    = 'cviol',
-            query   = rq,
-            funcs   = [cvpb],
-            tags    = ['fit'],
-            actions = [Fit(fit = rq['f'], c_viol = cvpb['out'])])
-
-    ########################################################################
-    def f_score(r2ce:float, r2bm:float, r2lat:float, cviol:float) -> float:
-        c,b,l,v = map(float,[r2ce,r2bm,r2lat,cviol])
-        return 2*c + b + l - v/5
-
-    sq   = Query({'f':Fit.id(),
-                 **{x:Fit[x]() for x in resid_cols[-4:]}})
-    spb  = PyBlock(f_score, args = [sq[x] for x in resid_cols[-4:]])
-    score =                                                                     \
-        Gen(name    = 'score',
-            desc    = 'Computes Fit.score',
-            query   = sq,
-            funcs   = [spb],
-            tags    = ['fit'],
-            actions = [Fit(fit   = sq['f'],
-                           score = spb['out'])])
-    ############################################################################
 
     ############################################################################
     ############################################################################
     ############################################################################
-    gens = [optg,score,resid,cviol]
+    gens =  [resid,fitdata]
     mod.add(gens)

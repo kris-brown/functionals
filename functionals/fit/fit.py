@@ -1,5 +1,12 @@
 # External
-from typing       import Dict as D, List as L, Tuple as T, Any, Optional as O, Callable as C
+from typing import (Any,
+                    Set      as S,
+                    Dict     as D,
+                    List     as L,
+                    Tuple    as T,
+                    Optional as O,
+                    Callable as C)
+
 from ast          import literal_eval
 from time         import time
 from os.path      import join
@@ -13,7 +20,6 @@ from contextlib   import redirect_stdout
 from traceback    import format_exc
 from contextlib   import contextmanager
 from hashlib      import sha512
-from random       import shuffle
 
 from numpy          import (ndarray,average,empty,tile,eye,sum,ones,array,linspace,inf,  # type: ignore
                             zeros,inf,vstack,concatenate as concat,diag, multiply,
@@ -22,15 +28,45 @@ from numpy.linalg   import lstsq,norm,inv,LinAlgError      # type: ignore
 
 from scipy.optimize import least_squares                   # type: ignore
 
-from scipy.stats import linregress         # type: ignore
-from psycopg2    import connect # type: ignore
+from scipy.stats        import linregress         # type: ignore
+from psycopg2           import connect # type: ignore
+from plotly.offline     import plot # type: ignore
+from plotly.graph_objs  import Scatter, Figure, Layout, Bar # type: ignore
 
 # Internal
-from functionals.fit.constraint           import Constraint,lda,liebox,scan11,pos,hnorm
-from functionals.fit.data                 import process_data,weight
+from functionals.fit.constraint import Constraint,all_cons
+from functionals.fit.data       import Data, Datum
 
 Connection = Any
 Arrs       = L[array]
+################################################################################
+# CONSTANTS
+###########
+root = __file__.split('functionals')[0]
+
+beef = array([
+    1.18029330e+00,8.53027860e-03,-1.02312143e-01,6.85757490e-02,-6.61294786e-03,-2.84176163e-02,5.54283363e-03,3.95434277e-03,
+    -1.98479086e-03,1.00339208e-01,-4.34643460e-02,-1.82177954e-02,1.62638575e-02,-8.84148272e-03,-9.57417512e-03,9.40675747e-03,
+    6.37590839e-03,-8.79090772e-03,-1.50103636e-02,2.80678872e-02,-1.82911291e-02,-1.88495102e-02,1.69805915e-07,-2.76524680e-07,
+    1.44642135e-03,-3.03347141e-03,2.93253041e-03,-8.45508103e-03,6.31891628e-03,-8.96771404e-03,-2.65114646e-08,5.05920757e-08,
+    6.65511484e-04,1.19130546e-03,1.82906057e-03,3.39308972e-03,-7.90811707e-08,1.62238741e-07,-4.16393106e-08,5.54588743e-08,
+    -1.16063796e-04,8.22139896e-04,-3.51041030e-04,8.96739466e-04,2.09603871e-08,-3.76702959e-08,2.36391411e-08,-3.38128188e-08,
+    -5.54173599e-06,-5.14204676e-05,6.68980219e-09,-2.16860568e-08,9.12223751e-09,-1.38472194e-08,6.94482484e-09,-7.74224962e-09,
+    7.36062570e-07,-9.40351563e-06,-2.23014657e-09,6.74910119e-09,-4.93824365e-09,8.50272392e-09,-6.91592964e-09,8.88525527e-09])
+
+bias = array([1.3**(x%8 + x//8) for x in range(64)]) # unequally weigh matrix elements
+
+q2 = '''SELECT ce_scale,bm_scale,lc_scale,reg,consts
+        FROM fitparams WHERE fitparams_id = %s'''
+
+q3 = '''SELECT a_ce,a_bm,a_l,b_ce,b_bm,b_l,expt_ce,expt_bm,expt_vol,name,ce
+        FROM bulks JOIN job ON job=job_id
+        WHERE calc = %s'''
+
+q4 = '''SELECT pw,data,a11,a12,a13,a14,a15,msb
+        FROM calc C JOIN beef B ON B.functional = C.functional
+        WHERE calc_id = %s'''
+
 ################################################################################
 # Helper functions
 #-----------------
@@ -42,298 +78,306 @@ def sqlselect(conn : Connection, q : str, binds : list = []) -> L[tuple]:
 
 def hash_(x : Any)->str: return sha512(str(x).encode()).hexdigest()[:10]
 
-
-bias = array([2**(x%8 + x//8) for x in range(64)]) # unequally weigh matrix elements
-
 def safeLoad(x:Any)->Any: return x if x is None else loads(x)
 
-q2 = '''SELECT bm_weight,lat_weight,reg,consts
-        FROM fitparams WHERE fitparams_id=%s'''
+###############################################################################
+# Classes
+#########
 
-q3 = '''SELECT a_ce,a_bm,a_l,b_ce,b_bm,b_l,expt_ce,expt_bm,expt_vol,name
-        FROM bulks JOIN job on job=job_id
-        WHERE calc = %s'''
+class Traj(object):
+    '''
+    Result of fitting: sequence from unconstrained to overconstrained solutions
+    '''
+    threshold = -1 # optimimum-point-finding parameter
 
-q4 = '''SELECT pw,econv,data,a11,a12,a13,a14,a15,msb
-        FROM calc C JOIN beef B on B.functional = C.functional
-        WHERE calc_id = %s'''
+    def __init__(self,
+                 data     : Data,
+                 cons     : C[[array,bool],float],
+                 ces : float, bms : float, lcs : float
+                 ) -> None:
+        self.data  = data
+        self.cons  = cons
+        self.ces = ces; self.bms = bms; self.lcs = lcs
+
+        # Initialize internal state
+        self.errs = {x:[] for x in ['cost','ce','bm','lc','vol','cviol','cviol_all']} # type: D[str,L[float]]
+        self.xs   = [] # type: L[array]
+        self.time = time()
+        # self._opt = None # type: O[int]
+        self.done = False
+
+    def __len__(self)->int:
+        return len(self.xs)
+
+    def __eq__(self,other:object)->bool:
+        return False if not isinstance(other,Traj) else \
+                (self.xs,self.errs) != (other.xs,other.errs)
+
+    # Serialization/Deserialization
+    def to_dict(self)->dict:
+        return {**dict(x    = [x.tolist() for x in self.xs],
+                       time = self.time, opt = self.opt, bms = self.bms,
+                       ces = self.ces, lcs = self.lcs),**self.errs,}
+
+    @classmethod
+    def from_dict(cls,d:dict,datapth:str=None,decay:int=None)->'Traj':
+        '''
+        Load a completed traj instance (cannot add any more data, which would require a Fit object)
+        '''
+        if datapth:
+            assert decay is not None
+            with open(datapth,'r') as f: data = Data.from_list(load(f)[decay])
+        else:
+            assert decay is None
+            data = Data(set())
+
+        t = cls(data,lambda x,y:0.,d['ces'],d['bms'],d['lcs'])
+        t.xs = d['x']; t.time = d['time']
+        for k in ['cost','ce','bm','lc','cviol','cviol_all']:
+            t.errs[k] = d[k]
+        t._opt = t.getopt()
+        t.done = True
+        return t
+
+    def add(self,x:array)->None:
+        '''
+        Add a step to the trajectory. Compute metrics upon insert
+        '''
+        assert not self.done
+        keys = ['ce','bm','vol','lc']
+        scale = dict(ce=self.ces,bm=self.bms,vol=self.lcs)
+        self.xs.append(x)
+        for k in keys:
+            self.errs[k].append(self.data.mse(x,k))
+
+        self.errs['cost'].append(sum([self.errs[k][-1]/scale[k] if scale[k]>0 else 0
+                                      for k in keys[:3]]))
+        viol    = self.cons(x,False)
+        allviol = self.cons(x,True)
+        self.errs['cviol'].append(viol); self.errs['cviol_all'].append(allviol)
+
+        # COMMENT OUT LATER
+        # if len(self)%500 == 1:
+        #     print('\n%d'%len(self))
+        #     for k in keys: print(k,self.errs[k][-1])
+        #     self.resid(['lc'],step=len(self.xs)-1)
+        #     import pdb;pdb.set_trace()
+
+    def end(self)->None:
+        '''Call this when an optimization is finished'''
+        self.time = time() - self.time
+        self._opt = self.getopt()
+        self.done = True
+
+    @property
+    def x(self)->array:
+        '''The "current" state of the trajectory'''
+        return array(self.xs[-1])
+
+    @property
+    def opt(self)->int:
+        '''
+        Only compute optimum of constraint/error tradeoff once
+        '''
+        assert self.done; assert self._opt is not None
+        return self._opt
+
+    def getopt(self) -> int:
+        '''
+        Identify an optimum value (index) along the trajectory
+        '''
+        warnings.filterwarnings('ignore')
+        try:
+            cost,cviol = self.errs['cost'],self.errs['cviol']
+            dic = {c : i for i,c in enumerate(cviol)} # remove duplicates
+            cv, cs = self.pareto_frontier(cviol,cost)
+            if len(cv)<3: return dic[cv[0]]
+            dcosts = gradient(cs,cv)
+            for c,dcost in zip(cv,dcosts):
+                if dcost > self.threshold: break
+            #import matplotlib.pyplot as plt # type: ignore
+            #print(c);plt.scatter(cviol,cost); plt.show();import pdb;pdb.set_trace()
+            return dic[c]
+        except Exception as e:
+            print(e);import pdb;pdb.set_trace();assert False
+
+    @staticmethod
+    def pareto_frontier(Xs:list, Ys:list, maxX:bool = False, maxY:bool = False) -> T[list,list]:
+        '''
+        By default, get lower left corner of a curve
+        '''
+        myList = sorted([[Xs[i], Ys[i]] for i in range(len(Xs))], reverse = maxX)
+        p_front = [myList[0]]
+        for pair in myList[1:]:
+            if maxY:
+                if pair[1] >= p_front[-1][1]: p_front.append(pair)
+            else:
+                if pair[1] <= p_front[-1][1]: p_front.append(pair)
+        p_frontX, p_frontY = zip(*p_front)
+        return p_frontX, p_frontY
+
+    def plot(self,met:str)->Figure:
+        '''
+        Plots a metric over the trajectory
+        '''
+        assert met in ['ce','bm','lc','vol','cost']
+        xs = self.errs['cviol']
+        ys = self.errs[met]
+        data = [Scatter(x=xs,y=ys,name='fit',mode='markers',
+                             text = [str(x) for x in range(len(xs))],
+                             hoverinfo = 'text')]
+        annotations =[dict(x=xs[self.opt], y=ys[self.opt],xref ='x',yref='y',text='opt')]
+
+        layout = Layout(title= 'Trajectory of constrained optimization', hovermode= 'closest',
+                        xaxis= dict(title= 'Constraint Violation', ticklen= 5, zeroline= False, gridwidth= 2),
+                        yaxis= dict(title= met, ticklen= 5, gridwidth= 2,),
+                        annotations = annotations)
+
+        fig = Figure(data=data,layout=layout)
+        plot(fig,filename='temp0.html')
+        return Figure
+
+    def resid(self, met:L[str]=None, step:int=None, scale : dict = None)->None:
+        '''
+        Plots residual BarPlot across all materials
+        '''
+        assert len(self.data)>0, 'need data'
+        mets = met or ['ce','bm','lc']
+        scales = {} if scale is None or len(mets)==1 else scale
+        data = []
+        s = step if step is not None else self.opt
+        x = array(self.xs[s])
+        for m in mets:
+            mats,ys = [],[]
+            for mat,d in sorted(getattr(self.data,m).items()):
+                mats.append(mat); ys.append( d.err(x) / scales.get(m,1) )
+            data.append(Bar(x=mats,y=ys,name=m))
+        if scales:
+            args = [scales.get(x,1) for x in ['ce','bm','lc']]
+            scalestr = '(scaled ce/{},bm/{},lc/{})'.format(*args)
+        else:
+            scalestr = ''
+        layout = Layout(title= 'Residuals '+scalestr, hovermode= 'closest',
+                        xaxis= dict(title= 'Material'),
+                        yaxis= dict(title= 'Error', ticklen= 5, gridwidth= 2,))
+
+        fig = Figure(data=data,layout=layout)
+        plot(fig,filename='temp0.html')
+        return Figure
+
 
 class Fit(object):
     """
     Fit a 8 x 8 matrix of coefficients corresponding to Legendre polynomial
     basis functions to DFT data + constraints
     """
-
     def __init__(self,
-                 cons : L[str],
-                 calc : dict,
-                 bmw  : float, lw   : float, reg  : float,
-                 ceX : list, bmX : list, lX : list,
-                 ceB : list, bmB : list, lB : list,
-                 ceY : list, bmY : list, lY : list,
-                 pre_ce : float, pre_bm : float, pre_l : float,
-                 c_A_eq: list,c_b_eq: list, c_A_lt: list, c_b_lt: list,
-                 C_A_eq: list,C_b_eq: list, C_A_lt: list, C_b_lt: list,
-                 X:list,Y:list) -> None:
+                 # DFT parameters
+                 calc : dict, data : T[Data,Data,Data,Data,Data],
+                 # Fit hyperparameters
+                 cons : L[str], reg  : float,
+                 cescale  : float, bmscale : float, lcscale : float,
+                 ) -> None:
+        self.data = data; self.calc = calc
+        self.cons = set(cons); self.lam_reg = reg;
+        self.cescale = cescale; self.bmscale = bmscale; self.lcscale = lcscale
 
-        self.cons = cons
-        self.calc = calc
-        self.bmw = bmw; self.lw = lw; self.lam_reg = reg;
+        #print('force only CE')
+        #self.cescale=0.1;self.bmscale = 0; self.lcscale = 0;
 
-        self.pre_ce,self.pre_bm,self.pre_l = pre_ce, pre_bm, pre_l
+        self.c_A_eq, self.c_b_eq, self.c_A_lt, self.c_b_lt = Constraint.const_xy(calc['msb'],calc['decays'],cons)
+        self.C_A_eq, self.C_b_eq, self.C_A_lt, self.C_b_lt = Constraint.const_xy(calc['msb'],calc['decays'])
 
-
-        self.ceY, self.bmY, self.lY,\
-        self.c_b_eq,self.c_b_lt,self.C_b_eq,self.C_b_lt\
-            = map(array, [ceY, bmY, lY,c_b_eq,c_b_lt,C_b_eq,C_b_lt])
-
-        self.ceX, self.bmX, self.lX, self.ceB, self.bmB, self.lB, \
-        X,Y \
-          = [[array(x[i]) for i in range(5)] for x in
-            [ceX, bmX, lX, ceB, bmB, lB,
-             X,Y]]
-
-        self.X,self.Y = [],[] # type: T[list,list]
-        for i in range(5):
-            zeros = npall(X[i]==0,axis=1)
-            self.X.append(X[i][~zeros,:]); self.Y.append(Y[i][~zeros])
-
-        self.c_A_eq, self.c_A_lt, self.C_A_eq, self.C_A_lt,\
-          = [[array(x[i]) if x[i] else empty((0,64)) for i in range(5)] for x in
-            [c_A_eq, c_A_lt, C_A_eq, C_A_lt]]
-
-        self.kwargs = dict(method   = 'trf',
-                           ftol = 1e-12, xtol = 1e-12, gtol = 1e-12,
-                           x_scale  = 'jac',
-                           loss     = 'linear',
-                           max_nfev = 50000,
-                           verbose  = 0) # type: dict
-
-
-        # Validate X and Y #
-        ### DON'T DO THIS IF WE FILTER OUT ZEROS!
-        # ce_avg,bm_avg,l_avg = [abs(average(x)) for x in [self.ceY,self.bmY,self.lY]]
-        # pre = [1 /  ce_avg,  self.bmw * ce_avg / bm_avg, self.lw * ce_avg / l_avg]
-        # for i in range(5):
-        #     X = vstack([a[i]*b for a,b in zip([self.ceX,self.bmX,self.lX],pre)])
-        #     assert array_equal(self.X[i],X)
+        # Constant parameters for least_squares
+        self.kwargs = dict(method   = 'trf',ftol = 1e-12, xtol = 1e-12, gtol = 1e-12,bounds = ([-float('inf')]*64,[float('inf')]*64),
+          x_scale  = 'jac', loss     = 'linear', max_nfev = 50000, verbose  = 0) # type: dict
 
     def __eq__(self, other : object) -> bool:
+        fields = ['calc','cons','reg','cescale','bmscale','lcscale','data']
         return False if not isinstance(other,Fit) else \
-             all([self.calc         == other.calc,
-                  self.cons         == other.cons,
-                  self.bmw          == other.bmw,
-                  self.lw           == other.lw,
-                  self.lam_reg      == other.lam_reg,
-                  self.pre_ce       == other.pre_ce,
-                  self.pre_bm       == other.pre_bm,
-                  self.pre_l        == other.pre_l,
-                  array_equal(self.ceY, other.ceY),
-                  array_equal(self.bmY, other.bmY),
-                  array_equal(self.lY, other.lY),
-                  array_equal(self.ceX,other.ceX),
-                  array_equal(self.bmX,other.bmX),
-                  array_equal(self.lX,other.lX),
-                  array_equal(self.ceB,other.ceB),
-                  array_equal(self.bmB,other.bmB),
-                  array_equal(self.lB,other.lB),
-                  array_equal(self.c_A_eq,other.c_A_eq),
-                  array_equal(self.c_A_lt,other.c_A_lt),
-                  array_equal(self.C_A_eq,other.C_A_eq),
-                  array_equal(self.C_A_lt,other.C_A_lt),
-                  array_equal(self.Y,other.Y),
-                  array_equal(self.X,other.X)])
-
-    @property
-    def beef(self)->array:
-        return array([
-            1.18029330e+00,8.53027860e-03,-1.02312143e-01,6.85757490e-02,-6.61294786e-03,-2.84176163e-02,5.54283363e-03,3.95434277e-03,
-            -1.98479086e-03,1.00339208e-01,-4.34643460e-02,-1.82177954e-02,1.62638575e-02,-8.84148272e-03,-9.57417512e-03,9.40675747e-03,
-            6.37590839e-03,-8.79090772e-03,-1.50103636e-02,2.80678872e-02,-1.82911291e-02,-1.88495102e-02,1.69805915e-07,-2.76524680e-07,
-            1.44642135e-03,-3.03347141e-03,2.93253041e-03,-8.45508103e-03,6.31891628e-03,-8.96771404e-03,-2.65114646e-08,5.05920757e-08,
-            6.65511484e-04,1.19130546e-03,1.82906057e-03,3.39308972e-03,-7.90811707e-08,1.62238741e-07,-4.16393106e-08,5.54588743e-08,
-            -1.16063796e-04,8.22139896e-04,-3.51041030e-04,8.96739466e-04,2.09603871e-08,-3.76702959e-08,2.36391411e-08,-3.38128188e-08,
-            -5.54173599e-06,-5.14204676e-05,6.68980219e-09,-2.16860568e-08,9.12223751e-09,-1.38472194e-08,6.94482484e-09,-7.74224962e-09,
-            7.36062570e-07,-9.40351563e-06,-2.23014657e-09,6.74910119e-09,-4.93824365e-09,8.50272392e-09,-6.91592964e-09,8.88525527e-09])
-
-    all_cons = dict(lda    = lda,
-                    liebox = liebox,
-                    scan11 = scan11,
-                    pos    = pos,
-                    hnorm  = hnorm) # type: D[str,Constraint]
-
-    @property
-    def constraints(self)->L[Constraint]:
-        return [self.all_cons[x] for x in self.cons]
+             all([getattr(self,x)==getattr(other,x) for x in fields])
 
     ###############
     # MAIN METHOD #
     ###############
-    def cv(self, n : int = 30) -> L[float]:
-        '''Cross validate on 30 random 50/50 splits of the data'''
-        result  = []
-        nx      = len(self.X[0])
-        allinds = list(range(nx))
+    def cv(self, n : int = 30) -> D[str,L[float]]:
+        '''
+        Cross validate on 30 random 50/50 splits of the data
+        '''
+        keys = ['ce','bm','lc']
+        results  = {k:[] for k in keys} # type: D[str,L[float]]
         for i in range(n):
             print('cv %d'%i)
-            shuffle(allinds)
-            traininds,testinds = allinds[:nx//2],allinds[nx//2:]
-            fitresult = self.fit(traininds)[2] # care about last step of i=2
-            optfit    = self.opt([(r,c) for _,r,c in fitresult])
-            opt_x     = fitresult[optfit][0]
-            testX,testY = self.X[2][testinds,:], self.Y[2][testinds]
-            result.append(self.r2avg(opt_x,2))
+            train,test = self.data[2].split()
+            fitresult  = self.fit(2,train) # care about last step of i=2
+            opt_x      = fitresult.xs[fitresult.opt]
+            for k in keys: results[k].append(test.mse(opt_x,k))
+        return results
 
-        return result
-
-    def fit(self,traininds : L[int] = None)->list:
+    def fit(self, i : int, data_ : Data = None) -> Traj:
         '''
-        Returns: trajectory of solutions until convergence [(coefs,r2,constr)]
-        trainfrac - which subset of the training data to use (default: All of it)
+        Returns: trajectory of solutions until convergence
         '''
+        data = data_ or self.data[i] # default: use all data
+        t = Traj(data,lambda x,a: sum(abs(self.c_loss(x,i,a))),self.cescale,self.bmscale,self.lcscale)
 
-        # initialize
-        start_time = time()
-        allsols    = []
-        for i in range(5):
-            beefsols = [self.beef.tolist(),
-                        self.r2avg(self.beef,i),
-                        norm(self.c_loss(self.beef,i))]
+        X,Y = data.xy(self.cescale,self.bmscale,self.lcscale)
 
-            if traininds:
-                if i != 2: allsols.append([beefsols]); continue # we only do training on i == 2
-                X = self.X[i][traininds,:]
-                Y = self.Y[i][traininds]
-            else:
-                X,Y = self.X[i], self.Y[i]
+        #print('adding BEEF instead')
+        #t.add(beef);import pdb;pdb.set_trace()
+        t.add(lstsq(X,Y,rcond=None)[0])
+        dx,constr  = 0.,1e-10    # negligible constraints initially
+        c_reg      = self.lam_reg/10000 # initial regularization penalty = 1/1000 of final
 
-            x0         = lstsq(X,Y,rcond=None)[0]
-            dx         = float('inf')
-            c_reg      = self.lam_reg/10000 # initial regularization penalty = 1/1000 of final
-            constr     = 1e-10               # negligible constraints initially
-            sols       = [beefsols]
-            bounds     = ([-dx]*64,[dx]*64)#([-2.]+[-0.5] * 63, [2.]+[0.5]* 63)
+        # break when constraints are high AND negligible change in x
+        while (constr < 1e5) or (dx > self.kwargs['xtol']):
+            # Do fitting
+            kwargs = dict(Xmat = X, Y = Y, constr = constr, c_reg = c_reg, i = i)
+            res = least_squares(self.cost, t.x, jac = self.dcost, kwargs = kwargs, **self.kwargs)
+            # Do updates
+            dx      = norm(res.x - t.x)          # how much has solution changed
+            c_reg  += (self.lam_reg - c_reg) / 5 # asymptotically increase regularization
+            constr *= 1.01                       # increase constraints
+            t.add(res.x)                         # update trajectory
 
-            # main loop - break when constraints are high AND negligible change in x
-            while (constr < 1e5) or (dx > self.kwargs['xtol']):
-                # Do fitting
-                kwargs = dict(Xmat = X, Y = Y, constr = constr, c_reg = c_reg, i = i)
-                res = least_squares(self.cost, x0, jac = self.dcost, bounds=bounds, kwargs = kwargs,**self.kwargs)#try: except LinAlgError:
-                # Do updates
-                sols.append([x0.tolist(),self.r2avg(x0,i),norm(self.c_loss(x0,i))])
-                dx      = norm(res.x - x0)            # how much has solution changed
-                x0      = res.x                       # overwrite previous solution
-                c_reg  += (self.lam_reg - c_reg) / 5 # asymptotically increase regularization
-                constr *= 1.01                           # increase constraints
-            allsols.append(sols)
-        tottime = time() - start_time # currently do nothing with this
-        assert len(allsols)==5
-        return allsols
+        t.end()
+        return t
 
-    def costs(self, x : Arrs) -> T[L[float],L[float],L[float],L[float],L[float],L[float]]:
-        '''Returns the following metrics: MSE - cohesive (eV), bulkmod (GPa),
-          lattice (A), three r2 values, and constraint violation'''
-        from numpy.linalg import norm
-
-        yys = [([ce@X+b for X,b,ce in zip(x,self.ceB,self.ceX)],   self.ceY),
-               ([bm@X+b for X,b,bm in zip(x,self.bmB,self.bmX)],   self.bmY),
-               ([lx@X+b for X,b,lx in zip(x,self.lB,self.lX)],     self.lY)] # convert volume -> lattice constant
-
-        (rces,ces),(rbms,bms),(rls,ls) = [([linregress(y_,y)[2]**2 for y_ in yy_],
-                                           [average((y_ - y)**2)    for y_ in yy_])
-                                            for yy_,y in yys]
-
-        return ces,bms,ls,rces,rbms,rls
-
-    def midcosts(self, x : Arrs) -> T[float,float,float,float,float,float]:
-        '''Returns the cost metrics but only for the central functional (a1 = a13)'''
-        ce,bm,l,rce,rbm,rl = [x[2] for x in self.costs(x)]
-        return ce,bm,l,rce,rbm,rl
-
-    def decaycosts(self,  x : str) -> T[float,float,float,float,float]:
-        '''Weighted average R2 value for the 5 decays'''
-        x_ = [array(y) for y in loads(x)]
-        x1,x2,x3,x4,x5 = [self.r2avg(x__,i) for i,x__ in enumerate(x_)]
-        return x1,x2,x3,x4,x5
-
-    def allcosts(self, x : str) -> T[str,float,float,float,float,float,float]:
-        '''Combine midcosts and decay costs information'''
-        x_ = [array(y) for y in loads(x)]
-        ces,bms,ls,rces,rbms,rls = self.costs(x_)
-        x1,x2,x3,x4,x5 = [(r1+r2+r3)/3 for r1,r2,r3 in zip(rces,rbms,rls)]
-        ce,bm,l,rce,rbm,rl = [min(x[2],10**13) for x in [ces,bms,ls,rces,rbms,rls]]
-        return dumps([x1,x2,x3,x4,x5]),ce,bm,l,rce,rbm,rl
-
-    def allviols(self, x : array, decay : int) -> D[str,float]:
-        '''Report all constraint violation magnitudes'''
-        out = dict(tot=0.)
-        for k,v in self.all_cons.items():
-            out[k]  = v.viol(x,self.calc['decays'][decay],self.calc['msb'])
-            if k in self.cons:
-                out['tot']       += out[k] * v.weight
-        return out
 
     ################
     # CONSTRUCTORS #
     ################
     @classmethod
-    def from_db(cls,
-                db      : str,
-                fp_id   : int,
-                calc_id : int,
-               )->'Fit':
+    def from_db(cls, db : str, fp_id : int, calc_id : int)->'Fit':
         with open(db,'r') as fi:
             kwargs = load(fi)
             kwargs['dbname']=kwargs.pop('db'); kwargs['password']=kwargs.pop('passwd')
             conn = connect(**kwargs)
 
         # Extract fitting parameters
-        bmw_,lw_,reg_,constrs_ = sqlselect(conn,q2,[fp_id])[0]
+        ces,bms,lcs,reg_,constrs_ = sqlselect(conn,q2,[fp_id])[0]
         constraints = constrs_.split()
-        bmw,lw,reg = map(float,[bmw_,lw_,reg_])
+        ce_scale,bm_scale,lc_scale,reg = map(float,[ces,bms,lcs,reg_])
 
         # Extract calculation parameters
-        pw_,econv_,fx_,a1_,a2_,a3_,a4_,a5_,msb_ = sqlselect(conn,q4,[calc_id])[0]
-        pw,econv,a11,a12,a13,a14,a15,msb = map(float,[pw_,econv_,a1_,a2_,a3_,a4_,a5_,msb_])
-        calc = dict(pw=pw,econv=econv,decays=[a11,a12,a13,a14,a15],msb=msb,fx=loads(fx_))
+        pw_,fx_,a1_,a2_,a3_,a4_,a5_,msb_ = sqlselect(conn,q4,[calc_id])[0]
+        pw,a11,a12,a13,a14,a15,msb = map(float,[pw_,a1_,a2_,a3_,a4_,a5_,msb_])
+        calc = dict(pw=pw,decays=[a11,a12,a13,a14,a15],msb=msb,fx=loads(fx_))
 
         # Extract fitted data
-        ceX,bmX,lX,ceB,bmB,lB,ceY,bmY,lY,pre_ce,pre_bm,pre_l = cls.data_xy(db=conn,calc=calc_id,fx=calc['fx'],bmw=bmw,lw=lw)
+        data = cls.db_data(db=conn,calc=calc_id)
 
-        c_A_eq,c_b_eq, c_A_lt,c_b_lt = Constraint.const_xy([cls.all_cons[x] for x in constraints],msb,calc['decays'])
-        C_A_eq,C_b_eq,C_A_lt,C_b_lt = Constraint.const_xy(list(cls.all_cons.values()),msb,calc['decays'])
-
-        X = [vstack((pre_ce * array(xc),
-                     pre_bm * array(xb),
-                     pre_l  * array(xl))).tolist()
-             for xc,xb,xl in  zip(ceX,bmX,lX)]
-
-        Y = [concat((pre_ce * (array(ceY) - array(bc)),
-                     pre_bm * (array(bmY) - array(bb)),
-                     pre_l  * (array(lY)  - array(bl)))).tolist()
-             for bc,bb,bl in zip(ceB,bmB,lB)]
-
-        return cls(cons = constraints, calc=calc, bmw=bmw, lw=lw,
-                   reg = reg, ceX=ceX, bmX=bmX, lX=lX, ceB=ceB, bmB=bmB, lB=lB,
-                   ceY = ceY,bmY=bmY,lY = lY,
-                   pre_ce=pre_ce, pre_bm=pre_bm, pre_l=pre_l,
-                   c_A_eq=c_A_eq, c_b_eq=c_b_eq, c_A_lt=c_A_lt,c_b_lt=c_b_lt,
-                   C_A_eq=C_A_eq, C_b_eq=C_b_eq, C_A_lt=C_A_lt,C_b_lt=C_b_lt,
-                   X=X,Y=Y)
+        return cls(cons = constraints, calc=calc, cescale=ce_scale,bmscale=bm_scale,lcscale=lc_scale,
+                   reg = reg,data=data)
 
     @classmethod
     def from_json(cls,pth : str)->'Fit':
         with open(join(pth,'metadata.json'),'r')    as fi: md = load(fi)
-        with open(join(pth,'data.json'),'r')        as fi: d = load(fi)
+        with open(join(pth,'data.json'),'r')        as fi: ds = load(fi)
         p = md['params']
-        ceX,bmX,lX,ceB,bmB,lB,ceY,bmY,lY,c_A_eq,c_b_eq, c_A_lt,c_b_lt,C_A_eq,C_b_eq,C_A_lt,C_b_lt,X,Y = d
-
-        return cls(cons=p['c'],calc=md['calc'],
-                    bmw=p['bmw'],lw=p['lw'],reg=p['reg'],
-                    ceX=ceX,bmX=bmX,lX=lX,ceY=ceY,bmY=bmY,lY=lY,ceB=ceB,bmB=bmB,lB=lB,
-                    c_A_eq=c_A_eq,c_b_eq=c_b_eq, c_A_lt=c_A_lt,c_b_lt=c_b_lt,
-                    C_A_eq=C_A_eq,C_b_eq=C_b_eq, C_A_lt=C_A_lt,C_b_lt=C_b_lt,
-                    pre_ce=p['pre_ce'],pre_bm=p['pre_bm'],pre_l=p['pre_l'],X=X,Y=Y)
+        d1,d2,d3,d4,d5 = [Data.from_list(d) for d in ds]
+        return cls(cons=p['c'],calc=md['calc'],data=(d1,d2,d3,d4,d5),
+                    reg=p['reg'],cescale=p['ce_scale'],bmscale=p['bm_scale'],lcscale=p['lc_scale'])
 
     #######################
     # COST/LOSS FUNCTIONS #
@@ -343,13 +387,17 @@ class Fit(object):
     def relu(x:array) -> array: return x * (x > 0)
     def c_lt_loss(self,x : array, i : int, all : bool = False) -> array:
         if all: return self.relu(self.C_A_lt[i] @ x - self.C_b_lt)
-        else:   return self.relu(self.c_A_lt[i] @ x - self.c_b_lt)
-    def jc_lt_loss(self,x : array, i : int) -> array: return self.c_A_lt[i] * tile(((self.c_A_lt[i] @ x - self.c_b_lt) > 0).reshape(-1,1),(1,64))
-
+        elif len(self.c_A_lt[i]): return self.relu(self.c_A_lt[i] @ x - self.c_b_lt)
+        else: return empty(0)
+    def jc_lt_loss(self,x : array, i : int) -> array:
+        if len(self.c_A_lt[i]): return self.c_A_lt[i] * tile(((self.c_A_lt[i] @ x - self.c_b_lt) > 0).reshape(-1,1),(1,64))
+        else:                   return zeros((0,64))
     def c_eq_loss(self,x  : array, i : int, all : bool = False) -> array:
         if all: return self.C_A_eq[i] @ x - self.C_b_eq #use all known constraints
-        else:   return self.c_A_eq[i] @ x - self.c_b_eq
-    def jc_eq_loss(self,_ : array, i : int) -> array: return self.c_A_eq[i]
+        elif len(self.c_A_eq[i]):  return self.c_A_eq[i] @ x - self.c_b_eq
+        else: return empty(0)
+    def jc_eq_loss(self,_ : array, i : int) -> array:
+        return self.c_A_eq[i] or zeros((0,64))
 
     def c_loss(self,x  : array, i : int, all : bool = False) -> array:
         return concat((self.c_lt_loss(x,i,all),  self.c_eq_loss(x,i,all)))
@@ -373,167 +421,52 @@ class Fit(object):
     def dcost(self, x:array, Xmat : array, Y : array, i : int, constr : float, c_reg : float) -> array:
         return vstack((self.dloss(Xmat), constr * self.dc_loss(x, i), c_reg * self.dreg(x)))
 
-    # Data
-    def r2avg(self, x  : array, i : int) -> array:
-        '''Weighted average R2 value for an arbitrary BEEF vector'''
-        ys = [(self.ceX[i]@x + self.ceB[i], self.ceY),
-              (self.bmX[i]@x + self.bmB[i], self.bmY),
-              ((self.lX[i]@x + self.lB[i]), self.lY)]
-        r2c,r2b,r2l = [linregress(y_,y)[2]**2  for y_,y in ys]
-
-        ce_avg,bm_avg,l_avg = [abs(average(x)) for x in [self.ceY,self.bmY,self.lY]]
-        pre_c = 1 /  ce_avg
-        pre_l = self.lw * ce_avg / l_avg
-        pre_b = self.bmw * ce_avg / bm_avg
-
-        norm = pre_c + pre_l + pre_b
-
-        return  (pre_c*r2c + pre_b*r2b + pre_l*r2l)/norm
-
-
     ##########
     # HELPER #
     ##########
 
     def metadata(self) -> dict:
         '''Summary of parameters used to determine fit inputs'''
-        uid = hash_([self.calc[x] for x in ['pw','econv','decays','msb','fx']]+
-                    [self.bmw,self.lw,self.lam_reg,self.cons])
-        md = dict(calc   = self.calc,
-                  params = dict(bmw=self.bmw,lw=self.lw,
-                                reg=self.lam_reg,pre_ce=self.pre_ce,c = self.cons,
-                                pre_bm=self.pre_bm,pre_l=self.pre_l),
-                  uid = uid)
+        uid = hash_([self.calc[x] for x in ['pw','decays','msb','fx']]+
+                    [self.cescale,self.bmscale,self.lcscale,self.lam_reg,list(sorted(self.cons))])
+        md = dict(calc   = self.calc,uid = uid,
+                  params = dict(ce_scale=self.cescale,bm_scale=self.bmscale,lc_scale=self.lcscale,
+                                reg=self.lam_reg,c = list(self.cons)),)
         return md
 
     @classmethod
-    def data_xy(cls,
+    def db_data(cls,
                 db    : Connection,
                 calc  : int,
-                fx    : array,
-                bmw   : float,
-                lw    : float
-               ) -> T[Arrs,Arrs,Arrs,Arrs,Arrs,Arrs,list,list,list,float,float,float]:
+               ) -> T[Data,Data,Data,Data,Data]:
         '''
-        Assemble X,Y matrices given a database connection
-        Returns:
-            ceXs,bmXs,lXs - lists of length 5, each having a matrix of N rows and 64 columns
-            ceBs,bmBs,lBs - lists of length 5, each having a 64 element vector
-            ceY,bmY,lY    - N rows 64 column matrices
-            pre_c,pre_b,pre_l - lists of length 5, each having a float
+        Assemble datasets given a database connection
         '''
-        ceX_,bmX_,lX_,ceB_,bmB_,lB_,ceY,bmY,lY = [],[],[],[],[],[],[],[],[]
+        datas = [set(),set(),set(),set(),set()] # type: L[S[Datum]]
+        for a_ce,a_bm,a_lc,b_ce,b_bm,b_lc,ce,bm,lc,name,ce_calc in                         \
+                [[safeLoad(x) for x in [x1,x2,x3,x4,x5,x6]]+[x7,x8,x9,x10,x11]
+                    for x1,x2,x3,x4,x5,x6,x7,x8,x9,x10,x11 in sqlselect(db,q3,[calc,])]:
 
-        for a_ce,a_bm,a_l,b_ce,b_bm,b_l,ce,bm,l,name in                         \
-                [[safeLoad(x) for x in [x1,x2,x3,x4,x5,x6]]+[x7,x8,x9,x10]
-                    for x1,x2,x3,x4,x5,x6,x7,x8,x9,x10 in sqlselect(db,q3,[calc,])]:
+            for i in range(5):
+                if a_ce and ce and ce_calc:
+                    datas[i].add(Datum(name,'ce',a_ce[i],b_ce[i],float(ce)))
+                if a_bm and bm:
+                    datas[i].add(Datum(name,'bm',a_bm[i],b_bm[i],float(bm)))
+                if a_lc and lc:
+                    datas[i].add(Datum(name,'lc',a_lc[i],b_lc[i],float(lc)))
 
-            if a_ce and ce: ceX_.append(a_ce); ceB_.append(b_ce); ceY.append(float(ce))
-            if a_bm and bm: bmX_.append(a_bm); bmB_.append(b_bm); bmY.append(float(bm))
-            if a_l and l:   lX_.append(a_l);   lB_.append(b_l);   lY.append(float(l))
+        d1,d2,d3,d4,d5 = [Data(d) for d in datas]
+        return d1,d2,d3,d4,d5
 
-        Xs  = tuple(map(array,[ceX_,bmX_,lX_]))
-        Bs = tuple(map(array,[ceB_,bmB_,lB_]))
-
-        ceXs,bmXs,lXs = [[x[:,i,:].tolist()  for i in range(5)] for x in  Xs]
-        ceBs,bmBs,lBs = [[x[:,i].tolist()    for i in range(5)] for x in  Bs]
-
-        ce_avg,bm_avg,l_avg = [abs(average(x)) for x in [ceY,bmY,lY]]
-        pre_c = 1 / ce_avg
-        pre_l = lw * ce_avg / l_avg
-        pre_b = bmw * ce_avg / bm_avg
-
-        return ceXs,bmXs,lXs,ceBs,bmBs,lBs,ceY,bmY,lY,pre_c,pre_b,pre_l
-
-    def write(self, pth : str)->None:
-        root = join(environ['FUNCTIONALS_ROOT'],'functionals/scripts/fit/')
+    def write(self, pth : str) -> None:
+        rootpth = join(root,'functionals/functionals/scripts/fit/')
         def write(fi:str,x:Any)->None:
             with open(join(pth,fi)+'.json','w') as file: dump(x,file)
 
         # Write to directory
         #--------------------
         write('metadata', self.metadata())
-        write('data', [[x.tolist() for x in self.ceX],
-                       [x.tolist() for x in  self.bmX],
-                       [x.tolist() for x in self.lX],
-                       [x.tolist() for x in self.ceB],
-                       [x.tolist() for x in self.bmB],
-                       [x.tolist() for x in self.lB],
-                       self.ceY.tolist() ,self.bmY.tolist() ,self.lY.tolist() ,
-                       [x.tolist() for x in self.c_A_eq],
-                       [x.tolist() for x in self.c_b_eq],
-                       [x.tolist() for x in self.c_A_lt],
-                       [x.tolist() for x in self.c_b_lt],
-                       [x.tolist() for x in self.C_A_eq],
-                       [x.tolist() for x in self.C_b_eq],
-                       [x.tolist() for x in self.C_A_lt],
-                       [x.tolist() for x in self.C_b_lt],
-                       [x.tolist() for x in self.X],
-                       [y.tolist() for y in self.Y]])
-        copyfile(root+'runfit.py',join(pth,'runfit.py'))
-        copyfile(root+'subfit.sh',join(pth,'subfit.sh'))
+        write('data', [d.to_list() for d in self.data])
+        copyfile(rootpth+'runfit.py',join(pth,'runfit.py'))
+        copyfile(rootpth+'subfit.sh',join(pth,'subfit.sh'))
         system('chmod 755 '+join(pth,'subfit.sh'))
-
-    @classmethod
-    def opt(cls, steps:L[T[float,float]])->int:
-        '''Input - pairs of (R2,C_viol). Identify an optimum value for this tradeoff'''
-        warnings.filterwarnings('ignore')
-
-        threshold = 1e-1
-        startup   = 10
-
-        if len(steps) <= startup: return 0
-
-        dic = {c : startup + i for i,(_,c) in enumerate(steps[startup:])} # remove duplicates
-        r2s, cviols = [list(x) for x in zip(*steps[startup:])]
-
-        cv, r2 = cls.pareto_frontier(cviols,r2s)
-        if len(cv)==1: return dic[cv[0]]
-
-        dr2s = gradient(r2,cv)
-
-        for c,dr2 in reversed(list(zip(cv,dr2s))):
-            if dr2 > threshold: break
-
-        #import matplotlib.pyplot as plt # type: ignore
-        #print(c);plt.scatter(cv,r2); plt.show();import pdb;pdb.set_trace()
-
-        return dic[c]
-
-    @staticmethod
-    def pareto_frontier(Xs:list, Ys:list, maxX:bool = False, maxY:bool = True) -> T[list,list]:
-        myList = sorted([[Xs[i], Ys[i]] for i in range(len(Xs))], reverse = maxX)
-        p_front = [myList[0]]
-        for pair in myList[1:]:
-            if maxY:
-                if pair[1] >= p_front[-1][1]: p_front.append(pair)
-            else:
-                if pair[1] <= p_front[-1][1]: p_front.append(pair)
-        p_frontX,p_frontY = zip(*p_front)
-        return p_frontX, p_frontY
-
-"""
-BONUS
------
-
-Derivation of Jacobian in Einstein notation:
-
-        Capital letters = vectors, matrices in [brackets]
-
-        Fi  = residual                                                      --- (DIM: m x 1)
-        Aij = basis function coefficients (cols) for each data point (row)  --- (DIM: m x n)
-        Rj  = vector of weights corresponding to basis functions            --- (DIM: n x 1)
-        Yi  = vector of targets for dot product of rows in Aij and Rj       --- (DIM: m x 1)
-        δij = Kroenecker delta
-
-        let: Fj = [A]ji * Ri - Yj
-        d(Fj)/d(Rk) = [A]ji * d(Ri)/d(Rk) = [A]ji * δik = [A]jk
-
-        d(FjFj)/d(Rk) = 2 * d(Fj)/d(Rk) * Fj
-                      = 2 * [A]jk * Fj
-
-Derivation of constant hessian:
-        To see this, take derivative of jac result w/r/t some Rm:
-
-        d(FjFj)/d(Rk)d(Rm) = 2 * [A]jk * d(Fj)/d(Rm) =  2 * [A]jk * [A]jm
-"""

@@ -1,61 +1,121 @@
-consts,reg,bm_weight,lat_weight
-,0,0,0
-,0,0,1
-,0,1,0
-,0,1,1
-,0.1,0,0
-,0.1,0,1
-,0.1,1,0
-,0.1,1,1
-,0.01,0,0
-,0.01,0,1
-,0.01,1,0
-,0.01,1,1
-hnorm pos,0,0,0
-hnorm pos,0,0,1
-hnorm pos,0,1,0
-hnorm pos,0,1,1
-hnorm pos,0.1,0,0
-hnorm pos,0.1,0,1
-hnorm pos,0.1,1,0
-hnorm pos,0.1,1,1
-hnorm pos,0.01,0,0
-hnorm pos,0.01,0,1
-hnorm pos,0.01,1,0
-hnorm pos,0.01,1,1
-lda pos,0,0,0
-lda pos,0,0,1
-lda pos,0,1,0
-lda pos,0,1,1
-lda pos,0.1,0,0
-lda pos,0.1,0,1
-lda pos,0.1,1,0
-lda pos,0.1,1,1
-lda pos,0.01,0,0
-lda pos,0.01,0,1
-lda pos,0.01,1,0
-lda pos,0.01,1,1
-lda hnorm pos liebox scan11,0,0,0
-lda hnorm pos liebox scan11,0,0,1
-lda hnorm pos liebox scan11,0,1,0
-lda hnorm pos liebox scan11,0,1,1
-lda hnorm pos liebox scan11,0.1,0,0
-lda hnorm pos liebox scan11,0.1,0,1
-lda hnorm pos liebox scan11,0.1,1,0
-lda hnorm pos liebox scan11,0.1,1,1
-lda hnorm pos liebox scan11,0.01,0,0
-lda hnorm pos liebox scan11,0.01,0,1
-lda hnorm pos liebox scan11,0.01,1,0
-lda hnorm pos liebox scan11,0.01,1,1
-lda hnorm pos,0,0,0
-lda hnorm pos,0,0,1
-lda hnorm pos,0,1,0
-lda hnorm pos,0,1,1
-lda hnorm pos,0.1,0,0
-lda hnorm pos,0.1,0,1
-lda hnorm pos,0.1,1,0
-lda hnorm pos,0.1,1,1
-lda hnorm pos,0.01,0,0
-lda hnorm pos,0.01,0,1
-lda hnorm pos,0.01,1,0
-lda hnorm pos,0.01,1,1
+consts,reg,ce_scale,bm_scale,lc_scale
+,0,0.1,0.5,0.1
+,0,0.1,0.5,0.5
+,0,0.1,5,0.1
+,0,0.1,5,0.5
+,0,0.01,0.5,0.1
+,0,0.01,0.5,0.5
+,0,0.01,5,0.1
+,0,0.01,5,0.5
+,0.1,0.1,0.5,0.1
+,0.1,0.1,0.5,0.5
+,0.1,0.1,5,0.1
+,0.1,0.1,5,0.5
+,0.1,0.01,0.5,0.1
+,0.1,0.01,0.5,0.5
+,0.1,0.01,5,0.1
+,0.1,0.01,5,0.5
+,0.01,0.1,0.5,0.1
+,0.01,0.1,0.5,0.5
+,0.01,0.1,5,0.1
+,0.01,0.1,5,0.5
+,0.01,0.01,0.5,0.1
+,0.01,0.01,0.5,0.5
+,0.01,0.01,5,0.1
+,0.01,0.01,5,0.5
+lda hnorm pos,0,0.1,0.5,0.1
+lda hnorm pos,0,0.1,0.5,0.5
+lda hnorm pos,0,0.1,5,0.1
+lda hnorm pos,0,0.1,5,0.5
+lda hnorm pos,0,0.01,0.5,0.1
+lda hnorm pos,0,0.01,0.5,0.5
+lda hnorm pos,0,0.01,5,0.1
+lda hnorm pos,0,0.01,5,0.5
+lda hnorm pos,0.1,0.1,0.5,0.1
+lda hnorm pos,0.1,0.1,0.5,0.5
+lda hnorm pos,0.1,0.1,5,0.1
+lda hnorm pos,0.1,0.1,5,0.5
+lda hnorm pos,0.1,0.01,0.5,0.1
+lda hnorm pos,0.1,0.01,0.5,0.5
+lda hnorm pos,0.1,0.01,5,0.1
+lda hnorm pos,0.1,0.01,5,0.5
+lda hnorm pos,0.01,0.1,0.5,0.1
+lda hnorm pos,0.01,0.1,0.5,0.5
+lda hnorm pos,0.01,0.1,5,0.1
+lda hnorm pos,0.01,0.1,5,0.5
+lda hnorm pos,0.01,0.01,0.5,0.1
+lda hnorm pos,0.01,0.01,0.5,0.5
+lda hnorm pos,0.01,0.01,5,0.1
+lda hnorm pos,0.01,0.01,5,0.5
+lda pos,0,0.1,0.5,0.1
+lda pos,0,0.1,0.5,0.5
+lda pos,0,0.1,5,0.1
+lda pos,0,0.1,5,0.5
+lda pos,0,0.01,0.5,0.1
+lda pos,0,0.01,0.5,0.5
+lda pos,0,0.01,5,0.1
+lda pos,0,0.01,5,0.5
+lda pos,0.1,0.1,0.5,0.1
+lda pos,0.1,0.1,0.5,0.5
+lda pos,0.1,0.1,5,0.1
+lda pos,0.1,0.1,5,0.5
+lda pos,0.1,0.01,0.5,0.1
+lda pos,0.1,0.01,0.5,0.5
+lda pos,0.1,0.01,5,0.1
+lda pos,0.1,0.01,5,0.5
+lda pos,0.01,0.1,0.5,0.1
+lda pos,0.01,0.1,0.5,0.5
+lda pos,0.01,0.1,5,0.1
+lda pos,0.01,0.1,5,0.5
+lda pos,0.01,0.01,0.5,0.1
+lda pos,0.01,0.01,0.5,0.5
+lda pos,0.01,0.01,5,0.1
+lda pos,0.01,0.01,5,0.5
+hnorm pos,0,0.1,0.5,0.1
+hnorm pos,0,0.1,0.5,0.5
+hnorm pos,0,0.1,5,0.1
+hnorm pos,0,0.1,5,0.5
+hnorm pos,0,0.01,0.5,0.1
+hnorm pos,0,0.01,0.5,0.5
+hnorm pos,0,0.01,5,0.1
+hnorm pos,0,0.01,5,0.5
+hnorm pos,0.1,0.1,0.5,0.1
+hnorm pos,0.1,0.1,0.5,0.5
+hnorm pos,0.1,0.1,5,0.1
+hnorm pos,0.1,0.1,5,0.5
+hnorm pos,0.1,0.01,0.5,0.1
+hnorm pos,0.1,0.01,0.5,0.5
+hnorm pos,0.1,0.01,5,0.1
+hnorm pos,0.1,0.01,5,0.5
+hnorm pos,0.01,0.1,0.5,0.1
+hnorm pos,0.01,0.1,0.5,0.5
+hnorm pos,0.01,0.1,5,0.1
+hnorm pos,0.01,0.1,5,0.5
+hnorm pos,0.01,0.01,0.5,0.1
+hnorm pos,0.01,0.01,0.5,0.5
+hnorm pos,0.01,0.01,5,0.1
+hnorm pos,0.01,0.01,5,0.5
+lda hnorm pos liebox scan11,0,0.1,0.5,0.1
+lda hnorm pos liebox scan11,0,0.1,0.5,0.5
+lda hnorm pos liebox scan11,0,0.1,5,0.1
+lda hnorm pos liebox scan11,0,0.1,5,0.5
+lda hnorm pos liebox scan11,0,0.01,0.5,0.1
+lda hnorm pos liebox scan11,0,0.01,0.5,0.5
+lda hnorm pos liebox scan11,0,0.01,5,0.1
+lda hnorm pos liebox scan11,0,0.01,5,0.5
+lda hnorm pos liebox scan11,0.1,0.1,0.5,0.1
+lda hnorm pos liebox scan11,0.1,0.1,0.5,0.5
+lda hnorm pos liebox scan11,0.1,0.1,5,0.1
+lda hnorm pos liebox scan11,0.1,0.1,5,0.5
+lda hnorm pos liebox scan11,0.1,0.01,0.5,0.1
+lda hnorm pos liebox scan11,0.1,0.01,0.5,0.5
+lda hnorm pos liebox scan11,0.1,0.01,5,0.1
+lda hnorm pos liebox scan11,0.1,0.01,5,0.5
+lda hnorm pos liebox scan11,0.01,0.1,0.5,0.1
+lda hnorm pos liebox scan11,0.01,0.1,0.5,0.5
+lda hnorm pos liebox scan11,0.01,0.1,5,0.1
+lda hnorm pos liebox scan11,0.01,0.1,5,0.5
+lda hnorm pos liebox scan11,0.01,0.01,0.5,0.1
+lda hnorm pos liebox scan11,0.01,0.01,0.5,0.5
+lda hnorm pos liebox scan11,0.01,0.01,5,0.1
+lda hnorm pos liebox scan11,0.01,0.01,5,0.5

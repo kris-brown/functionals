@@ -47,7 +47,7 @@ def a_ce(atom_engs_     : str,
 
         atom_engs     = sum(all_atom_engs)
         atom_contribs = reduce(np.add,all_atom_contribs).reshape((5,64))
-        bulk_contribs = np.array(loads(loads(bulk_contribs_)[0])).reshape((5,64)) # just take the min energy structure's contribs
+        bulk_contribs = np.array(loads(bulk_contribs_)[0]).reshape((5,64)) # just take the min energy structure's contribs
         bulk_eng      = float(loads(bulk_engs_)[0]) # just take the min energy
         coefs         = np.array(loads(coefs_))
     except Exception as e:

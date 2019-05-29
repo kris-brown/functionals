@@ -1,6 +1,7 @@
 from typing     import Any, List as L, Dict as D, Tuple as T
 from argparse   import ArgumentParser
 from os.path    import join, exists
+from subprocess  import check_output
 from itertools  import product as prod
 from os         import environ, system, listdir
 from shutil     import copyfile
@@ -19,13 +20,13 @@ Submit fitting jobs, provided a DB connection to the DB with DFT jobs
 ###############################################################################
 # Constants
 ###########
-home = environ['FUNCTIONALS_ROOT']
+home = __file__.split('functionals')[0]+'functionals/'
+
 # Queries
 #------------
 q1 = 'SELECT fitparams_id  FROM fitparams'
 q2 = '''SELECT calc_id FROM calc
-         JOIN functional ON functional = functional_id WHERE beef''' # also need to add WHERE calc.done once we have all the data
-
+         JOIN functional ON functional = functional_id WHERE beef  --and done'''
 
 def main(db_ : str, sub: bool, retry:bool) -> None:
     '''
@@ -40,27 +41,30 @@ def main(db_ : str, sub: bool, retry:bool) -> None:
         conn = connect(**kwargs)
 
     params,calcs = [sqlselect(conn,x) for x in [q1,q2]]
-
     for (fp,),(calc,) in sorted(list(prod(params,calcs))):
         print(fp,calc)
-        #if fp!=3: continue
         fit = Fit.from_db(db=db_,fp_id=fp,calc_id=calc)
         root = join(pth,fit.metadata()['uid'][:10])
         Path(root).mkdir(parents=True, exist_ok=True)
         fit.write(root)
-        #print('\n\t',fit.metadata()['uid'][:10])
+        #fit2 = fit.from_json(root); print(fit==fit2)
         if sub and (retry or not exists(join(root,'result.json'))):
             act   = 'python runfit.py'
             cmd   = 'cd {}; '.format(root) + act
             system(cmd)
 
-def sub(time : int, retry : bool, local : bool) -> None:
-    pth  = join(home, 'data/fit')
-    dirs = listdir(pth)
+def sub(time : int, retry : bool) -> None:
+    pth     = join(home, 'data/fit')
+    dirs    = listdir(pth)
+    currstr = 'bjobs -o exec_cwd -noheader'
+    working = set([x.split('/')[-1] for x in check_output(currstr, encoding='UTF-8',shell=True).split()])
+
     for d in dirs:
-        dir   = join(pth,d)
-        if retry or not exists(join(pth,dir,'result.json')):
-            act   = 'python runfit.py' if local else 'bsub -n 1 -W{}:30 -q suncat subfit.sh'.format(time)
+        dir    = join(pth,d)
+        inprog = d in working
+        done   = exists(join(pth,dir,'result.json'))
+        if retry or (not (done or inprog)):
+            act   = 'bsub -n 1 -W{}:30 -q suncat3 subfit.sh'.format(time)
             cmd   = 'cd {}; '.format(dir) + act
             system(cmd)
 
@@ -78,38 +82,29 @@ parser.add_argument('--sub',default=False,
                     help='Add anything to do submit command instead')
 
 parser.add_argument('--create',default=False,
-                    help='Add anything to do submit command instead')
+                    help='Add anything to do create command instead')
 
-parser.add_argument('--time', type    = int,
-                    default = 0,
+parser.add_argument('--time', type    = int, default = 0,
                     help    = 'Walltime for batch jobs')
 
-parser.add_argument('--retry', type    = bool,
-                    default = False,
-                    help    = 'Walltime for batch jobs')
+parser.add_argument('--retry', type    = bool, default = False,
+                    help    = 'Ignore existence of result.json')
 
-parser.add_argument('--local', type    = bool,
-                    default = False,
-                    help    = 'Walltime for batch jobs')
-
-parser.add_argument('--move', type    = bool,
-                    default = False,
+parser.add_argument('--move', type    = bool, default = False,
                     help    = 'Move jobs from scp_tmp/vauto/fit to /functionals/data/fit')
 
-def move()->None:
-    r= '/Users/ksb/'
-    r1,r2=[r+x for x in ['scp_tmp/vauto/fit','functionals/data/fit']]
-    dirs = set( listdir(r2))
-    for dir in listdir(r1):
-        res = join(r1,dir,'result.json')
-        if dir in dirs and exists(res):
-            copyfile(res,join(r2,dir,'result.json'))
+def move() -> None:
+    s='/ksb/functionals/data/fit/'
+    cmd = 'rsync -avz ksb@suncatls1.slac.stanford.edu:/nfs/slac/staas/fs1/g/suncat{0} /Users{0}'.format(s)
+    system(cmd)
 
 if __name__ == '__main__':
     args = parser.parse_args()
     if args.create:
         main(args.db,args.sub,args.retry)
     elif args.sub:
-        sub(args.time,args.retry,args.local)
+        sub(args.time,args.retry)
     elif args.move:
         move()
+    else:
+        raise ValueError("Run with CREATE SUB or MOVE")

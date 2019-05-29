@@ -1,4 +1,4 @@
-from typing import List as L, Tuple as T, Callable as C
+from typing import List as L, Dict as D,Tuple as T, Callable as C
 from abc import ABCMeta,abstractmethod
 from numpy import array,linspace,inf,empty,vstack,concatenate as concat # type: ignore
 from numpy.linalg import norm # type: ignore
@@ -32,11 +32,13 @@ class Constraint(object,metaclass=ABCMeta):
     def norm_weight(self)->float: return self.weight / self.card
 
     @classmethod
-    def const_xy(cls,consts:L['Constraint'],msb:float,decays:list) -> T[L[list],list,L[list],list]:
+    def const_xy(cls,msb:float,decays:list,consts_:L['str'] = None) -> T[L[list],list,L[list],list]:
         '''
-        Convert constraint dictionaries into matrices (add analytic H solution, too)
+        Convert constraint dictionaries into matrices
         '''
+        consts = [all_cons[x] for x in consts_] if consts_ is not None else list(all_cons.values())
         c_A_eqs,c_A_lts = [],[]
+
         for decay in decays:
             c_A_eq,c_b_eq,c_A_lt,c_b_lt = empty((0,64)),empty(0),empty((0,64)),empty(0)
             for const in consts:
@@ -110,3 +112,9 @@ scan11 = LC(name='scan11',weight = 1, s = None, alpha = 0.0,  kind = 'lt', val =
 pos    = LC(name='pos',   weight = 1, s = None, alpha = None, kind = 'gt', val = 0.0)
 
 hnorm = VC(name='hnorm',weight=1.,kind='eq',fA=h_norm_vec,val= -.3125)
+
+all_cons = dict(lda    = lda,
+                liebox = liebox,
+                scan11 = scan11,
+                pos    = pos,
+                hnorm  = hnorm) # type: D[str,Constraint]

@@ -1,8 +1,8 @@
 from typing import List as L, Tuple as T
 from json import load,dumps
 
-def parse_bulks(root:str)->T[L[str],L[str],L[int],L[int],L[float],L[str],
-                             L[str],L[str],L[str],L[int],L[int],
+def parse_bulks(root:str)->T[L[str],L[str],L[int],L[int],L[str],
+                             L[str],L[str],L[str],L[str],L[str],L[int],L[int],
                              L[str],L[str],L[float],L[float],
                              L[int],L[int],L[int],L[str],L[bool]]:
 
@@ -30,11 +30,11 @@ def parse_bulks(root:str)->T[L[str],L[str],L[int],L[int],L[float],L[str],
         # INITIALIZE VARS
         funroot  = environ['FUNCTIONALS_ROOT']
 
-        pths,names,rts,pws,econvs,fxs, \
-        contribs,engs,vols,n_atoms,n_elems,\
+        pths,names,rts,pws,fxs, \
+        alleng,allvol,allcontrib,n_atoms,n_elems,\
         comps,figs,eosbms,lats,\
         sls,shs,mjs,incs,sucs \
-            = [],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[]
+            = [],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[]
 
         randroot = environ['HOME']
         suffix   = 'tmp_'+''.join(choices(ascii_lowercase,k=8))+'.png'
@@ -42,7 +42,8 @@ def parse_bulks(root:str)->T[L[str],L[str],L[int],L[int],L[float],L[str],
 
         # Traverse directory hierarchy with 3 levels (overall,batch,element)
         stordirs = listdir(root)
-        for sd in stordirs: # 'date_description'
+        for sd in stordirs: # xc
+            if sd[:3]== 'old': continue
             folder = join(root,sd)
             for bulk in listdir(folder):
                 pth = join(folder,bulk)
@@ -125,10 +126,13 @@ def parse_bulks(root:str)->T[L[str],L[str],L[int],L[int],L[float],L[str],
                     # Isolate the best 5 jobs,Convert vectors into strings
                     min_inds = [s_engs.index(x) for x in sorted(s_engs)[:5]]
                     lats.append(s_lats[min_inds[0]])
-                    m_vols,m_engs,m_contribs = [[x[i] for i in min_inds]
-                                                for x in [s_vols,s_engs,s_contribs]] # filtered
-                    vols.append(dumps(m_vols));engs.append(dumps(m_engs));
-                    contribs.append(dumps(m_contribs))
+                    #m_vols,m_engs,m_contribs = [[x[i] for i in min_inds]
+                    #                            for x in [s_vols,s_engs,s_contribs]] # filtered
+                    #vols.append(dumps(m_vols));engs.append(dumps(m_engs));
+                    #contribs.append(dumps(m_contribs))
+                    allvol.append(dumps(s_vols))
+                    alleng.append(dumps(s_engs))
+                    allcontrib.append(dumps(s_contribs))
 
                     # Things to do for an arbitrary strain
                     #------------------------------------
@@ -139,12 +143,12 @@ def parse_bulks(root:str)->T[L[str],L[str],L[int],L[int],L[float],L[str],
                     comps.append(str({elem:elems.count(elem) for elem in sorted(set(elems))}))
                     # GET INCAR PARAMETERS
                     incar = parse_incar(join(dir,'INCAR'))
-                    pws.append(incar['encut']); econvs.append(incar['ediff'])
+                    pws.append(incar['encut'])
                     eosbms.append(eosbm / kJ * 1.0e24)
                     # GET XC-SPECIFIC INFO
                     if incar['metagga'] == 'BF':
                         a1msb = [incar[x] for x in ['a1'+y for y in '12345']+['msb']]
-                        with open(join(funroot,'data/beef.json'),'r') as f: beef = load(f)
+                        with open(join(funroot,'data/beefs/beef.json'),'r') as f: beef = load(f)
                         fxs.append(dumps([beef]+a1msb))
                     else:
                         if incar['metagga'] == 'SCAN':
@@ -156,13 +160,12 @@ def parse_bulks(root:str)->T[L[str],L[str],L[int],L[int],L[float],L[str],
                             raise ValueError()
                 else:
                     sucs.append(False)
-                    pws.append(None); econvs.append(None);fxs.append(None) # type: ignore
-                    contribs.append(None);engs.append(None);vols.append(None) # type: ignore
+                    pws.append(None); fxs.append(None) # type: ignore
                     n_atoms.append(None); n_elems.append(None) # type: ignore
                     comps.append(None); eosbms.append(None) # type: ignore
-                    lats.append(None)
-
-        return (pths,names,rts,pws,econvs,fxs,contribs,engs,vols,n_atoms,n_elems, # type: ignore
+                    lats.append(None); alleng.append(None); allvol.append(None) # type: ignore
+                    allcontrib.append(None) # type: ignore
+        return (pths,names,rts,pws,fxs,alleng,allvol,allcontrib,n_atoms,n_elems, # type: ignore
                 comps,figs,eosbms,lats,sls,shs,mjs,incs,sucs)
 
     except Exception as e:

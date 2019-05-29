@@ -12,17 +12,18 @@ from dbgen import Model, Obj, Attr, Rel, Int, Varchar, Text, Decimal, Boolean, D
 
 ################################################################################
 
-funmetrics = ['%s_%s'%(x,y) for x in ['mse','r2'] for y in ['ce','bm','lat']]
+funmetrics = ['mse_%s'%(x) for x in ['ce','bm','lat']]
 
 calc = Obj(
     name  = 'calc',
     desc  = 'Calculator details',
     attrs = [Attr('pw',                id = True, desc = 'Planewave cutoff, eV'),
-             Attr('econv',  Decimal(), id = True, desc = 'Energy convergance criterion'),
+             #Attr('econv',  Decimal(), id = True, desc = 'Energy convergance criterion'),
              Attr('done',   Boolean(),            desc = 'Whether or not all calculations have been finished'),
              Attr('missing',Text(),               desc = 'Materials not yet finished (bulk or atom related)'),
              Attr('n_missing',Int(),              desc = 'Materials not yet finished (bulk or atom related)'),
-             Attr('missing_bulk',Text(),          desc = 'Materials for which not enough bulk calculations have finished')]
+             Attr('missing_bulk',Text(),          desc = 'Materials for which not enough bulk calculations have finished'),
+             Attr('fitdata',Text(),               desc = 'For a BEEF calc, the input data to fitting')]
            +[Attr(m, Decimal(), desc = 'Only fills out if results in for all materials')
                 for m in funmetrics])
 
@@ -84,6 +85,7 @@ bulks = Obj(
    name  = 'bulks',
    desc  = 'Set of singlepoints on a particular material under strain',
    attrs = [Attr('name',       Varchar(), desc = 'Species nickname'),
+            Attr('composition',Varchar(), desc='Species composition'),
             Attr('n_atoms',               desc = 'Number of atoms in unit cell'),
             Attr('n_elems',               desc = 'Number of distinct chemical species'),
             Attr('alloy',      Varchar(), desc = 'What type of alloy it is, if any'),
@@ -95,28 +97,31 @@ bulks = Obj(
             Attr('success',    Boolean(), desc = 'We have enough calculations to do an EOS'),
 
             # Properties when enough jobs have completed
+            Attr('allvol',      Text('long'),   desc = 'volumes  of all jobs'),
+            Attr('alleng',      Text('long'),   desc = 'energies of all jobs'),
+            Attr('allcontrib',  Text('long'),   desc = 'contribs of all jobs'),
             Attr('volumes',     Text('long'),   desc = 'volumes of the 5 most optimal jobs'),
             Attr('energies',    Text('long'),   desc = 'energies of the 5 most optimal jobs'),
             Attr('contribs',    Text('long'),   desc = 'xc contribs of 5 most optimal jobs'),
             Attr('img',         Text('long'),   desc = 'base64 encoded image of EOS fit'),
 
-            Attr('composition',     Varchar(),   desc='Species composition'),
-
+            Attr('volume',      Decimal(),      desc='volume of min-energy structure'),
             # Analysis Results from minimum 5 jobs
+            Attr('appxvol',     Decimal(),      desc='minimum volume from 5-point interpolation'),
             Attr('eform',       Decimal(),      desc = 'Formation energy, eV'),
             Attr('ce',          Decimal(),      desc = 'Cohesive  energy, eV'),
-            Attr('bulkmod',     Decimal(),      desc = 'Bulk modulus, GPa'),
+            Attr('bulkmod',     Decimal(),      desc = 'Bulk modulus, GPa, from 5-point interpolation'),
             Attr('lattice',     Decimal(),      desc = 'Conventional unit cell lattice (optimized)'),
             # Analysis from ase.eos
-            Attr('eosbm',       Decimal(),      desc='Bulk modulus, GPa'),
+            Attr('eosbm',       Decimal(),      desc='Bulk modulus, GPa, from ASE EOS'),
             Attr('irregular',   Boolean(),      desc='Whether discrete BM differs significantly from EOS BM'),
 
             # Experimental results
             Attr('expt_ce',    Decimal(15,3),   desc = 'Experimental cohesive energy, eV'),
             Attr('expt_bm',    Decimal(15,3),   desc = 'Experimental bulk modulus, GPa'),
             Attr('expt_l',     Decimal(15,6),   desc = 'Experimental lattice parameter of reference stoichiometry, A'),
-            Attr('expt_vol',     Decimal(),   desc = 'Experimental volume of reference stoichiometry, A^3'),
-            Attr('expt_mag',   Decimal(),   desc = 'Experimental magnetic moment, bohr'),
+            Attr('expt_vol',   Decimal(),       desc = 'Experimental volume of reference stoichiometry, A^3'),
+            Attr('expt_mag',   Decimal(),       desc = 'Experimental magnetic moment, bohr'),
 
             # Fitting inputs
             Attr('a_ce', Text(), desc = '5 vectors (for each a1 value), when dotted w/ BEEF coef + offset gives formation energy in eV'),
@@ -155,10 +160,11 @@ ea_rels = [Rel('bulks', 'refs', id=True),
 fitparams = Obj(
     name = 'fitparams',
     desc = 'Input parameters to a fit',
-    attrs = [Attr('bm_weight',    Decimal(),  id = True, desc = 'Relative weight of bulk-modulus data to cohesive energy'),
-             Attr('lat_weight',   Decimal(),  id = True, desc = 'Relative weight of lattice data to cohesive energy'),
-             Attr('consts',       Text(),     id = True, desc = 'Ordered (by importance) list linear constraints to be included'),
-             Attr('reg',          Decimal(),  id = True, desc = 'Regularization penalty') ])
+    attrs = [Attr('ce_scale', Decimal(),  id = True, desc = 'One cost unit'),
+             Attr('bm_scale', Decimal(),  id = True, desc = 'One cost unit'),
+             Attr('lc_scale', Decimal(),  id = True, desc = 'One cost unit'),
+             Attr('consts',   Text(),     id = True, desc = 'Sorted string list of linear constraints to be included'),
+             Attr('reg',      Decimal(),  id = True, desc = 'Regularization penalty') ])
 
 fit = Obj(
     name  = 'fit',
@@ -166,30 +172,16 @@ fit = Obj(
     attrs = [Attr('name',Varchar(),id=True),
              Attr('pth',Varchar(),desc='Location of fit job'),
              # Result params
-             Attr('timestamp',  Date(),       desc = 'Timestamp of fitting'),
-
+             #Attr('timestamp',  Date(),       desc = 'Timestamp of fitting'),
              # Analysis of results
-             Attr('opt',        Varchar(),   desc = '5 indices referring to optimal r2 c_viol tradeoff'),
-             Attr('score',      Decimal(),   desc = "Arbitrary combination of R2's and c_viol"),
+             ]+
+             [Attr('traj%d'%i, Text(),desc='JSON trajectory') for i in range(5)]+[
              Attr('result',     Text(),      desc = '5 Flattened NxN fitted coefficients'),
-             Attr('decaycosts', Text(),      desc = 'JSONd list of 5 avg R2 values'),
+             Attr('decaycosts', Text(),      desc = 'JSONd list of 5 avg MSE values'),
              Attr('c_viol',     Text(),      desc = 'Constraint violations'),
              ]+[Attr(m,Decimal(20,6)) for m in funmetrics])
 
 fit_rels = [Rel('fitparams','fit', id = True), Rel('calc','fit')]
-
-################################################################################
-
-# const = Obj(
-#     name  = 'const',
-#     desc  ='Constrain Fx(s,a)',
-#     attrs = [Attr('const_name',  Varchar(),  id  = True),
-#              Attr('description', Text(),     desc='Description of constraint'),
-#              Attr('val',         Decimal(),  desc='Value of Fx(s,alpha)'),
-#              Attr('kind',        Varchar(),  desc='GT/LT/EQ'),
-#              Attr('s',           Decimal(),  desc='If valid only for particular s, else None'),
-#              Attr('alpha',       Decimal(),  desc='If valid only for particular alpha, else None')])
-#
 
 ################################################################################
 ################################################################################

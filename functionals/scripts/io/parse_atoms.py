@@ -1,7 +1,7 @@
 from typing import List as L, Tuple as T
 from json import load,dumps
 
-def parse_atoms(root:str)->T[L[str],L[str],L[int],L[int],L[float],L[str],L[str],L[float],L[bool],L[int],L[int],L[float]]:
+def parse_atoms(root:str)->T[L[str],L[str],L[int],L[int],L[str],L[str],L[float],L[bool],L[int],L[int],L[float]]:
     from os      import listdir, environ
     from os.path import join, exists
     from re      import findall,compile,MULTILINE
@@ -14,12 +14,13 @@ def parse_atoms(root:str)->T[L[str],L[str],L[int],L[int],L[float],L[str],L[str],
 
         # INITIALIZE VARS
         funroot  = environ['FUNCTIONALS_ROOT']
-        pths,names,pws,econvs,fxs,contribs,engs,intoccs,nums,tmags,mags,rts \
-            = [],[],[],[],[],[],[],[],[],[],[],[]
+        pths,names,pws,fxs,contribs,engs,intoccs,nums,tmags,mags,rts \
+            = [],[],[],[],[],[],[],[],[],[],[]
 
         # Traverse directory hierarchy with 3 levels (overall,batch,element)
         stordirs = listdir(root)
         for sd in stordirs: # 'date_description'
+            if sd[:3]== 'old': continue
             folder = join(root,sd)
             for atom in listdir(folder):
                 pth = join(folder,atom)
@@ -34,13 +35,13 @@ def parse_atoms(root:str)->T[L[str],L[str],L[int],L[int],L[float],L[str],L[str],
 
                     # GET INCAR PARAMETERS
                     incar = parse_incar(join(pth,'INCAR'))
-                    pws.append(incar['encut']); econvs.append(incar['ediff'])
-                    tmags.append(incar.get('magmom',0))
+                    pws.append(incar['encut']);
+                    tmags.append(incar.get('magmom') or 0)
 
                     # GET XC-SPECIFIC INFO
                     if incar['metagga'] == 'BF':
                         a1msb = [incar[x] for x in ['a1'+y for y in '12345']+['msb']]
-                        with open(join(funroot,'data/beef.json'),'r') as f: beef = load(f)
+                        with open(join(funroot,'data/beefs/beef.json'),'r') as f: beef = load(f)
                         fxs.append(dumps([beef]+a1msb))
                         contribs.append(parse_contribs_vasp(outcar))
                     else:
@@ -71,7 +72,7 @@ def parse_atoms(root:str)->T[L[str],L[str],L[int],L[int],L[float],L[str],L[str],
                     num = symbols.index(atom)
                     pths.append(pth); names.append(atom); nums.append(num)
 
-        return pths,names,rts,pws,econvs,fxs,contribs,engs,intoccs,nums,tmags,mags
+        return pths,names,rts,pws,fxs,contribs,engs,intoccs,nums,tmags,mags
     except Exception as e:
         import traceback,pdb
         traceback.print_exc(); print(pth,e);pdb.set_trace(); assert False

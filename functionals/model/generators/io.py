@@ -1,6 +1,9 @@
 # External
+from typing import Tuple as T
 from os import environ
 from os.path import join
+from json import load,dumps
+
 # Internal Modules
 from dbgen import (Model, Gen, PyBlock, Env, Query, Const, Import, defaultEnv,
                     EQ, Literal as Lit, Arg, JPath, CONCAT, NULL, LIKE, NOT, AND)
@@ -27,7 +30,7 @@ def io(mod : Model) -> None:
     ################################################################################
     ################################################################################
 
-    fitcols = ['consts','reg', 'bm_weight','lat_weight']
+    fitcols = ['consts','reg', 'ce_scale','bm_scale','lc_scale']
 
     parampth = root('data/fitparams.csv')
 
@@ -43,25 +46,11 @@ def io(mod : Model) -> None:
             actions = [Fitparams(insert = True,
                            **{x:pfpb[x] for x in fitcols})])
 
-    ################################################################################
-
-    # constpth = root('data/constraints.csv')
-    # constcols = ['const_name','description','s','alpha','val','kind']
-    #
-    # pcpb      = PyBlock(parse_const, args = [Const(constpth)], outnames = constcols)
-    #
-    # pop_constraint =                                                            \
-    #     Gen(name    = 'pop_constraint',
-    #         desc    = 'populate constraints',
-    #         funcs   = [pcpb],
-    #         tags    = ['fit'],
-    #         actions = [Cnst(insert = True, **{x:pcpb[x] for x in constcols})])
-
 
     ############################################################################
 
     acols  = ['contribs','energy','int_occupation','num','true_mag','mag']
-    jcols  = ['stordir','name','runtime','pw','econv','fx'] # job cols
+    jcols  = ['stordir','name','runtime','pw','fx'] # job cols
     pacols = jcols + acols
     apth  = '/Users/ksb/scp_tmp/vauto/atoms'
     papb  = PyBlock(parse_atoms, args = [Const(apth)], outnames = pacols)
@@ -72,7 +61,7 @@ def io(mod : Model) -> None:
                 runtime = papb['runtime'],
                 calc    = Calc(insert     = True,
                                pw         = papb['pw'],
-                               econv      = papb['econv'],
+                               #econv      = papb['econv'],
                                functional = ifun),
                 stordir = papb['stordir'])
 
@@ -88,7 +77,7 @@ def io(mod : Model) -> None:
 
     ############################################################################
 
-    bcols  = ['contribs','energies','volumes','n_atoms','n_elems','composition','img',
+    bcols  = ['alleng','allvol','allcontrib','n_atoms','n_elems','composition','img',
               'eosbm', 'lattice','strain_low','strain_hi','morejobs','incomplete','success']
     bpth   = '/Users/ksb/scp_tmp/vauto/bulks'
     pbcols = jcols + bcols
@@ -98,9 +87,8 @@ def io(mod : Model) -> None:
 
     ijob_  = Job(insert  = True,
                  runtime    = pbpb['runtime'],
-                 calc    = Calc(insert    = True,
+                 calc    = Calc(insert     = True,
                                 pw         = pbpb['pw'],
-                                econv      = pbpb['econv'],
                                 functional = ifun_),
                  stordir = pbpb['stordir'])
 
@@ -130,15 +118,14 @@ def io(mod : Model) -> None:
             actions = [Bulks(bulks=peq['b'],**{x:pepb[x] for x in xcols})])
 
     ############################################################################
-    #a1msb = ['a11','a12','a13','a14','a15','msb']
 
-    fcols = ['name','pth','timestamp']
+    fcols = ['name','pth']
 
     fitpth   = join(environ['FUNCTIONALS_ROOT'],'data/fit')
 
     fpb = PyBlock(parse_fit,
                   args     = [Const(fitpth)],
-                  outnames = fcols + ['pw','econv','fdata'] + fitcols)
+                  outnames = fcols + ['pw','fdata'] + fitcols)
 
     pop_fit =                                                                   \
         Gen(name    = 'pop_fit',
@@ -148,7 +135,7 @@ def io(mod : Model) -> None:
             actions = [Fit(insert = True,
                            **{x:fpb[x] for x in fcols},
                            calc   = Calc(insert = True,
-                                        **{x:fpb[x] for x in ['pw','econv']},
+                                         pw = fpb['pw'],
                                         functional = Fx(insert = True,
                                                         data   = fpb['fdata'])),
                            fitparams = Fitparams(insert=True,
@@ -157,9 +144,26 @@ def io(mod : Model) -> None:
 
 
     ############################################################################
+    ptcols = ['traj%d'%i for i in range(5)]
+
+    ptq = Query(dict(f=Fit.id(),p=Fit['pth']()))
+
+    def ptfun(pth:str)->T[str,str,str,str,str]:
+        with open(join(pth,'result.json'),'r') as f: a,b,c,d,e = map(dumps,load(f))
+        return a,b,c,d,e
+
+    ptpb = PyBlock(ptfun,env=defaultEnv+Env(Import('os.path','join')),args=[ptq['p']],outnames=ptcols)
+
+    pop_traj = \
+        Gen(name = 'pop_traj',
+            desc = 'loads trajectories of fits',
+            query = ptq,
+            funcs = [ptpb],
+            actions = [Fit(fit=ptq['f'],**{x:ptpb[x] for x in ptcols})])
+    ############################################################################
     ############################################################################
     ############################################################################
 
-    gens = [pop_fitparams,pop_atoms,pop_bulks,pop_expt,pop_fit]
+    gens = [pop_fitparams,pop_atoms,pop_bulks,pop_expt,pop_fit,pop_traj]
 
     mod.add(gens)

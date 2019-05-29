@@ -1,6 +1,6 @@
 from typing import Callable as C, Tuple as T
 
-def parse_incar(pth:str)->dict:
+def parse_incar(pth : str)->dict:
     '''Turn path to INCAR into a dictionary'''
     with open(pth,'r') as f:
         pairs = [l.split('=') for l in f if len(l.split('=')) == 2]

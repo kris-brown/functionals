@@ -10,7 +10,7 @@ from scipy.stats import linregress         # type: ignore
 from dbgen import (Model, Gen, Query, PyBlock, AND, Env, defaultEnv, Import,
                   Literal as Lit,  EQ, JPath, Constraint, LEFT, One, SUM, GT,
                   LIKE, CONCAT, LT, ABS, GROUP_CONCAT, NOT, NULL, Const, MAX,
-                  RIGHT, AVG, R2, COUNT, CASE, OR, LIKE)
+                  RIGHT, AVG, R2, COUNT, CASE, OR, LIKE, COALESCE)
 
 ################################################################################
 ################################################################################
@@ -45,6 +45,8 @@ allspecies = \
 
 from functionals.scripts.fit.a_ce import a_ce
 from functionals.scripts.fit.a_bm import a_bm
+from functionals.scripts.fit.get_minjob import get_minjob
+
 
 def analysis(mod : Model) -> None:
     # Extract tables
@@ -63,7 +65,7 @@ def analysis(mod : Model) -> None:
                      n = RIGHT(Bulks['name'](),Lit(3)),
                      l = Bulks['expt_l']()))
 
-    xvpb=PyBlock(lambda n,l: float(l)**2 * (1.633 if n=='hcp' else float(l)),
+    xvpb=PyBlock(lambda n,l: float(l)**3 * (1.4142 if n=='hcp' else 1.),
                  args = [xvq[x] for x in 'nl'])
 
     xvol = Gen(name='xvol',
@@ -72,6 +74,10 @@ def analysis(mod : Model) -> None:
                query = xvq,
                funcs = [xvpb],
                actions = [Bulks(bulks=xvq['b'],expt_vol=xvpb['out'])])
+    ########################################################################
+    vq = Query(dict(b=Bulks.id(),v = Bulks['volumes']()))
+    vpb = PyBlock(lambda x: loads(x)[0],args=[vq['v']])
+    vol = Gen(name = 'vol',query=vq,funcs=[vpb],actions=[Bulks(bulks=vq['b'],volume=vpb['out'])])
     ########################################################################
     ibq = Query(dict(f = Fx.id(),
                      b = LEFT(Fx['data'](), One) |EQ| Lit('[')))
@@ -99,8 +105,8 @@ def analysis(mod : Model) -> None:
             desc    = 'Populates BEEF table',
             query   = bq,
             funcs   = [bpb],
-            actions = [Beef(insert=True,
-                            functional= bq['f'],
+            actions = [Beef(insert     = True,
+                            functional = bq['f'],
                             **{x:bpb[x] for x in bcols})])
     ############################################################################
     name  = CONCAT(Lit('%'),Atoms['name'](),Lit('%'))
@@ -164,21 +170,6 @@ def analysis(mod : Model) -> None:
                              ce     = ceq['ce'])])
 
     ########################################################################
-    bmq = Query(exprs = dict(b = Bulks.id(),
-                             v = Bulks['volumes'](),
-                             e = Bulks['energies']()))
-    uconv       = (10**-9) * (1.602 * 10**-19) * (10**10)**3
-    doc         = '\nConvert eV/A³ to GPa or GJ/m³'
-    bmpb1,bmpb2 = [PyBlock(lambda x: loads(x),args = [bmq[x]]) for x in 've']
-    bmpb3 = PyBlock(lambda xs,ys,conv: 2 * xs[0] * np.polyfit(xs,ys,2)[0] * conv,
-                   args = [bmpb1['out'],bmpb2['out'],Const(uconv)])
-    bm =                                                                        \
-        Gen(name    = 'bulkmod',
-            desc    = 'Calculates bulk modulus given the 5 minimum energy jobs'+doc,
-            funcs   = [bmpb1,bmpb2,bmpb3],
-            query   = bmq,
-            actions = [Bulks(bulks=bmq['b'],bulkmod=bmpb3['out'])])
-    ############################################################################
 
     all  = ','.join(sorted(set(allspecies)))
     bpth = JPath('bulks',[bulks__job,job__calc])
@@ -186,7 +177,7 @@ def analysis(mod : Model) -> None:
     dq = Query(exprs   = dict(c = Calc.id(),
                               t = GROUP_CONCAT(Bulks['name'](bpth))),
                basis   = [Calc],
-               #constr  = NOT(NULL(Bulks['ce'](bpth))),
+               constr  = NOT(NULL(Bulks['ce'](bpth))),
                aggcols = [Calc.id()])
 
     dqpb = PyBlock(lambda s,all: ','.join(set(all.split(','))-set(s.split(','))),
@@ -276,27 +267,34 @@ def analysis(mod : Model) -> None:
                             c = Bulks['contribs'](),
                             e = Bulks['energies'](),
                             v = Bulks['volumes'](),
-                            f = Beef['data'](beefpth)),
-                 basis   = [Bulks])
+                            a = Bulks['alleng'](),
+                            l = Bulks['allvol'](),
+                            f = Beef['data'](beefpth),
+
+                            q=Bulks['volume'](),w=Bulks['expt_vol']()),
+                 basis   = [Bulks],
+                 constr   = NOT(Bulks['irregular']()),
+                 opt_attr = [Bulks['expt_bm']()])
 
     bmout = ['a_bm','b_bm','a_l','b_l']
     abmpb = PyBlock(a_bm,
                     env      = defaultEnv + Env(Import('numpy.linalg','inv')),
-                    args     = [abmq[x] for x in 'evcfx'],
+                    args     = [abmq[x] for x in 'evcfxalqw'],
                     outnames = bmout)
 
     abm =                                                                       \
         Gen(name    = 'abm',
-            desc    = 'Computes A matrix vectors to yield cohesive energy',
+            desc    = 'Computes Ax+b=y matrices/vectors to compute bulk modulus + volume',
             query   =  abmq,
             funcs   = [abmpb],
             actions = [Bulks(bulks=aceq['b'],**{x:abmpb[x] for x in bmout})])
 
     ########################################################################
-    diff = Bulks['eosbm']() - Bulks['bulkmod']()
-
-    iq = Query(dict(b=Bulks.id(),i = GT(ABS(diff)/Bulks['expt_bm'](),
-                                          Lit(0.1))))
+    denom = COALESCE(Bulks['expt_bm'](),Bulks['eosbm']())
+    i  = AND(*[GT(ABS(x - Bulks['bulkmod']())/denom, Lit(0.1))
+                for x in [denom, Bulks['eosbm']()]])
+    iq = Query(dict(b=Bulks.id(), i = i),
+            opt_attr = [Bulks['expt_bm']()])
     irreg =                                                                     \
         Gen(name = 'irreg',
             desc = 'Sets Bulks.irregular to TRUE if ASE eos bulkmod differs from discrete by too much',
@@ -320,32 +318,6 @@ def analysis(mod : Model) -> None:
                                           **{'mse_'+k:mseq['m']})]))
     msec,mseb,msel = msegens
     ########################################################################
-    r2gens = []
-
-    def fx(x:str,y:str)->float:
-        x_,y_ = [loads('[%s]'%z) for z in [x,y]]
-        #print(sorted(list(zip(y_,x_))))
-        out = linregress(x_,y_)[2]**2
-        return out
-
-    for k,(x_,y_) in cols.items():
-        x = Bulks.get(x_)(cbp); y = Bulks.get(y_)(cbp)
-        r2q = Query(exprs   = dict(c = Calc.id(),
-                                   x = GROUP_CONCAT(x),
-                                   y = GROUP_CONCAT(y)),
-                     basis   = [Calc],
-                     #constr  = Fx['beef'](JPath('functional',[calc__functional])), #delete this
-                     aggcols = [Calc.id()])
-        r2 = PyBlock(fx,
-            env = Env(Import('scipy.stats','linregress'))+defaultEnv,
-            args = [r2q['x'],r2q['y']])
-
-        r2gens.append(Gen(name='r2_'+k,
-                           query=r2q, funcs=[r2],
-                           actions=[Calc(calc=mseq['c'],
-                                          **{'r2_'+k:r2['out']})]))
-    r2c,r2b,r2l = r2gens
-    ########################################################################
     cd   = dict(Hydride=['H'],III=['Al'],IV=['C','Se','As'],V=['N','V','P'],
                 VI=['S','O'],VII=['I','F','Br'])
 
@@ -364,13 +336,29 @@ def analysis(mod : Model) -> None:
         actions = [Bulks(bulks=aq['b'],alloy=aq['k'])]
     )
 
+    ########################################################################
+    mjcols = ['energies','volumes','contribs','bulkmod','appxvol']
+    mjq = Query(dict(b = Bulks.id(),
+                     x = Bulks['expt_bm'](),
+                     m = Bulks['eosbm'](),
+                     e = Bulks['alleng'](),
+                     v = Bulks['allvol'](),
+                     c = Bulks['allcontrib']()),
+                opt_attr = [Bulks['expt_bm']()])
+    mjpb  = PyBlock(get_minjob, args=[mjq[x] for x in 'xmevc'], outnames = mjcols)
 
-
+    minjobs = Gen(
+        name = 'minjobs',
+        desc = 'Identifies subset of jobs to be used for least square fit',
+        query = mjq,
+        funcs = [mjpb],
+        actions = [Bulks(bulks=mjq['b'],**{x:mjpb[x] for x in mjcols})]
+    )
     ########################################################################
     ########################################################################
     ########################################################################
 
-    gens = [alloy,xvol,isbeef,beef,exptref,eform,ce,bm,done,done2,refcontribs,ace,abm,
-            irreg,msec,mseb,msel,r2c,r2b,r2l]
+    gens = [alloy,xvol,isbeef,beef,exptref,eform,ce,done,done2,refcontribs,ace,abm,
+            irreg,msec,mseb,msel,vol,minjobs]
 
     mod.add(gens)
