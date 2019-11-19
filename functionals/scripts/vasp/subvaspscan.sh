@@ -1,11 +1,13 @@
-#!/bin/bash
-echo $HOST > host.txt
+#!/bin/tcsh
+source /nfs/slac/g/suncatfs/sw/vasp/vbfscan/setupenv
+echo ${{HOST}} > host.txt
 
-mpirun -n $LSB_MAX_NUM_PROCESSORS /nfs/slac/staas/fs1/g/suncat/ksb/vasp/olsherlock/vasp.5.4.1/bin/vasp_std &> run.log
+mpirun -n ${{LSB_MAX_NUM_PROCESSORS}} vasp > run1.log
 
-mv INCAR INCAR0
-mv INCAR2 INCAR
+cp OUTCAR OUTCAR0
+cp INCAR INCAR0
+cp INCAR2 INCAR
 
-vasp-ver-bsub-native bfscan -n 16 -o qlog.txt -q suncat3 -W 20:00
+mpirun -n ${{LSB_MAX_NUM_PROCESSORS}} vasp > run2.log
 
 rm -f WAVECAR

@@ -1,6 +1,14 @@
 {
  "type" : "bar",
- "query": "Select MAX(CASE WHEN n_elems=1 THEN 'Simple' ELSE 'Compound' END) AS kind,MAX(case when left(data,1)='[' THEN 'BEEF' ELSE data END) AS xc,POW(AVG(POW(ce-expt_ce,2)),0.5) AS rmse from bulks join job on job=job_id join calc on calc=calc_id join functional on functional=functional_id where expt_ce-ce is not null GROUP BY data,n_elems",
+ "query": "
+SELECT MAX(CASE WHEN n_elems = 1 THEN 'Simple' ELSE 'Compound' END) AS kind,
+       MAX(CASE WHEN LEFT(data, 1) = '[' THEN 'BEEF' ELSE data END) AS xc,
+       POW(AVG(POW(ce - expt_ce, 2)),0.5) AS rmse
+FROM bulks JOIN job ON job=job_id
+           JOIN calc ON calc=calc_id
+           JOIN functional ON functional=functional_id
+WHERE expt_ce - ce IS NOT NULL
+GROUP BY data,n_elems",
  "xcols": "rmse",
  "gcols": "xc",
  "spcols": "kind",

@@ -1,169 +1,112 @@
 # External
-from typing import Tuple as T
+from typing import Tuple as T, Set as S
 from os import environ
 from os.path import join
+from csv import reader
 from json import load,dumps
 
 # Internal Modules
 from dbgen import (Model, Gen, PyBlock, Env, Query, Const, Import, defaultEnv,
-                    EQ, Literal as Lit, Arg, JPath, CONCAT, NULL, LIKE, NOT, AND)
+                    EQ, Literal as Lit, Arg, JPath, CONCAT, NULL, LIKE, NOT,
+                    AND, GROUP_CONCAT, MAX)
 
-from functionals.scripts.io.parse_fitparams        import parse_fitparams
-from functionals.scripts.io.parse_const            import parse_const
-from functionals.scripts.io.parse_atoms            import parse_atoms
-from functionals.scripts.io.parse_bulks            import parse_bulks
-from functionals.scripts.io.parse_keld             import parse_keld
-from functionals.scripts.io.parse_fit              import parse_fit
+from functionals.scripts.io.parse_const          import parse_const
+from functionals.scripts.io.parse_csv            import parse_csv
+from functionals.scripts.io.parse_job            import parse_job
+from functionals.scripts.io.parse_fit            import parse_fit
 
 ################################################################################
 ################################################################################
 ################################################################################
-def root(x:str)->str: return join(environ['FUNCTIONALS_ROOT'],x)
+root = '/Users/ksb/scp_tmp/vauto/'
+csvpth = '/'+join(*__file__.split('/')[:-4], 'data/%s.csv')
+pj_cols = ['stordir','runtime','pw','econv','fx','contribs','energy', 'int_occupation', 'mag']
+
+# with open(csvpth,'r') as f:
+#     csvr = reader(f)
+#     mats = set(['/%s_'%row[0] for row in csvr if 'hcp' != row[1]])
+# elems = {'/%s$'%x for x in {'Ag','Al','As','N','P','Au','B','Ba','Be','C','Ca','O','Cd','Co','Cu',
+#          'Fe','Ge','As','Ga','Ge','In','Ir','K','Li','Cl','F','H','Mg','S','Mo',
+#          'Na','Nb','Ni','Os','Pb','Pd','Pt','Rb','Rh','Ru','Sc','Si','Sn','Sr',
+#          'Ta','Ti','V','W','Zn','Zr'}}
+mats = elems = set() # type: S[str]
+
 
 def io(mod : Model) -> None:
 
     # Extract tables
-    tabs = ['Fitparams','Atoms','Functional',"Job","Calc","Bulks",'Fit']
-    Fitparams, Atoms,Fx, Job, Calc, Bulks, Fit = map(mod.get,tabs)
+    tabs = ['Atoms','Functional',"Calc","Bulkjob", "Bulks", "Fit", "Fitparams"]
+    Atoms, Fx, Calc, Bulkjob, Bulks, Fit, Fitparams = map(mod.get,tabs)
 
     ################################################################################
     ################################################################################
     ################################################################################
 
-    fitcols = ['consts','reg', 'ce_scale','bm_scale','lc_scale']
+    papb  = PyBlock(parse_job, args = [Const(root+'atoms'),Const(elems)], outnames = pj_cols)
 
-    parampth = root('data/fitparams.csv')
-
-    pfpb = PyBlock(parse_fitparams,
-                   args     = [Const(parampth)],
-                   outnames = fitcols)
-
-    pop_fitparams =                                                             \
-        Gen(name    = 'pop_fitparams',
-            desc    = 'Looks in FITPATH for fitting specifications',
-            funcs   = [pfpb],
-            tags    = ['fit','io'],
-            actions = [Fitparams(insert = True,
-                           **{x:pfpb[x] for x in fitcols})])
-
-
-    ############################################################################
-
-    acols  = ['contribs','energy','int_occupation','num','true_mag','mag']
-    jcols  = ['stordir','name','runtime','pw','fx'] # job cols
-    pacols = jcols + acols
-    apth  = '/Users/ksb/scp_tmp/vauto/atoms'
-    papb  = PyBlock(parse_atoms, args = [Const(apth)], outnames = pacols)
-
-    ifun  = Fx(insert = True, data   = papb['fx'])
-
-    ijob  = Job(insert  = True,
-                runtime = papb['runtime'],
-                calc    = Calc(insert     = True,
-                               pw         = papb['pw'],
-                               #econv      = papb['econv'],
-                               functional = ifun),
-                stordir = papb['stordir'])
-
+    ia = Atoms(insert=True, **{x:papb[x] for x in pj_cols})
     pop_atoms =                                                                 \
         Gen(name    = 'pop_atoms',
             desc    = 'populate Atoms',
             funcs   = [papb],
-            tags    = [],#['io'],
-            actions = [Atoms(insert=True,
-                             job   = ijob,
-                             name  = papb['name'],
-                             **{x:papb[x] for x in acols})])
-
+            actions = [Atoms(insert=True, **{x:papb[x] for x in pj_cols})])
     ############################################################################
 
-    bcols  = ['alleng','allvol','allcontrib','n_atoms','n_elems','composition','img',
-              'eosbm', 'lattice','strain_low','strain_hi','morejobs','incomplete','success']
-    bpth   = '/Users/ksb/scp_tmp/vauto/bulks'
-    pbcols = jcols + bcols
-    pbpb   = PyBlock(parse_bulks, args = [Const(bpth)], outnames = pbcols)
+    pbpb   = PyBlock(parse_job, args = [Const(root+'bulks'),Const(mats)], outnames = pj_cols)
 
-    ifun_  = Fx(insert = True, data   = pbpb['fx'])
 
-    ijob_  = Job(insert  = True,
-                 runtime    = pbpb['runtime'],
-                 calc    = Calc(insert     = True,
-                                pw         = pbpb['pw'],
-                                functional = ifun_),
-                 stordir = pbpb['stordir'])
-
-    pop_bulks =                                                                 \
-        Gen(name = 'pop_bulks',
-            desc = 'populates Bulks',
+    pop_bulkjobs =                                                                 \
+        Gen(name = 'pop_bulkjobs',
+            desc = 'populates BulkJobs',
             funcs = [pbpb],
-            tags  = [],#['io'],
-            actions = [Bulks(insert=True,job=ijob_,name=pbpb['name'],
-                            **{x:pbpb[x] for x in bcols})])
+            actions = [Bulkjob(insert=True, **{x:pbpb[x] for x in pj_cols})])
 
     ############################################################################
-    xcols    = ['expt_ce', 'expt_bm', 'expt_l', 'expt_mag']
-    keldpath = environ['KELDPATH']
 
-    peq = Query(dict(b = Bulks.id(), n = Bulks['name']()))
+    ############################################################################
+    xcols = ['expt_ce', 'expt_bm', 'expt_l','expt_vol', 'expt_mag']
+    ptq = Query(dict(b = Bulks.id(), n = Bulks['name'](), r=Bulks['volrat']()))
 
-    pepb = PyBlock(parse_keld,
-                   args     = [peq['n'],Const(keldpath)],
+    ptpb = PyBlock(parse_csv,
+                   args = [Const(csvpth), ptq['n'], ptq['r']],
                    outnames = xcols)
 
-    pop_expt =                                                                  \
-        Gen(name    = 'pop_expt',
-            desc    = 'Populates experimental data cols in Bulks',
-            query   = peq,
-            funcs   = [pepb],
-            actions = [Bulks(bulks=peq['b'],**{x:pepb[x] for x in xcols})])
-
+    pop_expt = Gen(name = 'pop_expt',
+                   desc='tran https://aip.scitation.org/doi/10.1063/1.4948636',
+                   query= ptq, funcs=[ptpb],
+                   actions = [Bulks(bulks=ptq['b'],**{x:ptpb[x] for x in xcols})])
     ############################################################################
 
-    fcols = ['name','pth']
+    fcols = ['name','pth','done']
+    fitcols = ['consts','reg', 'ce_scale','bm_scale','lc_scale','mag_scale']
 
-    fitpth   = join(environ['FUNCTIONALS_ROOT'],'data/fit')
-
+    env = Env([Import('os.path',['join','getsize']),
+               Import('os',['listdir'])]) + defaultEnv
     fpb = PyBlock(parse_fit,
-                  args     = [Const(fitpth)],
+                  env = env,
+                  args     = [Const(root+'fit')],
                   outnames = fcols + ['pw','fdata'] + fitcols)
+
+    icalc = Calc(insert=True,
+                 pw=fpb['pw'],
+                 functional=Fx(insert=True, data=fpb['fdata']))
 
     pop_fit =                                                                   \
         Gen(name    = 'pop_fit',
             desc    = 'looks for completed fitting jobs - grabs identifying info',
             funcs   = [fpb],
             tags    = ['io','fit'],
-            actions = [Fit(insert = True,
+            actions = [Fit(insert = True,calc=icalc,
                            **{x:fpb[x] for x in fcols},
-                           calc   = Calc(insert = True,
-                                         pw = fpb['pw'],
-                                        functional = Fx(insert = True,
-                                                        data   = fpb['fdata'])),
                            fitparams = Fitparams(insert=True,
                                                  **{x:fpb[x] for x in fitcols}))])
 
 
 
     ############################################################################
-    ptcols = ['traj%d'%i for i in range(5)]
-
-    ptq = Query(dict(f=Fit.id(),p=Fit['pth']()))
-
-    def ptfun(pth:str)->T[str,str,str,str,str]:
-        with open(join(pth,'result.json'),'r') as f: a,b,c,d,e = map(dumps,load(f))
-        return a,b,c,d,e
-
-    ptpb = PyBlock(ptfun,env=defaultEnv+Env(Import('os.path','join')),args=[ptq['p']],outnames=ptcols)
-
-    pop_traj = \
-        Gen(name = 'pop_traj',
-            desc = 'loads trajectories of fits',
-            query = ptq,
-            funcs = [ptpb],
-            actions = [Fit(fit=ptq['f'],**{x:ptpb[x] for x in ptcols})])
-    ############################################################################
     ############################################################################
     ############################################################################
 
-    gens = [pop_fitparams,pop_atoms,pop_bulks,pop_expt,pop_fit,pop_traj]
+    gens = [pop_atoms, pop_bulkjobs, pop_fit, pop_expt]
 
     mod.add(gens)

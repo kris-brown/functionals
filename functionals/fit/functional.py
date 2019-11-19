@@ -3,7 +3,6 @@ from typing import Callable as C, List as L, Dict as D, Tuple as T
 from abc    import ABCMeta, abstractmethod
 from json   import load, loads
 from os     import environ
-from hashlib import sha224
 from os.path import join
 from numpy  import inf,vstack,array,sum,multiply,heaviside,exp,arange,concatenate as concat # type: ignore
 from plotly.graph_objs import Figure,Layout,Scatter        # type: ignore
@@ -12,7 +11,7 @@ from sklearn.linear_model import LinearRegression as LinReg          # type: ign
 
 # Internal
 from functionals.fit.utilities import LegendreProduct
-from functionals.fit.fit           import Fit,sqlselect
+
 binary = C[[float,float],float]
 ################################################################################
 ################################################################################
@@ -47,7 +46,7 @@ class Functional(object, metaclass = ABCMeta):
         raise NotImplementedError
 
     @staticmethod
-    def plots(ps : L['Functional']) -> None:
+    def plots(ps : L['Functional']) -> Figure:
         assert len(ps)<7
         cs     = colors = ['rgb(255,0,0)', 'rgb(0,255,0)', 'rgb(0,0,255)', 'rgb(153,0,153)', 'rgb(0,0,0)', 'rgb(255,255,0)']
         data   = flatten([p.plot(color=c) for p,c in zip(ps,cs)])
@@ -55,13 +54,12 @@ class Functional(object, metaclass = ABCMeta):
                       xaxis = dict(title = 's'),
                       yaxis = dict(title = 'Fx'))
         fig = Figure(data = data, layout = layout)
-        plot(fig,filename='temp0.html')
+        return fig
 
     def plot(self,color:str) -> L[dict]:
         ss     = arange(0.,5,0.1)
         alphas = array([0,1]) if self.mgga else [1]
         styles = ['solid','dot','dash','dashdot']
-
 
         out    = []
         for sty,a in zip(styles,alphas):
@@ -131,7 +129,7 @@ class FromMatrix(Functional):
 
     @staticmethod
     def mkPlots(a1:float,msb:float,**ps : str) -> None:
-        Functional.plots([FromMatrix(loads(p) if isinstance(p,str) else p,a1,msb,n)
+        Functional.plots([FromMatrix(array(loads(p)) if isinstance(p,str) else p,a1,msb,n)
                             for n,p in ps.items()])
 
 ################################################################################
@@ -206,7 +204,7 @@ MS2 = FromFunc('MS2',fxMS2)
 
 # From data
 #----------
-with open(join(environ['FUNCTIONALS_ROOT'],'data/beefs/beef.json'),'r') as f:
+with open('/'+join(*__file__.split('/')[:-3],'data/beefs/beef.json'),'r') as f:
     beefcoeff = array(load(f))
 
 BEEF = FromMatrix(beefcoeff.reshape(8,8),a1=float('inf'),msb=1,name='beef')

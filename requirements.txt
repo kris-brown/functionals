@@ -11,3 +11,5 @@ plotly
 infinite
 jsonpickle
 sklearn
+sshtunnel
+jinja2

@@ -10,10 +10,9 @@ Visualize results from the DB
 e.g. >> python CLI/plot.py --pltpth=plots/example.json
 '''
 ################################################################################
-def main(args:dict)->None:
-    plt(args)
 
 if __name__=='__main__':
     args = vars(parser.parse_args())
-    args['db'] = join(environ['FUNCTIONALS_ROOT'],'data/functionals.json')
-    main(args)
+    args['db'] = '/'+join(*__file__.split('/')[:-3],'data/functionals.json')
+    args['open'] = True
+    plt(args)

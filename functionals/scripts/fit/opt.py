@@ -2,7 +2,7 @@ from json import loads, dumps,load
 from typing import List as L, Tuple as T
 import numpy as np # type: ignore
 
-def opt(pth:str)->T[str,str]:
+def opt(pth : str) -> T[str, str]:
     np.warnings.filterwarnings('ignore')
 
     with open(pth+'/result.json','r') as fi: steps = load(fi)

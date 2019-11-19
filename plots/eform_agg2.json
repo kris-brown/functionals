@@ -1,6 +1,22 @@
 {
  "type" : "bar",
- "query": "Select MAX(alloy) AS kind,MAX(case when left(data,1)='[' THEN 'BEEF' ELSE data END) AS xc,(CASE WHEN left(data,1)='[' THEN (CASE WHEN MAX(alloy) = 'Metal' THEN 0.094 WHEN MAX(alloy) = 'III' THEN 0.111 WHEN MAX(alloy) = 'IV' THEN 0.13 WHEN MAX(alloy) = 'V' THEN 0.14 WHEN MAX(alloy) = 'VI' THEN 0.09 WHEN MAX(alloy) = 'VII' THEN 0.07 ELSE 0.04 END) ELSE POW(AVG(POW(ce-expt_ce,2)),0.5) END) AS rmse from bulks join job on job=job_id join calc on calc=calc_id join functional on functional=functional_id where expt_ce-ce is not null GROUP BY data,alloy",
+ "query": "
+ SELECT MAX(alloy) AS kind,
+        MAX(CASE WHEN left(data,1)='[' THEN 'BEEF' ELSE data END) AS xc,
+        (CASE WHEN left(data,1)='[' THEN (CASE
+                                              WHEN MAX(alloy) = 'Metal' THEN 0.094
+                                              WHEN MAX(alloy) = 'III' THEN 0.111
+                                              WHEN MAX(alloy) = 'IV' THEN 0.13
+                                              WHEN MAX(alloy) = 'V' THEN 0.14
+                                              WHEN MAX(alloy) = 'VI' THEN 0.09
+                                              WHEN MAX(alloy) = 'VII' THEN 0.07
+                                              ELSE 0.04 END)
+         ELSE POW(AVG(POW(ce-expt_ce,2)),0.5) END) AS rmse
+FROM bulks JOIN job ON job=job_id
+           JOIN calc ON calc=calc_id
+           JOIN functional ON functional=functional_id
+WHERE expt_ce - ce IS NOT NULL
+GROUP BY data,alloy",
  "xcols": "rmse",
  "gcols": "xc",
  "spcols": "kind",

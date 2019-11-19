@@ -1,6 +1,13 @@
 {
  "type" : "bar",
- "query": "Select name,case when left(data,1)='[' THEN 'BEEF' ELSE data END AS xc,ce-expt_ce as err from bulks join job on job=job_id join calc on calc=calc_id join functional on functional=functional_id where expt_ce-ce is not null ",
+ "query": "
+SELECT name,
+       CASE WHEN LEFT(data,1)='[' THEN 'BEEF' ELSE data END AS xc,
+       ce-expt_ce as err
+FROM bulks join job ON job=job_id
+     JOIN calc ON calc=calc_id
+     JOIN functional ON functional=functional_id
+WHERE expt_ce-ce IS NOT NULL",
  "xcols": "err",
  "gcols": "xc",
  "spcols": "name",

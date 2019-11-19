@@ -1,10 +1,14 @@
 {
   "type"   : "line",
-  "query"  : "SELECT job_id,energy,user,xc FROM job JOIN calc ON job__calc=calc_id ORDER BY RAND() LIMIT 1000",
-  "xcols"  : "job_id",
+  "query"  : "
+SELECT atoms_id,energy, true_mag
+FROM atoms
+ORDER BY RANDOM()
+LIMIT 1000",
+  "xcols"  : "atoms_id",
   "xfunc"  : "lambda x: x**2",
   "ycols"  : "energy",
-  "gcols"  : "xc",
+  "gcols"  : "true_mag",
   "title"  : "Trivial scatterplot",
   "xlab"   : "$(Job ID)^2$",
   "ylab"   : "Energy, eV",

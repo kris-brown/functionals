@@ -7,4 +7,6 @@ def parse_contribs_vasp(outcar : str)->str:
     start    = outcar.find('BEEF xc energy contributions')
     lines    = outcar[start:].split('\n')[1:321]
     contribs = [float(line.split(':')[1]) for line in lines]
-    return dumps(contribs)
+    # assuming that a1 isn't varied
+    # assert contribs[:64] == contribs[64:128]
+    return dumps(contribs[:64])

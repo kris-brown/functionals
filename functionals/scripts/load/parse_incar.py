@@ -14,8 +14,8 @@ def parse_incar(pth : str)->dict:
     def maybe(f : C) -> C:
         return lambda x: x if x is None else f(x)
 
-    strs = ['metagga','gga','prec','magmom']
-    floats = ['encut','ediff','sigma','a11','a12','a13','a14','a15','msb','nupdown']
+    strs = ['metagga','gga','prec','magmom','ferwe','ferdo']
+    floats = ['encut','ediff','sigma','nupdown']
     ints = ['ismear','npar','nelm','ispin','ibrion']
     bools = ['lcharg','lbeefens','addgrid','lasph','lwave']
     keys = dict(**{k:str for k in strs},**{k:float for k in floats},

@@ -11,7 +11,7 @@ def a_bm(engs_     : str,
          allengs_  : str,
          allvols_  : str,
          vol:float,xvol:float
-         ) -> T[str,str,str,str]:
+         ) -> T[str,float,str,float]:
     '''
     E(Vol) = Ex(Vol) + Enx(Vol) = A * Vol² + B * Vol + C
      - A :: eV/A^-6, B :: eV/A^-3, C :: eV
@@ -68,10 +68,9 @@ def a_bm(engs_     : str,
     volumes  = np.array(loads(vols_))             # 5 element array, A^3
     energies = np.array(loads(engs_))             # 5 element array, eV
 
-    contribs = np.array(loads(contribs_)) #[np.array(loads(x)) for x in loads(contribs_)]
+    contribs = np.array(loads(contribs_))
     N = len(volumes) # number of jobs used
     coefs    = np.array(loads(coefs_))            # 64 element array
-    a_bm,b_bm,a_l,b_l = [],[],[],[]
 
     fit = np.polyfit(loads(allvols_),loads(allengs_),2)
     if True: #bm_expt_ is None:
@@ -79,37 +78,21 @@ def a_bm(engs_     : str,
     else:
         bm_expt  = float(bm_expt_)
 
+    c = np.vstack(contribs) # n points x 64
+    e_nonx  = energies - c @ coefs # len-5 vector
 
-    try:
-        slices = [slice(i*64,(i+1)*64) for i in range(5)]
-
-        for sli in slices:
-            c = np.vstack([contrib[sli] for contrib in contribs])
-            e_nonx  = energies - c @ coefs # len-5 vector
-
-            vander = np.vstack((np.ones(N),volumes,volumes**2)).T  # 5 x 3
-            vinv   = inv(vander.T @ vander)                        # 3 x 3
-            solver = vinv @ vander.T                              # 3 x 5
+    vander = np.vstack((np.ones(N),volumes,volumes**2)).T  # 5 x 3
+    vinv   = inv(vander.T @ vander)                        # 3 x 3
+    solver = vinv @ vander.T                              # 3 x 5
 
 
-            bm_base = 2 * bm_conv * volumes[0] * (np.array([0,0,1]) @ solver)
-            a_bm.append(bm_base @ c)
-            b_bm.append(bm_base @ e_nonx)
+    bm_base = 2 * bm_conv * volumes[0] * (np.array([0,0,1]) @ solver)
+    a_bm = bm_base @ c
+    b_bm = bm_base @ e_nonx
 
-            # lattice_base = -bm_conv* volumes[0] /bm_expt * (np.array([0,1,0]) @ solver)
-            # a_l.append(lattice_base @ c)
-            # b_l.append(lattice_base @ e_nonx)
-            bm_expt = bm_base @ c @ coefs + (bm_base @ e_nonx)
-            lattice_base = -bm_conv* volumes[0] /bm_expt * (np.array([0,1,0]) @ solver)
-            a_l.append(lattice_base @ c)
-            b_l.append(lattice_base @ e_nonx)
+    bm_expt = bm_base @ c @ coefs + (bm_base @ e_nonx)
+    lattice_base = -bm_conv* volumes[0] /bm_expt * (np.array([0,1,0]) @ solver)
+    a_l = lattice_base @ c
+    b_l = lattice_base @ e_nonx
 
-
-        # if float(bm_expt_) == 109.:
-        #     print('Ag_fcc')
-        #     print(np.array(a_l)@coefs+np.array(b_l))
-        #     import pdb;pdb.set_trace()
-        return (dumps([x.tolist() for x in a_bm]),dumps(b_bm),
-                dumps([x.tolist() for x in a_l]),dumps(b_l))
-    except Exception as e:
-        print(e);import pdb;pdb.set_trace();assert False
+    return dumps(a_bm.tolist()),b_bm, dumps(a_l.tolist()),b_l
