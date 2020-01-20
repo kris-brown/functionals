@@ -1,93 +1,76 @@
 # External Modules
-from typing import Callable as C, List as L, Dict as D, Tuple as T
-from abc    import ABCMeta, abstractmethod
-from json   import load, loads
-from os     import environ
-from os.path import join
-from numpy  import inf,vstack,array,sum,multiply,heaviside,exp,arange,concatenate as concat # type: ignore
-from plotly.graph_objs import Figure,Layout,Scatter        # type: ignore
-from plotly.offline    import plot # type: ignore
-from sklearn.linear_model import LinearRegression as LinReg          # type: ignore
+from typing import Any, Callable as C, List as L, Dict as D
+import abc
+import json
+import os
+import numpy as np
+import functools
+import plotly.graph_objs as go
+import functionals.fit.math as math
+import plotly
 
-# Internal
-from functionals.fit.utilities import LegendreProduct
-
-binary = C[[float,float],float]
-################################################################################
-################################################################################
-################################################################################
+binary = C[[float, float], float]
+bvec = C[[float, float], np.ndarray]
+###############################################################################
+###############################################################################
 # Functional constants
-#---------------------
-mu_pbe   = 0.2195149727645171
-kappa    = 0.804
-mu       = 10./81
-################################################################################
-################################################################################
-################################################################################
-def flatten(lol:list)->list: return [item for sublist in lol for item in sublist]
+# --------------------
+mu_pbe = 0.2195149727645171
+kappa = 0.804
+mu = 10./81
+
+###############################################################################
+
+
+def flatten(lol: L[Any]) -> L[Any]:
+    return [item for sublist in lol for item in sublist]
 
 
 # Functional classes
-#-------------------
-class Functional(object, metaclass = ABCMeta):
+# ------------------
+
+
+class Functional(object, metaclass=abc.ABCMeta):
     """
     Something that implements a function (s,⍺)->Fx :: (ℝ+,ℝ+)->ℝ+
     """
     @property
-    @abstractmethod
+    @abc.abstractmethod
     def name(self) -> str: pass
 
     @property
-    @abstractmethod
+    @abc.abstractmethod
     def mgga(self) -> bool: pass
 
-    @abstractmethod
-    def apply(self, s : float, a : float) -> float:
+    @abc.abstractmethod
+    @functools.lru_cache(maxsize=1000, typed=False)
+    def apply(self, s: float, a: float) -> float:
         raise NotImplementedError
 
-    @staticmethod
-    def plots(ps : L['Functional']) -> Figure:
-        assert len(ps)<7
-        cs     = colors = ['rgb(255,0,0)', 'rgb(0,255,0)', 'rgb(0,0,255)', 'rgb(153,0,153)', 'rgb(0,0,0)', 'rgb(255,255,0)']
-        data   = flatten([p.plot(color=c) for p,c in zip(ps,cs)])
-        layout = Layout(title = 'Functionals',
-                      xaxis = dict(title = 's'),
-                      yaxis = dict(title = 'Fx'))
-        fig = Figure(data = data, layout = layout)
-        return fig
-
-    def plot(self,color:str) -> L[dict]:
-        ss     = arange(0.,5,0.1)
-        alphas = array([0,1]) if self.mgga else [1]
-        styles = ['solid','dot','dash','dashdot']
-
-        out    = []
-        for sty,a in zip(styles,alphas):
-            lab = self.name + r' ($\alpha$=%d)'%a if self.mgga else self.name
-            out.append(Scatter(x   = ss,
-                        y       = [self.apply(s,a) for s in ss],
-                        mode    = 'lines', name    = lab,
-                        line    = dict(dash    = sty,
-                                       color   = color,
-                                       shape   = 'spline')))
+    def plot(self, color: str) -> L[D[Any, Any]]:
+        ss = np.arange(0., 5, 0.1)
+        alphas = np.array([0, 1, 2, 3]) if self.mgga else [1]
+        styles = ['solid', 'dot', 'dash', 'dashdot']
+        out = []
+        for sty, a in zip(styles, alphas):
+            lab = self.name + r' (α=%d)' % a if self.mgga else self.name
+            out.append(go.Scatter(
+                x=ss, y=[self.apply(s, a) for s in ss],
+                mode='lines', name=lab,
+                line=dict(dash=sty, color=color, shape='spline')))
         return out
 
-    @staticmethod
-    def diff(f1:'Functional',f2:'Functional',s:L[float],a:L[float])->float:
-        '''
-        Return the average distance between Fx for a grid of points
-        '''
-        diffs = []
-        for s_ in s:
-            for a_ in a:
-                diffs.append(abs(f1.apply(s_,a_)-f2.apply(s_,a_)))
-        return sum(diffs)/len(diffs)
 
 # Different ways of creating a functional
+
+
 class FromFunc(Functional):
     """ Directly specify the enhancement factor formula """
-    def __init__(self, name : str, f : binary, mgga : bool = True) -> None:
-        self._name = name; self.f = f; self._mgga = mgga
+
+    def __init__(self, name: str, f: binary, mgga: bool = True) -> None:
+        self._name = name
+        self.f = f
+        self._mgga = mgga
 
     @property
     def name(self) -> str: return self._name
@@ -95,21 +78,26 @@ class FromFunc(Functional):
     @property
     def mgga(self) -> bool: return self._mgga
 
-    def apply(self, s : float, a : float) -> float:
-        return self.f(s,a)
+    @functools.lru_cache(maxsize=100, typed=False)
+    def apply(self, s: float, a: float) -> float:
+        return self.f(s, a)
+
 
 class FromMatrix(Functional):
     """
     Implicitly define Fx formula in terms of a 2D matrix corresponding to
     coefficients for Legendre Polynomials
     """
-    def __init__(self, A:array, a1 : float, msb : float, name : str = None) -> None:
-        self.A = A.reshape((8,8))
-        self.x = A.flatten()
-        self.a1 = a1
-        self.msb = msb
-        assert self.A.shape == (8,8)
+
+    def __init__(self, A: np.ndarray,  # a1: float = 4.9479, msb: float = 1.,
+                 name: str = None) -> None:
+        self.A = A.reshape((8, 8))
+        # self.a1 = a1 self.msb = msb
+        assert self.A.shape == (8, 8)
         self._name = name or '<no name>'
+
+    @property
+    def x(self) -> np.ndarray: return self.A.flatten()
 
     @property
     def name(self) -> str: return self._name
@@ -117,94 +105,171 @@ class FromMatrix(Functional):
     @property
     def mgga(self) -> bool: return True
 
-    def apply(self, s : float, a : float) -> float:
-        """
-        A - an MxN matrix with rows corresponding to s basis functions coefficients
-            and columns corresponding to alpha basis function coefficients
-        Eq # 5 in mBEEF paper
-        """
-        P = array([LegendreProduct(s,a,self.a1,self.msb,i,j)
-                                   for i in range(8) for j in range(8)])
-        return sum(self.x @ P)
+    @functools.lru_cache(maxsize=100, typed=False)
+    def apply(self, s: float, a: float,) -> float:
+        return float(np.sum(math.LegProduct(s=s, a=a, A=self.A)))
 
-    @staticmethod
-    def mkPlots(a1:float,msb:float,**ps : str) -> None:
-        Functional.plots([FromMatrix(array(loads(p)) if isinstance(p,str) else p,a1,msb,n)
-                            for n,p in ps.items()])
+    def plot2d(self, plot: bool = False) -> go.Figure:
+        import functionals.fit.constraint as constr
+        a = 0.5
 
-################################################################################
-################################################################################
-################################################################################
+        def d(s: float) -> float:
+            return float(constr.deriv_constr(s, a) @ self.x)
+        xs = np.linspace(0.2, 3, 1000)
+        fs, zs = zip(*[(self.apply(s, a), d(s)) for s in xs])
+        data = [go.Scatter(x=xs, y=fs, name='fx'),
+                go.Scatter(x=xs, y=zs, name='dfx')]
+        fig = go.Figure(data=data)
+        if plot:
+            plotly.offline.plot(fig)
+        return fig
+
+    def plot3d(self, smax: float = 3., amax: float = 3, deriv: str = 'fx',
+               plot: bool = False) -> go.Figure:
+        import functionals.fit.constraint as constr
+        N = 50
+
+        dvs = dict(fx=math.LegProduct, d1=constr.deriv_constr,
+                   d2=constr.deriv2_constr, d3=constr.deriv3_constr,
+                   ad2=constr.deriv2_alpha)  # type: D[str, bvec]
+
+        def d(s: float, a: float) -> float:
+            return float(dvs[deriv](s, a).flatten() @ self.x)
+
+        ss, als, fs, i = zip(*[(s, a, self.apply(s, a), d(s, a))
+                               for s in np.linspace(0, smax, N)
+                               for a in np.linspace(0, amax, N)])
+        lowi, hii = min(i), max(i)
+        if lowi > 0:
+            colorscale = 'bluered'
+        else:
+            denom = hii - lowi
+            zi = -lowi / denom
+            colorscale = [[0., 'blue'], [zi/2, 'green'],  # type: ignore
+                          [zi, 'yellow'], [zi+hii/2/denom, 'red'],
+                          [1, 'black']]
+        data = [go.Mesh3d(x=ss, y=als, z=fs, colorscale=colorscale,
+                          intensity=i)]
+        scene = dict(xaxis=dict(title='s'), yaxis=dict(title='alpha'),
+                     zaxis=dict(title='F(s,a)'),
+                     )
+        title = '%s: %s' % (deriv, self.name)
+        fig = go.Figure(data=data, layout=dict(title=title, scene=scene))
+        if plot:
+            plotly.offline.plot(fig)
+        return fig
+
+
+# def mkPlots(**ps: str) -> go.Figure:
+#     return plots(
+#         [FromMatrix(np.array(json.loads(p))
+#                     if isinstance(p, str) else p, n)
+#          for n, p in ps.items()])
+
+
+def plots(ps: L['Functional']) -> go.Figure:
+    assert len(ps) < 7
+    cs = ['rgb(255,0,0)', 'rgb(0,255,0)', 'rgb(0,0,255)', 'rgb(153,0,153)',
+          'rgb(0,0,0)', 'rgb(255,255,0)']
+    data = flatten([p.plot(color=c) for p, c in zip(ps, cs)])
+    layout = go.Layout(title='Functionals', xaxis=dict(title='s'),
+                       yaxis=dict(title='Fx'))
+    fig = go.Figure(data=data, layout=layout)
+    return fig
+
+###############################################################################
+###############################################################################
+###############################################################################
 # Functional instances
-#---------------------
+# --------------------
 
 # Functionals generated by Explicit enhancement factor functions
-#----------------------------------------------------------------
-PBE    = FromFunc('PBE',   lambda s,_: 1. + kappa*(1. - 1./(1. + mu_pbe*s**2 / kappa)),mgga=False)
-RPBE   = FromFunc('RPBE',  lambda s,_: 1. + kappa*(1. - exp(-mu_pbe*s**2 / kappa)),mgga=False)
-PBEsol = FromFunc('PBEsol',lambda s,_: 1. + kappa*(1. - 1./(1.+mu*s**2 / kappa)),mgga=False)
+# --------------------------------------------------------------
 
-def fxSCAN(s:float,alpha:float)->float:
+
+PBE = FromFunc('PBE', mgga=False,
+               f=lambda s, _: 1. + kappa*(1. - 1./(1. + mu_pbe*s**2 / kappa)))
+RPBE = FromFunc('RPBE', mgga=False,
+                f=lambda s, _: float(1.+kappa*(1.-np.exp(-mu_pbe*s**2/kappa))))
+PBEsol = FromFunc('PBEsol', mgga=False,
+                  f=lambda s, _: 1. + kappa*(1. - 1./(1.+mu*s**2 / kappa)))
+
+
+def fxSCAN(s: float, alpha: float) -> float:
     # Scan-specific constants
-    h0x,c1x,c2x,dx,b3,k1,a1 = 1.174,0.667,0.8,1.24,0.5,0.065,4.9479
+    h0x, c1x, c2x, dx, b3, k1, a1 = 1.174, 0.667, 0.8, 1.24, 0.5, 0.065, 4.9479
     b2 = (5913/405000)**0.5
     b1 = (511/13500) / (2*b2)
     b4 = mu**2/k1 - 1606/18225 - b1**2
     # Edge conditions with numerical instability
     assert s >= 0 and alpha >= 0
-    if s < 0.01: s = 0.01
-    if abs(alpha-1) < 0.01: alpha = 1.001
+    if s < 0.01:
+        s = 0.01
+    if abs(alpha-1) < 0.01:
+        alpha = 1.001
     # Intermediate values
-    theta_1a = float(heaviside(1-alpha,0.5))
-    theta_a1 = float(heaviside(alpha-1,0.5))
-    s2  = s**2
-    x   = mu*s2*(1 + b4*s2/mu) + (b1*s2 + b2*(1-alpha)*exp(-b3*(1-alpha)**2))**2
-    h1x = 1 + k1 - k1/(1+x/k1)
-    gx  = 1 - exp(-a1*s**(-0.5))
-    fx  = exp(-c1x * alpha/(1-alpha)) * theta_1a - dx*exp(c2x/(1-alpha))*theta_a1
+    th_1a = float(np.heaviside(1. - alpha, 0.5))
+    th_a1 = float(np.heaviside(alpha - 1., 0.5))
+    s2 = s**2
+    x_ = (b1*s2 + b2*(1.-alpha)*np.exp(-b3*(1-alpha)**2))**2
+    x = mu*s2*(1. + b4*s2/mu) + x_
+    h1x = 1. + k1 - k1/(1.+x/k1)
+    gx = 1. - np.exp(-a1*s**(-0.5))
+    fx = np.exp(-c1x * alpha/(1.-alpha))*th_1a - dx*np.exp(c2x/(1-alpha))*th_a1
     # Main output
-    return (h1x + fx*(h0x-h1x))*gx
+    return float((h1x + fx*(h0x-h1x))*gx)
 
-def fxSCAN_(s:float,alpha:float)->float:
-    '''Comment out taylor expansion terms in gx as desired'''
-    # Scan-specific constants
-    h0x,c1x,c2x,dx,b3,k1,a1 = 1.174,0.667,0.8,1.24,0.5,0.065,4.9479
-    b2 = (5913/405000)**0.5
-    b1 = (511/13500) / (2*b2)
-    b4 = mu**2/k1 - 1606/18225 - b1**2
-    # Edge conditions with numerical instability
-    assert s >= 0 and alpha >= 0
-    if s < 0.01: s = 0.01
-    if abs(alpha-1) < 0.01: alpha = 1.001
-    # Intermediate values
-    theta_1a = float(heaviside(1-alpha,0.5))
-    theta_a1 = float(heaviside(alpha-1,0.5))
-    s2  = s**2
-    x   = mu*s2*(1 + b4*s2/mu) + (b1*s2 + b2*(1-alpha)*exp(-b3*(1-alpha)**2))**2
-    h1x = 1 + k1 - k1/(1+x/k1)
-    #gx  = 1 - exp(-a1*s**(-0.5))
-    ea = exp(-a1)
-    gx   = ((1-ea) - 0.5*(a1*ea)*(s-1) + a1*ea*(s-1)**2 *(0.375-0.125*a1)
-            +a1 * (-0.0208333 * a1**2 + 0.1875 * a1 - 0.3125) * ea * (s - 1)**3)
-    fx  = exp(-c1x * alpha/(1-alpha)) * theta_1a - dx*exp(c2x/(1-alpha))*theta_a1
-    # Main output
-    return (h1x + fx*(h0x-h1x))*gx
 
-SCAN = FromFunc('SCAN',fxSCAN)
+SCAN = FromFunc('SCAN', fxSCAN)
 
-def fxMS2(s:float,alpha:float)->float:
-    k,c,b = 0.504,0.14601,4.0
-    p     = s**2
-    F1x   = 1 + k - k/(1+mu*p/k)
-    F0x   = 1 + k - k/(1+(mu*p+c)/k)
-    f     = (1-alpha**2) / (1 + alpha**3 + b*alpha**6)
+
+def fxMS2(s: float, alpha: float) -> float:
+    k, c, b = 0.504, 0.14601, 4.0
+    p = s**2
+    F1x = 1 + k - k/(1+mu*p/k)
+    F0x = 1 + k - k/(1+(mu*p+c)/k)
+    f = (1-alpha**2) / (1 + alpha**3 + b*alpha**6)
     return F1x + f*(F0x-F1x)
 
-MS2 = FromFunc('MS2',fxMS2)
+
+MS2 = FromFunc('MS2', fxMS2)
+
 
 # From data
-#----------
-with open('/'+join(*__file__.split('/')[:-3],'data/beefs/beef.json'),'r') as f:
-    beefcoeff = array(load(f))
+# ---------
+def BEEF() -> FromMatrix:
+    fi = 'data/beefs/beef.json'
+    beefpth = '/'+os.path.join(*__file__.split('/')[:-3], fi)
+    with open(beefpth, 'r') as f:
+        beefcoeff = np.array(json.load(f))
+    return FromMatrix(beefcoeff.reshape(8, 8), name='BEEF')
 
-BEEF = FromMatrix(beefcoeff.reshape(8,8),a1=float('inf'),msb=1,name='beef')
+
+def PBESOL() -> FromMatrix:
+    fi = 'data/beefs/pbesol.json'
+    beefpth = '/'+os.path.join(*__file__.split('/')[:-3], fi)
+    with open(beefpth, 'r') as f:
+        beefcoeff = np.array(json.load(f))
+    return FromMatrix(beefcoeff.reshape(8, 8), name='PBESOL')
+
+
+def Fsmooth() -> FromMatrix:
+    fi = 'data/beefs/smooth.json'
+    beefpth = '/'+os.path.join(*__file__.split('/')[:-3], fi)
+    with open(beefpth, 'r') as f:
+        beefcoeff = np.array(json.load(f))
+    return FromMatrix(beefcoeff.reshape(8, 8), name='smooth')
+
+
+if __name__ == '__main__':
+    '''Mbeef at s=0,alpha=1 is 1.03'''
+    beef = BEEF()
+    beef.A = np.multiply(
+        beef.A, [[3**(i+j)/1500 for j in range(8)] for i in range(8)])
+    beef.A[0][0] += 1
+    plotly.offline.plot(plots([PBE, RPBE, PBEsol, beef]))
+
+    # beef = Fsmooth()
+    # for x in ['fx']:
+    #     fig = beef.plot3d(deriv=x, smax=4)
+    #     plotly.offline.plot(fig)

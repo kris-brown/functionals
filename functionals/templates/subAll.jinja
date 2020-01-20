@@ -1,0 +1,17 @@
+#!/bin/bash
+source /nfs/slac/staas/fs1/g/suncat/ksb/vasp/olsherlock/runpaths.source
+source /nfs/slac/g/suncatfs/ksb/{{ exe }}_env.bash
+
+/bin/hostname > host.txt
+StringVal="{{ dirs|join(' ') }}"
+
+for d in $StringVal; do
+  cd $d
+  echo $d
+  mpirun -n $LSB_MAX_NUM_PROCESSORS vasp &>run.log
+  {% if rm %}
+  rm -f WAVECAR
+  {% endif %}
+
+  cd ..
+done

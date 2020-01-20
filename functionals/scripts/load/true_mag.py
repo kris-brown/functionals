@@ -8,5 +8,5 @@ def true_mag(elem:str)->int:
             Se= 2, Zn= 0, Co= 3, Ag= 1, Cl= 1, Ca= 0, Ir= 3, Al= 1,
             Cd= 0, Ge= 2, Ar= 0, Au= 1, Zr= 2, Ga= 1, In= 1, Cs= 1,
             Cr= 6, Cu= 1, Y = 1, Sb=3,Xe=0, Hf=2, Re=5,
-            Hg=0,Tl=1,La=0)
+            Hg=0,Tl=1, La=0, Tc=5)
     return emag[elem]

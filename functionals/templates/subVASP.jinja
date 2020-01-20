@@ -1,16 +1,4 @@
 #!/bin/bash
-source /nfs/slac/staas/fs1/g/suncat/ksb/vasp/olsherlock/runpaths.source
-{% if scan %}
-source /nfs/slac/g/suncatfs/ksb/scan_env.bash
-{% endif %}
-
+source /nfs/slac/g/suncatfs/ksb/{{ exe }}_env.bash
 /bin/hostname > host.txt
-
-mpirun -n $LSB_MAX_NUM_PROCESSORS {{ exe }} &>run.log
-
-if [[ -f "INCAR2" ]]; then
-    mv INCAR INCAR0
-    mv INCAR2 INCAR
-    mv run.log run0.log
-    mpirun -n $LSB_MAX_NUM_PROCESSORS {{ exe }} &>run.log
-fi
+mpirun -n $LSB_MAX_NUM_PROCESSORS vasp &>run.log

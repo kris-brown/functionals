@@ -13,3 +13,4 @@ jsonpickle
 sklearn
 sshtunnel
 jinja2
+hypothesis

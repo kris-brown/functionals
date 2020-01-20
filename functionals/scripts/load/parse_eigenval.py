@@ -8,14 +8,20 @@ def parse_eigenval(fi:str)->T[bool,float]:
     if len(splitlines[0]) == 3:
         return True, 0. # spin unpolarized!
 
-    ints  = True
-    for l in splitlines:
-        assert len(l) == 5
-        vals = [float(l[-2]),float(l[-1])] # spin polarized
-        nonints = [round(a,0) != round(a,2) for a in vals]
-        magmom +=  abs(vals[0] - vals[1])
+    ints = True
+    mags = [(float(l[-2]),float(l[-1])) for l in splitlines
+             if len(l)==5 and str.isdigit(l[0])]
 
+    for up, down in mags:
+        nonints = [abs(round(a)-a)>a/100 for a in [up,down]]
+        magmom +=  abs(up - down)
         if any(nonints): ints = False # flip flag if at any point this is true
 
-        if float(l[0]) == 1.:     return ints,magmom # final band (reverse order)
-    raise ValueError('Should not reach this part of code...')
+    return ints,magmom # final band (reverse order)
+
+
+if __name__=='__main__':
+    # DOESN'T GET THE SAME AS grepping MAG in OUTCAR for bulks
+    for fi in ['atoms/af288aeb10/Ag','bulks/pbesol/Ni/optstrain_0']:
+        with open('/Users/ksb/scp_tmp/vauto/%s/EIGENVAL'%fi,'r') as f:
+            print(parse_eigenval(f.read()))

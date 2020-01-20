@@ -6,7 +6,9 @@ from functionals.model.generators.fit import fit
 from functionals.model.generators.analysis import analysis
 from functionals.model.generators.bulk_analysis import bulk_analysis
 #############################################################
-def add_generators(mod : Model) -> None:
+
+
+def add_generators(mod: Model) -> None:
     io(mod)
     fit(mod)
     analysis(mod)

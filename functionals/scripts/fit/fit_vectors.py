@@ -1,9 +1,10 @@
 from typing import Tuple as T, Optional as O
 import numpy as np
 
+
 def fit_vectors(engs_: str, vols_: str, contribs_: str, coefs_: str,
-                volume: float, name:str
-               ) -> T[O[str],O[str]]:
+                volume: float, name: str
+                ) -> T[O[str], O[str]]:
     '''Ax=b fit vectors for experimental CE, BM, and volume.
 
     Quadratic approximation around center point: Eng = Av^2 + Bv + C
@@ -27,26 +28,35 @@ def fit_vectors(engs_: str, vols_: str, contribs_: str, coefs_: str,
     - GPa = GJ/m³
     '''
     from json import dumps, loads
-    ev_a3_to_gpa  = (10**-9) * (1.602 * 10**-19) * (10**10)**3
-    engs,vols,contribs,coefs = [np.array(loads(x)) for x in [engs_, vols_, contribs_,coefs_]]
+    ev_a3_to_gpa = (10**-9) * (1.602 * 10**-19) * (10**10)**3
+    engs, vols, contribs, coefs = [np.array(loads(x)) for x in [
+        engs_, vols_, contribs_, coefs_]]
+    if len(engs) != 5:
+        return None, None
     dx = np.mean(np.diff(vols))
     assert np.max(np.diff(vols)-dx) < 0.0001, vols  # check even spacing
 
     class AB(object):
         '''A pair A,b such that Ax=b for some vector of coefficients.'''
-        def __init__(self, A: np.array = None, b:float=None) -> None:
-            self.A = A if not A is None else np.zeros(64,)
-            self.b = b or 0.
-        def __str__(self) -> str: return dumps([self.A.tolist(),self.b])
-        def __add__(self, ab: 'AB') -> 'AB': return AB(self.A+ab.A,self.b+ab.b)
-        def __sub__(self, ab: 'AB') -> 'AB': return AB(self.A-ab.A,self.b-ab.b)
-        def __rmul__(self, z: float) -> 'AB': return AB(self.A*z,self.b*z)
-        def __truediv__(self, z: float) -> 'AB': return AB(self.A/z,self.b/z)
-        def __matmul__(self, v: np.array) -> float: return self.A @ v + self.b
 
-    Enonxc = [e-contrib@coefs for e,contrib in zip(engs,contribs)]
-    E = [AB(contrib,enonxc) for contrib,enonxc in zip(contribs,Enonxc)]
-    dE  = (-1*E[4] + 8*E[3] - 8*E[1] + E[0])/(12*dx)
+        def __init__(self, A: np.array = None, b: float = None) -> None:
+            self.A = A if A is not None else np.zeros(64,)
+            self.b = b or 0.
+
+        def __str__(self) -> str: return dumps([self.A.tolist(), self.b])
+        def __add__(self, ab: 'AB') -> 'AB': return AB(self.A +
+                                                       ab.A, self.b+ab.b)
+        def __sub__(self, ab: 'AB') -> 'AB': return AB(self.A -
+                                                       ab.A, self.b-ab.b)
+
+        def __rmul__(self, z: float) -> 'AB': return AB(self.A*z, self.b*z)
+        def __truediv__(self, z: float) -> 'AB': return AB(self.A/z, self.b/z)
+        def __matmul__(
+            self, v: np.array) -> float: return float(self.A @ v + self.b)
+
+    Enonxc = [e-contrib@coefs for e, contrib in zip(engs, contribs)]
+    E = [AB(contrib, enonxc) for contrib, enonxc in zip(contribs, Enonxc)]
+    dE = (-1*E[4] + 8*E[3] - 8*E[1] + E[0])/(12*dx)
     ddE = (-1*E[4] + 16*E[3] - 30*E[2] + 16*E[1] - E[0])/(12*dx**2)
     Bulkmod = float(volume) * ev_a3_to_gpa * ddE
     Vopt = AB(b=float(volume)) - dE/(ddE@coefs)
