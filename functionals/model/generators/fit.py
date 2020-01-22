@@ -2,7 +2,7 @@ from os.path import join
 
 # Internal Modules
 from dbgen import (Model, Gen, Query, PyBlock, Expr, Literal as Lit, COALESCE,
-                   EQ, Text, JPath, GROUP_CONCAT, MAX, AND, CONVERT, SUBSELECT)
+                   Text, JPath, GROUP_CONCAT, MAX, AND, CONVERT, SUBSELECT)
 
 from functionals.scripts.fit.db_data import db_data
 from functionals.scripts.fit.a_ce import a_ce
@@ -19,27 +19,27 @@ def fit(mod: Model) -> None:
     # Extract tables
 
     # Extract tables
-    tabs = ['fit', 'calc', 'fitparams', 'functional', 'bulks', 'refs']
-    Fit, Calc, Fitparams, Fx, Bulks, Refs = map(mod.get, tabs)
+    tabs = ['fit', 'calc', 'fitparams', 'bulks', 'refs']
+    Fit, Calc, Fitparams, Bulks, Refs = map(mod.get, tabs)
 
     # Extract rels
-    calc__functional, fit__calc, bulks__calc, refs__bulks, fit__fitparams = \
-        map(mod.get_rel, [Calc.r('functional'), Fit.r('calc'),
+    fit__calc, bulks__calc, refs__bulks, fit__fitparams = \
+        map(mod.get_rel, [Fit.r('calc'),
                           Bulks.r("calc"), Refs.r('bulks'),
                           Fit.r('fitparams')])
     ########################################################################
     ########################################################################
 
     refpth = JPath("refs", [refs__bulks])
-    beefpth = JPath('functional', [calc__functional, bulks__calc])
+    beefpth = JPath('calc', [bulks__calc])
     aceq = Query(exprs=dict(
         b=Bulks.id(),
         r=GROUP_CONCAT(Refs['energy'](refpth)),
         c=GROUP_CONCAT(Refs['contribs'](refpth), delim='$'),
-        e=Bulks['energy'](),
+        e=Bulks['eng'](),
         x=Bulks['contribs'](),
         n=Bulks['n_atoms'](),
-        f=MAX(Fx['data'](beefpth)),
+        f=MAX(Calc['data'](beefpth)),
         m=Bulks['name']()),
         aggcols=[Bulks.id()],
         basis=[Bulks])
@@ -63,7 +63,7 @@ def fit(mod: Model) -> None:
                             x=Bulks['contribs'](),
                             e=Bulks['energies'](),
                             n=Bulks['n_atoms'](),
-                            f=MAX(Fx['data'](beefpth))),
+                            f=MAX(Calc['data'](beefpth))),
                  aggcols=[Bulks.id()],
                  basis=[Bulks])
 
@@ -71,12 +71,10 @@ def fit(mod: Model) -> None:
                             e=Bulks['energies'](),
                             v=Bulks['volumes'](),
                             c=Bulks['contribs'](),
-                            f=Fx['data'](beefpth),
+                            f=Calc['data'](beefpth),
                             o=Bulks['vol'](),
                             n=Bulks['name']()),
                  basis=[Bulks],
-                 constr=AND([Bulks['optsuccess'](),
-                             EQ(Bulks['calcname'](), Lit('beef'))]),
                  opt_attr=[Bulks['expt_bm'](), Bulks['expt_vol']()])
 
     vecpb = PyBlock(fit_vectors,
@@ -92,7 +90,6 @@ def fit(mod: Model) -> None:
 
     ########################################################################
 
-    fxpth = JPath('functional', [calc__functional])
     bpth = JPath('bulks', [bulks__calc])
     names = ['ab_ce', 'ab_bm', 'ab_vol', 'expt_ce', 'expt_bm', 'expt_vol',
              'name', 'ce']
@@ -109,7 +106,7 @@ def fit(mod: Model) -> None:
                 basis=[Calc],
                 aggcols=[Calc.id()],
                 opt_attr=[Bulks[v](bpth) for v in fdgbs.values()],
-                constr=AND([Fx['beef'](fxpth)]))
+                constr=AND([Calc['beef']()]))
 
     fdpb = PyBlock(db_data, args=[fdq[x] for x in 'abcdefgh'])
 

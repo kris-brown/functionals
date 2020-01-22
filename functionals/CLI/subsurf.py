@@ -1,11 +1,10 @@
 from typing import List, Callable
 import argparse
-import csv
 import os
 import ase
 from ase.build import fcc111, hcp0001, add_adsorbate
 from functionals.CLI.submit import (mk_incar, root, potpos, matdata,
-                                    data_root, _sub, exe_root, exedic,
+                                    _sub, exedic,
                                     xcdict, mk_traj)
 import functionals.templates as temp
 
@@ -78,8 +77,6 @@ def submit(mat: str, xc: str, site: str = None,
     with open(os.path.join(pth, 'KPOINTS'), 'w') as g:
         g.write(temp.jinja_env.get_template(
             'KPOINTS.jinja').render(kpts=(4, 4, 1)))
-    scan = xc == 'scan'
-    exe = 'vasp' if scan else exe_root+'std'
 
     bash = temp.jinja_env.get_template('subVASP.jinja'
                                        ).render(exe=exedic[xc])

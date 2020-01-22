@@ -18,37 +18,15 @@ from functionals.scripts.load.true_mag import true_mag
 
 def analysis(mod: Model) -> None:
     # Extract tables
-    tabs = ['Functional', 'Bulks', 'Atoms', 'Refs', 'Calc', 'Surf']
-    Fx, Bulks, Atoms, Refs, Calc, Surf = map(mod.get, tabs)
+    tabs = ['Bulks', 'Atoms', 'Refs', 'Calc', 'Surf']
+    Bulks, Atoms, Refs, Calc, Surf = map(mod.get, tabs)
 
-    refs__atoms, refs__bulks, bulks__calc, atoms__calc, calc__functional = \
+    refs__atoms, refs__bulks, bulks__calc, atoms__calc = \
         map(mod.get_rel, [Refs.r('atoms'), Refs.r('bulks'), Bulks.r('calc'),
-                          Atoms.r('calc'), Calc.r('functional')])
+                          Atoms.r('calc')])
     ########################################################################
     ########################################################################
 
-    def aefun(intocc: bool, true_mag: float, mag: float, fx: str) -> str:
-        if fx is None:
-            return 'unconverged'
-        elif not intocc:
-            return 'non-integer magmom'
-        elif (true_mag - mag) > 0.05:
-            return 'wrong magmom'
-        else:
-            return ''
-    int_occupation, tm, mag, fx = [Atoms[x]() for x in [
-        'int_occupation', 'true_mag', 'mag', 'fx'
-    ]]
-    aeq = Query(dict(a=Atoms.id(), i=int_occupation,
-                     t=tm, m=mag, f=fx),
-                opt_attr=[int_occupation, tm, mag, fx])
-    aepb = PyBlock(aefun, args=[aeq[x] for x in 'itmf'])
-    aerror = Gen(
-        name='atomerror',
-        desc='detects anything wrong with atomic job',
-        query=aeq, funcs=[aepb],
-        actions=[Atoms(atoms=aeq['a'], error=aepb['out'])]
-    )
     ########################################################################
     tmagq = Query(dict(i=Atoms.id(), n=Atoms['name']()))
     tmagpb = PyBlock(true_mag, args=[tmagq['n']])
@@ -63,18 +41,18 @@ def analysis(mod: Model) -> None:
     xvol = Gen('xvol', query=xvq, actions=[Bulks(bulks=xvq['b'],
                                                  expt_vol=xvq['v'])])
     ########################################################################
-    cnq = Query(dict(b=Bulks.id(), n=Bulks['stordir']()))
-    cnpb = PyBlock(lambda x: x.split('/')[-2], args=[cnq['n']])
-    calcname = Gen('calcname', query=cnq, funcs=[cnpb],
-                   actions=[Bulks(bulks=cnq['b'], calcname=cnpb['out'])])
+    # cnq = Query(dict(b=Bulks.id(), n=Bulks['stordir']()))
+    # cnpb = PyBlock(lambda x: x.split('/')[-2], args=[cnq['n']])
+    # calcname = Gen('calcname', query=cnq, funcs=[cnpb],
+    #                actions=[Bulks(bulks=cnq['b'], calcname=cnpb['out'])])
     ########################################################################
-    ibq = Query(exprs=dict(f=Fx.id(),
-                           b=EQ(LEFT(Fx['data'](), One), Lit('['))))
+    ibq = Query(exprs=dict(c=Calc.id(),
+                           b=EQ(LEFT(Calc['data'](), One), Lit('['))))
     isbeef =                                                                  \
         Gen(name='isbeef',
             desc='Check whether fx was BEEF - if fx is a word or array',
             query=ibq,
-            actions=[Fx(functional=ibq['f'], beef=ibq['b'])])
+            actions=[Calc(calc=ibq['c'], beef=ibq['b'])])
 
     #####################################################################
     name = CONCAT([Lit('%,'), Atoms['num'](), Lit(',%')])
@@ -88,7 +66,7 @@ def analysis(mod: Model) -> None:
                 constr=AND([
                     EQ(Calc.id(bcalc), Calc.id(acalc)),
                     LIKE(Bulks['elems'](), name),
-                    EQ(Atoms['error'](), Lit(''))]))
+                    EQ(Atoms['err'](), Lit(''))]))
 
     erpb = PyBlock(lambda c, n: literal_eval(c).get(n, []),
                    env=Env([Import('ast', ['literal_eval'])]),
@@ -108,7 +86,7 @@ def analysis(mod: Model) -> None:
     refpth = JPath("refs", [refs__bulks])
 
     eq = Query(exprs=dict(b=Bulks.id(),
-                          e=Bulks['energy']() - SUM(Refs['energy'](refpth))),
+                          e=Bulks['eng']() - SUM(Refs['energy'](refpth))),
                aggcols=[Bulks.id()],
                basis=[Bulks],
                aconstr=EQ(SUM(Refs['num'](refpth)), Bulks['n_atoms']()))
@@ -200,18 +178,6 @@ def analysis(mod: Model) -> None:
                            actions=[Calc(calc=mseq['c'],
                                          **{'mae_'+k: mseq['m']})]))
     msec, mseb, msel, msem = msegens
-
-    #####################################################################
-    aqcols = ['pw', 'fx']
-    z = zip('pf', aqcols)
-    acq = Query(dict(a=Atoms.id(), **{x: Atoms[y]() for x, y in z}))
-    icalc = Calc(insert=True, pw=acq['p'],
-                 functional=Fx(insert=True, data=acq['f']))
-    atom_calc =                                                          \
-        Gen(name='atom_calc',
-            desc='populate atoms.calc',
-            query=acq,
-            actions=[Atoms(atoms=acq['a'], calc=icalc)])
     #####################################################################
 
     annq = Query(dict(a=Atoms.id(), s=Atoms['stordir']()))
@@ -230,33 +196,32 @@ def analysis(mod: Model) -> None:
             actions=[Atoms(atoms=annq['a'], name=annpb['n'], num=annpb['m'])])
 
     ########################################################################
-    cnp = JPath('functional', [calc__functional])
 
-    cnq = Query(dict(c=Calc.id(), d=Fx['data'](cnp)), basis=[Calc])
+    # cnq = Query(dict(c=Calc.id(), d=Fx['data'](cnp)), basis=[Calc])
 
-    def cnfunc(data: str) -> str:
-        import os
-        import json
-        root = '/Users/ksb/functionals/data/beefs'
-        if data[0] == '[':
-            data_ = json.loads(data)
-            for beef in os.listdir(root):
-                with open(os.path.join(root, beef), 'r') as f:
-                    if json.load(f) == data_:
-                        return beef
-            import pdb
-            pdb.set_trace()
-            assert False
-            return ''
-        else:
-            return data
+    # def cnfunc(data: str) -> str:
+    #     import os
+    #     import json
+    #     root = '/Users/ksb/functionals/data/beefs'
+    #     if data[0] == '[':
+    #         data_ = json.loads(data)
+    #         for beef in os.listdir(root):
+    #             with open(os.path.join(root, beef), 'r') as f:
+    #                 if json.load(f) == data_:
+    #                     return beef
+    #         import pdb
+    #         pdb.set_trace()
+    #         assert False
+    #         return ''
+    #     else:
+    #         return data
 
-    cnpb = PyBlock(cnfunc, args=[cnq['d']])
-    calcname2 =                                                           \
-        Gen(name='calcname2',
-            desc='Figures out the name of a BEEF calculator from its coefs',
-            query=cnq, funcs=[cnpb],
-            actions=[Calc(calc=cnq['c'], name=cnpb['out'])])
+    # cnpb = PyBlock(cnfunc, args=[cnq['d']])
+    # calcname2 =                                                           \
+    #     Gen(name='calcname2',
+    #         desc='Figures out the name of a BEEF calculator from its coefs',
+    #         query=cnq, funcs=[cnpb],
+    #         actions=[Calc(calc=cnq['c'], name=cnpb['out'])])
     ########################################################################
     seq = Query(dict(s=Surf.id(), m=Surf['mat'](
     ), o=Surf['ontop'](), h=Surf['hollow']()))
@@ -276,7 +241,7 @@ def analysis(mod: Model) -> None:
     ########################################################################
 
     gens = [isbeef, exptref, eform, ce, refcontribs, xvol, msem,
-            calcname, msec, mseb, msel, atom_namenum, atom_calc,
-            tmag, calcname2, done, aerror, surfan]
+            msec, mseb, msel, atom_namenum,
+            tmag, done, surfan]
 
     mod.add(gens)

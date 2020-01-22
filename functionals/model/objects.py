@@ -16,8 +16,7 @@ ms = [Attr(m, Decimal(), desc='Only True if results in for all mats')
 calc = Obj(
     name='calc',
     desc='Calculator details',
-    attrs=[Attr('pw', identifying=True, desc='Planewave cutoff, eV'),
-           Attr('allmat', Text(), desc='List of all (bulk) mats with data'),
+    attrs=[Attr('allmat', Text(), desc='List of all (bulk) mats with data'),
            Attr('done', Boolean(),
                 desc='Whether or not all calculations have been finished'),
            Attr('missing', Text(),
@@ -26,15 +25,17 @@ calc = Obj(
                 desc='Materials not yet finished (bulk or atom related)'),
            Attr('fitdata', Text(),
                 desc='For a BEEF calc, the input data to fitting'),
-           Attr('name', Text(), desc='Functional nickname')] + ms,
-    fks=[Rel('functional', identifying=True)])
+           Attr('name', Text(), identifying=True, desc='Functional nickname'),
+           Attr('data', Text(), desc='BEEF coefs, if any'),
+           Attr('beef', Boolean(), desc='True if BEEF style')] + ms)
+# fks=[Rel('functional', identifying=True)])
 
 ##############################################################################
 
-functional = Obj(
-    name='functional',
-    desc='DFT functional',
-    attrs=[Attr('data', Text(), identifying=True), Attr('beef', Boolean())])
+# functional = Obj(
+#     name='functional',
+#     desc='DFT functional',
+#     attrs=[Attr('data', Text(), identifying=True), Attr('beef', Boolean())])
 
 ##############################################################################
 
@@ -49,43 +50,41 @@ atoms = Obj(
     desc='DFT calculation',
     attrs=[
         Attr('stordir', Varchar(), identifying=True),
-        Attr('runtime', Int(), desc='Appx runtime, hours'),
-        Attr('pw', desc='Planewave cutoff, eV'),
-        Attr('econv', Decimal(), desc='EDIFF in the INCAR'),
+        # Attr('runtime', Int(), desc='Appx runtime, hours'),
+        # Attr('pw', desc='Planewave cutoff, eV'),
+        # Attr('econv', Decimal(), desc='EDIFF in the INCAR'),
         Attr('name', Varchar()),
-        Attr('fx', Text()),
-        Attr('error', Text(), desc='No problems detected if empty string'),
+        Attr('calcname', Varchar()),
+        Attr('err', Text(), desc='No problems detected if empty string'
+             ' - Else: econv, mag diff, intocc, maxstep, unconverged'),
         Attr('num', Int(), desc='Atomic number'),
         Attr('true_mag', Int(), desc='Magnetic moment'),
-        Attr('mag', Decimal(), desc='Magnetic moment'),
-        Attr('int_occupation', Boolean(),
-             desc='All orbitals have integer electron occupation'),
         Attr('energy', Decimal(), desc='eV'),
-        Attr('contribs', Text(), desc='list of five 64-element xc contribs')],
+        Attr('contribs', Text(), desc='JSONd list xc contribs')],
     fks=[Rel('calc')]
 )
 
 ##############################################################################
-bulkjob = Obj(
-    name='bulkjob',
-    desc='Individual singlepoints for a bulk.',
-    attrs=[
-        Attr('stordir', Varchar(), identifying=True),
-        Attr('parent', Varchar()),
-        Attr('fx', Text()),
-        Attr('contribs', Text()),
-        Attr('int_occupation', Boolean(),
-             desc='All orbitals have integer electron occupation'),
-        Attr('energy', Decimal(), desc='Energy'),
-        Attr('mag', Decimal(), desc='magnetic moment'),
-        Attr('runtime', Int(), desc='Appx runtime, hours'),
-        Attr('pw', desc='Planewave cutoff, eV'),
-        Attr('econv', Decimal(), desc='EDIFF in the INCAR'),
-        Attr('strain', Int(), desc='Relative strain, percent.'),
-        Attr('volume', Decimal(), desc='A^3'),
-        Attr('lattice', Decimal(), desc='A'),
-        Attr('opt', Boolean(), desc='Whether this is one of the 5 opt jobs'),
-    ])
+# bulkjob = Obj(
+#     name='bulkjob',
+#     desc='Individual singlepoints for a bulk.',
+#     attrs=[
+#         Attr('stordir', Varchar(), identifying=True),
+#         Attr('parent', Varchar()),
+#         Attr('fx', Text()),
+#         Attr('contribs', Text()),
+#         Attr('int_occupation', Boolean(),
+#              desc='All orbitals have integer electron occupation'),
+#         Attr('energy', Decimal(), desc='Energy'),
+#         Attr('mag', Decimal(), desc='magnetic moment'),
+#         Attr('runtime', Int(), desc='Appx runtime, hours'),
+#         Attr('pw', desc='Planewave cutoff, eV'),
+#         Attr('econv', Decimal(), desc='EDIFF in the INCAR'),
+#         Attr('strain', Int(), desc='Relative strain, percent.'),
+#         Attr('volume', Decimal(), desc='A^3'),
+#         Attr('lattice', Decimal(), desc='A'),
+#         Attr('opt', Boolean(), desc='Whether this is one of the 5 opt jobs'),
+#     ])
 
 bulks = Obj(
     name='bulks',
@@ -93,6 +92,7 @@ bulks = Obj(
     attrs=[
         Attr('stordir', Varchar(), identifying=True),
         Attr('name', Varchar(), desc='Species nickname'),
+        Attr('err', Varchar(), desc='Error in latopt'),
         Attr('calcname', Varchar(), desc='Calc nickname'),
         Attr('composition', Varchar(), desc='Species composition'),
         Attr('elems', Varchar(), desc='common separated list of atomic nums'),
@@ -100,28 +100,24 @@ bulks = Obj(
         Attr('n_atoms', desc='Number of atoms in unit cell'),
         Attr('n_elems', desc='Number of distinct chemical species'),
         Attr('alloy', Varchar(), desc='What type of alloy it is, if any'),
-        Attr('nodata', Boolean(), desc='No experimental data yet'),
-        # Figuring out if job is complete
-        Attr('allvol', Text('long'), desc='volumes  of all jobs'),
-        Attr('alleng', Text('long'), desc='energies of all jobs'),
-        Attr('strains', Text(), desc='List of strains that have completed'),
-        Attr('morejobs', Int(), desc='-1 = needs lower strain, +1 higher'),
-        Attr('success', Boolean(), desc='We have enough calcs to do an EOS'),
 
         # Analysis Results from minimum 5 jobs
-        Attr('optsuccess', Boolean(), desc='All 5 opt strains done'),
-        Attr('optstrains', Text(), desc='List of completed opt strains'),
+        Attr('success', Boolean(), desc='DFT data for each experiment data'),
+        # Attr('optstrains', Text(), desc='List of completed opt strains'),
+        # Attr('energy', Decimal(),desc='Minimum energy according to quadfit'),
+        Attr('mag', Decimal(), desc='Magmom of the minimum energy job'),
+        Attr('contrib', Text('long'), desc='xc contribs of 5 optimal jobs'),
+        Attr('eng', Decimal(), desc='unit cell lattice from quadfit'),
+        Attr('lat', Decimal(), desc='unit cell lattice from quadfit'),
+        Attr('vol', Decimal(), desc='Volume from quad fit'),
+        Attr('volrat', Decimal(), desc='lattice/vol^1/3'),
+
         Attr('volumes', Text('long'), desc='volumes of the 5 optimal jobs'),
         Attr('energies', Text('long'), desc='energies of the 5 optimal jobs'),
         Attr('contribs', Text('long'), desc='xc contribs of 5 optimal jobs'),
-        Attr('energy', Decimal(), desc='Minimum energy according to quadfit'),
-        Attr('mag', Decimal(), desc='Magmom of the minimum energy job'),
         Attr('bm', Decimal(), desc='Bulk modulus, GPa, from 5 jobs + stencil'),
         Attr('bulkmod_lstsq', Decimal(), desc='Bulkmod, GPa, from quadfit'),
         Attr('lstsq_abc', Text(), desc='JSON of quad fit of 5 optimal jobs'),
-        Attr('lat', Decimal(), desc='unit cell lattice from quadfit'),
-        Attr('volrat', Decimal(), desc='lattice/vol^1/3'),
-        Attr('vol', Decimal(), desc='Volume from quad fit'),
         Attr('eform', Decimal(), desc='Formation energy, eV, given ENG'),
         Attr('ce', Decimal(), desc='Cohesive  energy, eV'),
         # Analysis from ase.eos
@@ -204,7 +200,7 @@ surf = Obj(
 
 err = RawView('errs', '''
 SELECT name,mae_ce,mae_bm,mae_lat,mae_mag, true as isfx
-    FROM calc JOIN functional ON functional=functional_id
+FROM calc
 UNION
 SELECT fit_id::text,mae_ce,mae_bm,mae_lat,NULL, false as isfx from fit
 ''')
@@ -213,7 +209,7 @@ SELECT fit_id::text,mae_ce,mae_bm,mae_lat,NULL, false as isfx from fit
 ##############################################################################
 ##############################################################################
 
-objs = [calc, functional, bulkjob, atoms, bulks, fitparams, fit, expt_refs,
+objs = [calc, atoms, bulks, fitparams, fit, expt_refs,
         cons, surf]
 
 

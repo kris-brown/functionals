@@ -54,11 +54,11 @@ def safeAvg(xs: List[Optional[float]]) -> Optional[float]:
 ###############
 
 
-def viz_plts(name: str, calc: str, av_: str, ae_: str, v_: str, e_: str,
+def viz_plts(name: str, calc: str,  v_: str, e_: str,
              bulkmod_: str, vol_: str, eng_: str, abc: str, eosbm: float,
              expt_vol: float, expt_bm: float,
-             bm_ls: float) -> T[str, Any, Any, Any, Any]:
-    av, ae, v, e = map(json.loads, [av_, ae_, v_ or '[]', e_ or '[]'])
+             bm_ls: float) -> T[str, Any, Any, Any]:
+    v, e = map(json.loads, [v_ or '[]', e_ or '[]'])
     bulkmod, vol, eng = [float(x) if x else 0. for x in [bulkmod_, vol_, eng_]]
     m, m2, m3 = [dict(color='rgb(%d, %d, %d)' % (r, g, b), size=s)
                  for r, g, b, s
@@ -78,7 +78,7 @@ def viz_plts(name: str, calc: str, av_: str, ae_: str, v_: str, e_: str,
         bulkmod_y = [bulkmod_a*(x-vol)**2+eng for x in quad_v]
     else:
         quad_v = quad_y = bulkmod_y = []
-    return (title, go.Scatter(x=av, y=ae, mode='markers', name='all'),
+    return (title,
             go.Scatter(x=v,  y=e, mode='markers', marker=m, name='opt'),
             go.Scatter(x=quad_v, y=quad_y, mode='markers', marker=m2,
                        name='quad'),
@@ -87,35 +87,35 @@ def viz_plts(name: str, calc: str, av_: str, ae_: str, v_: str, e_: str,
 
 
 def vizone(mat: str, calc: str) -> None:
-    q = '''SELECT name, volumes,energies,allvol,alleng,eosbm,
-                  expt_bm,bm,bulkmod_lstsq,expt_vol,lstsq_abc,vol,energy
+    q = '''SELECT name, volumes,energies,eosbm,
+                  expt_bm,bm,bulkmod_lstsq,expt_vol,lstsq_abc,vol,eng
            FROM bulks WHERE name=%s and calcname=%s'''
-    name, v, e, av, ae, eosbm, expt_bm, bulkmod, bm_ls, expt_vol, abc, vol, \
+    name, v, e, eosbm, expt_bm, bulkmod, bm_ls, expt_vol, abc, vol, \
         eng = dbgen.sqlselect(default.connect(), q, [mat, calc])[0]
-    title, p1, p2, p3, p4 = viz_plts(name, calc, av, ae, v, e, bulkmod, vol,
-                                     eng, abc, eosbm, expt_vol, expt_bm, bm_ls)
+    title, p2, p3, p4 = viz_plts(name, calc, v, e, bulkmod, vol,
+                                 eng, abc, eosbm, expt_vol, expt_bm, bm_ls)
     layout = go.Layout(hovermode='closest', showlegend=True, title=title,
                        xaxis=dict(title='Volume, À3'),
                        yaxis=dict(title='Energy, eV',))
-    fig = go.Figure(data=[p1, p2, p3, p4], layout=layout)
+    fig = go.Figure(data=[p2, p3, p4], layout=layout)
     plotly.offline.plot(fig, filename='temp0.html')
 
 
-def viz(calc: str = 'beef') -> None:
-    q = '''SELECT name,volumes,energies,allvol,alleng,eosbm,
-                  expt_bm,bulkmod,bulkmod_lstsq,expt_vol,lstsq_abc,volume,energy
+def viz(calc: str = 'ms2') -> None:
+    q = '''SELECT name,volumes,energies,eosbm,
+                  expt_bm,bulkmod,bulkmod_lstsq,expt_vol,lstsq_abc,volume,eng
            FROM bulks WHERE calc=%s AND bulkmod IS NOT NULL
            ORDER BY name'''
     res = dbgen.sqlselect(default.connect(), q, [calc])
     data, steps = [], []
     trues = [True, True, True, True]
-    for i, (name, v, e, av, ae, eosbm, expt_bm, bulkmod, bm_ls, expt_vol,
+    for i, (name, v, e, eosbm, expt_bm, bulkmod, bm_ls, expt_vol,
             abc, vol, eng) in enumerate(res):
 
-        title, plt1, plt2, plt3, plt4 = viz_plts(
-            name, calc, av, ae, v, e, bulkmod, vol, eng, abc, eosbm, expt_vol,
+        title, plt2, plt3, plt4 = viz_plts(
+            name, calc, v, e, bulkmod, vol, eng, abc, eosbm, expt_vol,
             expt_bm, bm_ls)
-        data.extend([plt1, plt2, plt3, plt4])
+        data.extend([plt2, plt3, plt4])
 
         args = [dict(visible=[False] * 4*len(res)), {'title.text': title}]
         args[0]['visible'][4*i:4*i+4] = trues  # type: ignore

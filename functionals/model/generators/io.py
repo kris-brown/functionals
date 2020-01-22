@@ -1,5 +1,5 @@
 # External
-from typing import Set as S, Optional as O, Tuple as T
+from typing import Optional as O, Tuple as T
 from os.path import join
 
 # Internal Modules
@@ -7,6 +7,7 @@ from dbgen import (Model, Gen, PyBlock, Query, Const, GROUP_CONCAT, LEFT,
                    Literal)
 
 from functionals.scripts.io.parse_job import parse_job
+from functionals.scripts.io.parse_bulks import parse_bulks
 from functionals.scripts.io.pop_surf import pop_surf
 from functionals.scripts.io.all_mats import all_mats
 from functionals.scripts.fit.pop_cons import pop_cons
@@ -17,43 +18,43 @@ from functionals.scripts.fit.pop_fitp import pop_fitp
 ###################################################################
 root = '/Users/ksb/scp_tmp/vauto/'
 csvpth = '/'+join(*__file__.split('/')[:-4], 'data/%s.csv')
-pj_cols = ['stordir', 'runtime', 'pw', 'econv', 'fx', 'contribs', 'energy',
-           'int_occupation', 'mag']
-
-mats = elems = set()  # type: S[str]
 
 
 def io(mod: Model) -> None:
 
     # Extract tables
-    tabs = ['Atoms', 'Functional', "Calc", "Bulkjob", "Bulks", "Fit",
+    tabs = ['Atoms', "Calc", "Bulks", "Fit",
             "Fitparams", "Const", "Surf"]
-    Atoms, Fx, Calc, Bulkjob, Bulks, Fit, Fitparams, Constr, Surf = \
+    Atoms, Calc, Bulks, Fit, Fitparams, Constr, Surf = \
         map(mod.get, tabs)
 
     ###################################################################
     ###################################################################
     ###################################################################
+    pj_cols = ['stordir', 'contribs', 'energy', 'mag', 'err']
 
-    papb = PyBlock(parse_job, args=[Const(root+'atoms'), Const(elems)],
+    papb = PyBlock(parse_job, args=[Const(root+'atoms')],
                    outnames=pj_cols)
-
-    ia = Atoms(insert=True, **{x: papb[x] for x in pj_cols})
+    papb2 = PyBlock(lambda ns: [n.split('/')[-2]
+                                for n in ns], args=[papb['stordir']])
+    iac = Calc(insert=True, name=papb2['out'])
+    ia = Atoms(insert=True, calc=iac, calcname=papb2['out'],
+               **{x: papb[x] for x in pj_cols if x != 'mag'})
     pop_atoms =                               \
         Gen(name='pop_atoms',
-            desc='populate Atoms', funcs=[papb], actions=[ia])
+            desc='populate Atoms', funcs=[papb, papb2], actions=[ia])
     #########################################################################
+    pb_cols = ['stordir', 'name', 'calcname', 'eng', 'contrib',
+               'mag', 'volumes', 'energies', 'contribs', 'err']
 
-    pbpb = PyBlock(parse_job, args=[Const(root+'bulks'), Const(mats)],
-                   outnames=pj_cols)
+    pbpb = PyBlock(parse_bulks, args=[Const(root+'bulks')], outnames=pb_cols)
+    ibc = Calc(insert=True, name=pbpb['calcname'])
+    ib = Bulks(insert=True, calc=ibc, **{x: pbpb[x] for x in pb_cols})
 
-    pop_bulkjobs =                               \
+    pop_bulkjobs = \
         Gen(name='pop_bulkjobs',
-            desc='populates BulkJobs',
-            funcs=[pbpb],
-            actions=[Bulkjob(insert=True, **{x: pbpb[x] for x in pj_cols})])
-
-    #########################################################################
+            desc='populates Bulks',
+            funcs=[pbpb], actions=[ib])
 
     #########################################################################
     xcols = ['expt_ce', 'expt_bm', 'expt_lat', 'expt_mag']
@@ -62,16 +63,16 @@ def io(mod: Model) -> None:
     def parse_csv(root: str, mat: str
                   ) -> T[O[float], O[float], O[float], O[float]]:
         import csv
-        if mat in ['PdC', "PdN", "ScC", "NbC", "NbN", 'Re', 'Co', 'Os', 'Tc', 'Tl', 'Y', 'Zr']:
-            return None, None, None, None
-        bad = ['Re', 'Os', 'Ir', 'Hf', 'Pb', 'W', 'Zn', 'Ta', 'Pd', 'Pt']
+        # if mat in ['PdC', "PdN", "ScC", "NbC", "NbN", 'Re', 'Co',
+        #            'Os', 'Tc', 'Tl', 'Y', 'Zr']:
+        #     return None, None, None, None
+        # bad ['Re', 'Os', 'Ir', 'Hf', 'Pb', 'W', 'Zn', 'Ta', 'Pd', 'Pt']
         with open(root % 'expt', 'r') as f:
             r = csv.reader(f)
             for ro in r:
                 if ro[0] == mat:
                     x, b, z, m = [float(x) if x else None for x in ro[1:]]
-                    if any(mm in mat for mm in bad):
-                        x = None
+                    #  if any(mm in mat for mm in bad): x = None
                     return x, b, z, m
             print('\n\n\n', mat)
             import pdb
@@ -121,9 +122,22 @@ def io(mod: Model) -> None:
             funcs=[spb], tags=['surf'],
             actions=[Surf(insert=True, **{x: spb[x] for x in surfcol})])
     #######################################################################
+    bq = Query(dict(c=Calc.id(), n=Calc['name']()))
+
+    def bf(n: str) -> O[str]:
+        import os
+        root = '/Users/ksb/functionals/data/beefs'
+        for b in os.listdir(root):
+            if n == b[:-5]:
+                with open(os.path.join(root, b), 'r') as f:
+                    return f.read()
+        return None
+    bpb = PyBlock(bf, args=[bq['n']])
+    beef = Gen(name='beef', query=bq, funcs=[bpb],
+               actions=[Calc(calc=bq['c'], data=bpb['out'])])
     #######################################################################
     #######################################################################
 
-    gens = [pop_atoms, pop_bulkjobs, pop_expt, popc, popfp, allmat, surf]
+    gens = [pop_atoms, pop_bulkjobs, pop_expt, popc, popfp, allmat, surf, beef]
 
     mod.add(gens)
