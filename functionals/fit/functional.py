@@ -47,9 +47,9 @@ class Functional(object, metaclass=abc.ABCMeta):
     def apply(self, s: float, a: float) -> float:
         raise NotImplementedError
 
-    def plot(self, color: str) -> L[D[Any, Any]]:
+    def plot(self, color: str) -> L[Any]:
         ss = np.arange(0., 5, 0.1)
-        alphas = np.array([0, 1, 2, 3]) if self.mgga else [1]
+        alphas = np.array([0, 1]) if self.mgga else [1]
         styles = ['solid', 'dot', 'dash', 'dashdot']
         out = []
         for sty, a in zip(styles, alphas):
@@ -91,7 +91,7 @@ class FromMatrix(Functional):
 
     def __init__(self, A: np.ndarray,  # a1: float = 4.9479, msb: float = 1.,
                  name: str = None) -> None:
-        self.A = A.reshape((8, 8))
+        self.A = np.array(A).reshape((8, 8))
         # self.a1 = a1 self.msb = msb
         assert self.A.shape == (8, 8)
         self._name = name or '<no name>'
@@ -109,16 +109,18 @@ class FromMatrix(Functional):
     def apply(self, s: float, a: float,) -> float:
         return float(np.sum(math.LegProduct(s=s, a=a, A=self.A)))
 
-    def plot2d(self, plot: bool = False) -> go.Figure:
+    def plot2d(self, alpha: float = 1., plot: bool = False) -> go.Figure:
         import functionals.fit.constraint as constr
-        a = 0.5
+        a = alpha
 
         def d(s: float) -> float:
-            return float(constr.deriv_constr(s, a) @ self.x)
-        xs = np.linspace(0.2, 3, 1000)
-        fs, zs = zip(*[(self.apply(s, a), d(s)) for s in xs])
-        data = [go.Scatter(x=xs, y=fs, name='fx'),
-                go.Scatter(x=xs, y=zs, name='dfx')]
+            return float(constr.deriv_constr(
+                math.t_s(s), math.t_alpha(a)) @ self.x)
+        xs = np.linspace(0, 3, 100)
+        fs, zs = map(np.array, zip(*[(self.apply(s, a), d(s)) for s in xs]))
+        # zs = zs/np.max(np.abs(zs))
+        data = [go.Scatter(x=xs, y=fs, name='fx @ α=%f' % alpha),
+                go.Scatter(x=xs, y=zs, name='dfx/dŝ @ α=1')]
         fig = go.Figure(data=data)
         if plot:
             plotly.offline.plot(fig)
@@ -160,14 +162,7 @@ class FromMatrix(Functional):
         return fig
 
 
-# def mkPlots(**ps: str) -> go.Figure:
-#     return plots(
-#         [FromMatrix(np.array(json.loads(p))
-#                     if isinstance(p, str) else p, n)
-#          for n, p in ps.items()])
-
-
-def plots(ps: L['Functional']) -> go.Figure:
+def plots(ps: L['Functional'], plot: bool = False) -> go.Figure:
     assert len(ps) < 7
     cs = ['rgb(255,0,0)', 'rgb(0,255,0)', 'rgb(0,0,255)', 'rgb(153,0,153)',
           'rgb(0,0,0)', 'rgb(255,255,0)']
@@ -175,6 +170,8 @@ def plots(ps: L['Functional']) -> go.Figure:
     layout = go.Layout(title='Functionals', xaxis=dict(title='s'),
                        yaxis=dict(title='Fx'))
     fig = go.Figure(data=data, layout=layout)
+    if plot:
+        plotly.offline.plot(fig)
     return fig
 
 ###############################################################################
@@ -230,6 +227,14 @@ def fxMS2(s: float, alpha: float) -> float:
     F0x = 1 + k - k/(1+(mu*p+c)/k)
     f = (1-alpha**2) / (1 + alpha**3 + b*alpha**6)
     return F1x + f*(F0x-F1x)
+
+# (1 + .504 - .504/(1+(10/81)*x^2/.504)) + ((1-y**2) / (1 + y**3 + 4*y**6))*((1 + .504 - .504/(1+((10/81)*x^2+0.14601)/.504))-(1 + .504 - .504/(1+(10/81)*s**2/.504)))
+
+
+def ms2_s_curv(s: float, a: float) -> float:
+    return (16.7993-12.3452*s**2/(s**2+4.0824)**3
+            + ((12.3452*(s**2-1.75503)*(a**2-1))
+               / ((s**2+5.26508)**3*(4*a**6+a**3+1))))
 
 
 MS2 = FromFunc('MS2', fxMS2)

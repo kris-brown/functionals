@@ -37,7 +37,7 @@ def analysis(mod: Model) -> None:
 
     ########################################################################
     xvq = Query(dict(b=Bulks.id(),
-                     v=(Bulks['expt_lat']()/Bulks['volrat']())**Lit(3)))
+                     v=(Bulks['expt_lat']()**Lit(3)*Bulks['volrat']())))
     xvol = Gen('xvol', query=xvq, actions=[Bulks(bulks=xvq['b'],
                                                  expt_vol=xvq['v'])])
     ########################################################################
@@ -162,22 +162,31 @@ def analysis(mod: Model) -> None:
                           contribs=rcpb['out'])])
 
     ########################################################################
-    cols = dict(ce=('ce', 'expt_ce'), bm=('bm', 'expt_bm'),
-                lat=('lat', 'expt_lat'),  mag=('mag', 'expt_mag'))
+    mets = ['ce', 'bm', 'lat', 'vol', 'mag']
+    errcols = {x+'err_'+k: (Bulks.get(k)()-Bulks.get('expt_'+k)())/(
+        Bulks.get('expt_'+k)() if x else Lit(1)) for x in ['rel', ''] for k in mets}
+    errq = Query(dict(bulks=Bulks.id(), **errcols),
+                 opt_attr=[Bulks.get(x+k)() for x in ['', 'expt_'] for k in mets])
+
+    errs = Gen('errs', desc='Difference btw computed and expt',
+               query=errq,
+               actions=[Bulks(**{x: errq[x] for x in errq.exprs.keys()})])
+    ########################################################################
+    # cols = dict(ce=('ce', 'expt_ce'), bm=('bm', 'expt_bm'),
+    #             lat=('lat', 'expt_lat'),  mag=('mag', 'expt_mag'))
     cbp = JPath('bulks', [bulks__calc])
     msegens = []
-    for k, (x_, y_) in cols.items():
-        x = Bulks.get(x_)(cbp)
-        y = Bulks.get(y_)(cbp)
-        mseq = Query(exprs=dict(c=Calc.id(), m=AVG(ABS(x-y))),
+    for m in mets:
+        mae, relmae = [Bulks.get(x+'err_'+m)(cbp) for x in ['', 'rel']]
+
+        mseq = Query(exprs=dict(c=Calc.id(), m=AVG(ABS(mae)), r=AVG(ABS(relmae))),
                      basis=[Calc],
-                     # constr=Calc['done'](),
                      aggcols=[Calc.id()])
-        msegens.append(Gen(name='mae_'+k,
-                           query=mseq,
-                           actions=[Calc(calc=mseq['c'],
-                                         **{'mae_'+k: mseq['m']})]))
-    msec, mseb, msel, msem = msegens
+        msegens.append(Gen(
+            name='mae_'+m, query=mseq, tags=['mae'],
+            actions=[Calc(calc=mseq['c'], **{
+                'mae_'+m: mseq['m'], 'relmae_'+m:mseq['r']})]))
+    msec, mseb, msel, msev, msem = msegens
     #####################################################################
 
     annq = Query(dict(a=Atoms.id(), s=Atoms['stordir']()))
@@ -241,7 +250,7 @@ def analysis(mod: Model) -> None:
     ########################################################################
 
     gens = [isbeef, exptref, eform, ce, refcontribs, xvol, msem,
-            msec, mseb, msel, atom_namenum,
-            tmag, done, surfan]
+            msec, mseb, msel, msev, atom_namenum,
+            tmag, done, surfan, errs]
 
     mod.add(gens)

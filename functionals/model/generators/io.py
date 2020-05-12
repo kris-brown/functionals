@@ -24,8 +24,8 @@ def io(mod: Model) -> None:
 
     # Extract tables
     tabs = ['Atoms', "Calc", "Bulks", "Fit",
-            "Fitparams", "Const", "Surf"]
-    Atoms, Calc, Bulks, Fit, Fitparams, Constr, Surf = \
+            "Fitparams", "Surf"]
+    Atoms, Calc, Bulks, Fit, Fitparams, Surf = \
         map(mod.get, tabs)
 
     ###################################################################
@@ -90,16 +90,16 @@ def io(mod: Model) -> None:
                                   **{x: ptpb[x] for x in xcols})])
     ##########################################################################
 
-    pccols = ['name', 'abdata', 'kind', 'points', 'val', 'func']
-    pcq = Query(dict(x=GROUP_CONCAT(Fitparams['consts'](), delim='$')),
-                aggcols=[LEFT(Fitparams['consts'](), Literal(1))])
-    pcpb = PyBlock(pop_cons, args=[pcq['x']], outnames=pccols)
-    popc = \
-        Gen(name='popcon', funcs=[pcpb], tags=['fit'], query=pcq,
-            actions=[Constr(insert=True, **{x: pcpb[x] for x in pccols})])
+    # pccols = ['name', 'abdata', 'kind', 'points', 'val', 'func']
+    # pcq = Query(dict(x=GROUP_CONCAT(Fitparams['consts'](), delim='$')),
+    #             aggcols=[LEFT(Fitparams['consts'](), Literal(1))])
+    # pcpb = PyBlock(pop_cons, args=[pcq['x']], outnames=pccols)
+    # popc = \
+    #     Gen(name='popcon', funcs=[pcpb], tags=['fit'], query=pcq,
+    #         actions=[Constr(insert=True, **{x: pcpb[x] for x in pccols})])
     ##########################################################################
 
-    pfcols = ['ce_scale', 'bm_scale', 'lc_scale', 'consts']
+    pfcols = ['ce_scale', 'bm_scale', 'lc_scale', 'consts', 'abdata']
     pfpb = PyBlock(pop_fitp, outnames=pfcols)
 
     popfp = \
@@ -138,6 +138,6 @@ def io(mod: Model) -> None:
     #######################################################################
     #######################################################################
 
-    gens = [pop_atoms, pop_bulkjobs, pop_expt, popc, popfp, allmat, surf, beef]
+    gens = [pop_atoms, pop_bulkjobs, pop_expt, popfp, allmat, surf, beef]
 
     mod.add(gens)

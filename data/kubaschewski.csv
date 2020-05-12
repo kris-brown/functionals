@@ -7,8 +7,6 @@ CaO,rocksalt,634.9
 CaS,rocksalt,473.2
 CdO,rocksalt,258.4
 CdTe,zincblende,100.8
-CeN,rocksalt,326.4
-CeS,rocksalt,456.5
 CoAl,cesiumchloride,110.5
 CoO,rocksalt,237.7
 CrN,rocksalt,117.2
@@ -42,7 +40,6 @@ LaSe,rocksalt,405
 LiCl,rocksalt,408.4
 LiF,rocksalt,615
 LiH,rocksalt,90.7
-MgCe,cesiumchloride,16.1
 MgO,rocksalt,601.6
 MgS,rocksalt,345.6
 MnO,rocksalt,384.9

@@ -96,7 +96,7 @@ def parse(opts: List[str]) -> Callable[[str], List[str]]:
 parser = argparse.ArgumentParser(description='Submit some jobs',
                                  allow_abbrev=True)
 parser.add_argument('--xc', help='Functional', default='',
-                    type=parse(['pbe', 'rpbe']))
+                    type=parse(['pbe', 'rpbe', 'msurf']))
 parser.add_argument('--mat', help='Material', default='',
                     type=parse(fccs + hcps))
 parser.add_argument('--bulk', help='Put anything to do bulk', default='')

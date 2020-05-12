@@ -2,7 +2,8 @@ from os.path import join
 
 # Internal Modules
 from dbgen import (Model, Gen, Query, PyBlock, Expr, Literal as Lit, COALESCE,
-                   Text, JPath, GROUP_CONCAT, MAX, AND, CONVERT, SUBSELECT)
+                   Text, JPath, GROUP_CONCAT, MAX, AND, CONVERT,
+                   NOT)
 
 from functionals.scripts.fit.db_data import db_data
 from functionals.scripts.fit.a_ce import a_ce
@@ -75,7 +76,8 @@ def fit(mod: Model) -> None:
                             o=Bulks['vol'](),
                             n=Bulks['name']()),
                  basis=[Bulks],
-                 opt_attr=[Bulks['expt_bm'](), Bulks['expt_vol']()])
+                 opt_attr=[Bulks['expt_bm'](), Bulks['expt_vol']()],
+                 constr=NOT(Bulks['irregular']()))
 
     vecpb = PyBlock(fit_vectors,
                     args=[vecq[x] for x in 'evcfon'],
@@ -83,9 +85,8 @@ def fit(mod: Model) -> None:
 
     vecs =                                                            \
         Gen(name='vecs',
-            desc='Computes Ax+b=y matrices/vectors',
-            query=vecq, funcs=[vecpb],
-            tags=['fit'],
+            desc='Computes Ax+b=y matrices/vectors for BM and volume',
+            query=vecq, funcs=[vecpb], tags=['fit'],
             actions=[Bulks(bulks=vecq['b'], **{x: vecpb[x] for x in vecout})])
 
     ########################################################################
@@ -121,25 +122,25 @@ def fit(mod: Model) -> None:
 
     ########################################################################
 
-    funmetrics = ['mae_%s' % (x) for x in ['ce', 'bm', 'lat']]
+    funmetrics = [y+'mae_%s' % (x)
+                  for x in ['ce', 'bm', 'lat', 'vol', 'mag']
+                  for y in ['', 'rel']]
 
-    gc = SUBSELECT("""CONCAT('{',
-string_agg(CONCAT('''', name, ''':[', abdata, ',''', kind, ''','
-                  , points, ']'), ','),
-'}')""", 'const', 'true')
-    rfq = Query(dict(c=Calc.id(), d=Calc['fitdata'](), n=gc,
-                     o=Fitparams['consts'](),
+    rfq = Query(dict(c=Calc.id(), d=Calc['fitdata'](),
+                     o=Fitparams['abdata'](),
                      p=Fitparams.id(), e=Fitparams['ce_scale'](),
                      b=Fitparams['bm_scale'](), v=Fitparams['lc_scale']()),
                 basis=[Fitparams, Calc])
 
-    rfout = ['x', 'cv'] + funmetrics
-    rfpb = PyBlock(runfit, args=[rfq[x] for x in 'debvon'], outnames=rfout)
+    rfout = ['x', 'step', 'cv'] + funmetrics + ['err']
+    rfpb = PyBlock(runfit, args=[rfq[x] for x in 'debvo'], outnames=rfout)
     rfit = Gen(name='runfit',
                desc='', tags=['fit'],  # 'parallel'],
                query=rfq, funcs=[rfpb],
                actions=[Fit(insert=True, calc=rfq['c'], fitparams=rfq['p'],
                             **{x: rfpb[x] for x in rfout})])
+    ########################################################################
+
     ########################################################################
     ########################################################################
     ########################################################################

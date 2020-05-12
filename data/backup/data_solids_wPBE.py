@@ -1274,6 +1274,8 @@ def lattice_parameter(name:str)->float:
 
 def get_solid_cohesive_energy(name:str, ZPVE_corr:bool=True)->float:
     in_data(name)
+    if 'cohesive energy' not in data[name]: return None
+
     e = data[name]['cohesive energy']
     if ZPVE_corr == True and name in qubic_solids_27:
         e += (9./8.)*kB*data[name]['debye temperature']
@@ -1282,13 +1284,13 @@ def get_solid_cohesive_energy(name:str, ZPVE_corr:bool=True)->float:
 def get_solid_bulk_modulus(name:str)->O[float]:
     in_data(name)
     if name in solids_1:
-        return data[name]['bulk modulus']
+        return data[name].get('bulk modulus')
     else:
         return None
 
 def get_solid_magmom(name:str)->float:
     in_data(name)
-    return data[name]['magmom']
+    return data[name].get('magmom')
 
 def get_solid_crystal_structure(name:str)->str:
     in_data(name)
@@ -1494,3 +1496,10 @@ getKey={'Li-bcc':'Li_bcc'
         , 'CsF-rocksalt': 'CsF_b1'
         , 'BP-zincblende': 'BP_b3'
         , 'SiC-zincblende': 'SiC_b3'}
+
+def write()->None:
+    with open('data/keld.csv', 'w') as f:
+        import csv
+        w = csv.writer(f)
+        for d in sorted(data):
+            w.writerow([get_solid_symbols(d), get_solid_crystal_structure(d), get_solid_cohesive_energy(d), get_solid_bulk_modulus(d), get_solid_lattice_parameter(d),get_solid_magmom(d)])

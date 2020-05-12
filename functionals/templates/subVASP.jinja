@@ -1,4 +1,7 @@
 #!/bin/bash
-source /nfs/slac/g/suncatfs/ksb/{{ exe }}_env.bash
+source /nfs/slac/g/suncatfs/ksb/vasp54_env.bash
 /bin/hostname > host.txt
-mpirun -n $LSB_MAX_NUM_PROCESSORS vasp &>run.log
+mpirun -n $LSB_MAX_NUM_PROCESSORS vasp{{ gam }} &>run.log
+{% if rm %}
+rm -f WAVECAR
+{% endif %}

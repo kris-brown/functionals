@@ -44,7 +44,6 @@ Nb,bcc,3.31,,3.293,,275,172.758,,FALSE,kcal/mol
 NiAl,cesiumchloride,2.892,,2.881,,,,,,
 Ni,fcc,3.517,0.64,3.509,,450,102.213,,FALSE,kcal/mol
 Os,hcp,,,2.734,4.392,,8.17,,,eV
-Pb,fcc,5.04,,4.912,,105,46.81,,FALSE,kcal/mol
 Pd,fcc,3.932,,3.876,,274,90.2,198.1,FALSE,kcal/mol
 Pt,fcc,3.971,,3.913,,240,134.9,,FALSE,kcal/mol
 Rb,bcc,5.665,,5.58,,56,19.64,,FALSE,kcal/mol

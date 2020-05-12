@@ -7,6 +7,8 @@ from typing import (Any,
 import random
 import math
 import numpy as np
+import plotly
+import plotly.graph_objs as go
 
 '''Data Preprocessing for nonlinear fitting.'''
 
@@ -22,6 +24,7 @@ class Datum(object):
     def __init__(self, mat: str, kind: str, vec: L[float], offset: float,
                  target: float) -> None:
         assert kind in ['ce', 'bm', 'lc']
+        assert len(vec) == 64
         self.mat = mat
         self.kind = kind
         self.vec = vec
@@ -38,19 +41,24 @@ class Datum(object):
     def __hash__(self) -> int:
         return hash((self.mat, self.kind))
 
-    def err(self, x: np.ndarray, vol: bool = False) -> float:
+    def err(self, x: np.ndarray, vol: bool = False, rel: bool = True) -> float:
         ''' Compute error for this data point:
            - for lc, compute either vol or lattice constant
         '''
-        y = np.array(self.vec) @ x + self.offset
+        if len(self.vec) != 64 or len(x) != 64:
+            import pdb
+            pdb.set_trace()
+        y = (np.array(self.vec) @ x) + self.offset
         if vol or self.kind != 'lc':
-            return float(y - self.target)
+            div = 1/self.target if rel else 1
+            return float(y - self.target)*div
         else:
             hcp = 'hcp' in self.mat
             factor = 1./1.4142 if hcp else 1
             new_y = (max(y, 0)*factor)**(1/3)
             new_tar = (self.target*factor)**(1/3)
-            return float(new_y - new_tar)
+            div = 1/new_tar if rel else 1
+            return float(new_y - new_tar)*div
 
 
 class Data(object):
@@ -70,18 +78,30 @@ class Data(object):
 
     def __len__(self) -> int: return len(self.ce) + len(self.bm) + len(self.lc)
 
+    def remove(self, key: str, mat: str) -> bool:
+        n = len(getattr(self, key))
+        setattr(self, key, [x for x in getattr(self, key) if x.mat != mat])
+        n2 = len(getattr(self, key))
+        return n != n2  # successful removal
+
     @property
     def data(self) -> S[Datum]:
         return set(self.ce) | set(self.bm) | set(self.lc)
 
-    def mae(self, x: np.ndarray, key: str) -> float:
+    def mae2(self, x: np.ndarray, key: str, rel: bool = True) -> float:
+        '''This should give the same result as mae'''
+        a, b = self._xy(getattr(self, key), rel)
+        return float(np.sum(np.abs(a@x-b)))/len(b)
+
+    def mae(self, x: np.ndarray, key: str, rel: bool = True) -> float:
         '''Mean average error'''
         assert key in ['ce', 'bm', 'lc', 'vol']
         if key in ['ce', 'bm', 'lc']:
-            return sum(abs(d.err(x)) for d in
+            return sum(abs(d.err(x, rel=rel)) for d in
                        getattr(self, key))/len(getattr(self, key))
         elif key == 'vol':
-            return sum(abs(d.err(x, vol=True)) for d in self.lc)/len(self.lc)
+            return sum(abs(d.err(x, rel=rel, vol=True))
+                       for d in self.lc)/len(self.lc)
         else:
             raise ValueError()
 
@@ -97,16 +117,17 @@ class Data(object):
         else:
             raise ValueError()
 
-    def xy(self, ce: float, bm: float, lc: float) -> T[np.ndarray, np.ndarray]:
+    def xy(self, rel: bool = True) -> T[L[np.ndarray], L[np.ndarray]]:
         '''Matrices for fast computation of cost func, weighted by scale.'''
+        return map(list, zip(*[self._xy(getattr(self, x), rel)  # type: ignore
+                               for x in ['ce', 'bm', 'lc']]))
+
+    def _xy(self, ds: S[Datum], rel: bool) -> T[np.ndarray, np.ndarray]:
         X, Y = np.empty((0, 64)), []
-        scale = dict(ce=ce, bm=bm, lc=lc)
-        for d in self.data:
-            s = scale[d.kind]
-            assert s >= 0
-            if s > 0:
-                X = np.vstack((X, np.array([d.vec])/s))
-                Y.append((d.target - d.offset)/s)
+        for d in ds:
+            div = 1/d.target if rel else 1
+            X = np.vstack((X, np.array([d.vec])*div))
+            Y.append((d.target - d.offset)*div)
         return X, np.array(Y)
 
     @classmethod
@@ -138,3 +159,13 @@ class Data(object):
             traind = Data(self.data - test, full=False)
             datas.append((traind, testd))
         return datas
+
+    def resid(self, key: str, x: np.ndarray, rel: bool = True) -> None:
+        assert key in ['ce', 'bm', 'lc', 'vol']
+        points = getattr(self, 'lc' if key == 'vol' else key)
+        xs = [p.mat for p in points]
+        y = [p.err(x, rel=rel, vol=key == 'vol') for p in points]
+        layout = dict(title="%sError for %s" %
+                      ('Relative ' if rel else '', key))
+        fig = go.Figure(data=[go.Bar(name=key, x=xs, y=y)], layout=layout)
+        plotly.offline.plot(fig, filename='temp0.html')

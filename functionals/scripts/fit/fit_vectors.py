@@ -1,3 +1,4 @@
+import pdb
 from typing import Tuple as T, Optional as O
 import numpy as np
 
@@ -12,17 +13,17 @@ def fit_vectors(engs_: str, vols_: str, contribs_: str, coefs_: str,
     E[i](x) = Enonxc[i] + C[i]@x
     Enonxc[i] = E[i] - C[i]-CalcCoefs
 
-    5 point appx for 2nd derivative (i.e. E''= 2B):
+    5 point appx for 2nd derivative (i.e. E''= 2A):
         -E[+2] + 16E[+1] - 30E[0] + 16E[-1] - E[-2] / 12h^2
 
-    5 point appx for 1st derivative (i.e. E'=2Av + B):
+    4 point appx for 1st derivative (i.e. E'=2Av + B.... or B=E'-2Av):
         -E[+2] + 8E[+1] - 8E[-1] + E[-2] / 12h
 
     Bulk modulus is equal to A = E''/2
-    optimal volume is equal to -B/2A = -(E'-2Av)/2A = v_opt - E'/E''opt
 
-    cohesive energy will be taken as the energy of the minimum energy point,
-    but we include the offset of the true parabola minimum:
+    optimal volume: v_opt = -B/2A
+                    v_opt = -(E'-2Av)/E''
+                    v_opt = v - E'/E''
 
     - [[eV/A³ to GPa]] = (10**-9 GJ/J) * (1.602 * 10**-19 J/eV) * (10**10 A/m)**3
     - GPa = GJ/m³
@@ -35,6 +36,7 @@ def fit_vectors(engs_: str, vols_: str, contribs_: str, coefs_: str,
         return None, None
     dx = np.mean(np.diff(vols))
     assert np.max(np.diff(vols)-dx) < 0.0001, vols  # check even spacing
+    volume = float(volume)
 
     class AB(object):
         '''A pair A,b such that Ax=b for some vector of coefficients.'''
@@ -56,8 +58,19 @@ def fit_vectors(engs_: str, vols_: str, contribs_: str, coefs_: str,
 
     Enonxc = [e-contrib@coefs for e, contrib in zip(engs, contribs)]
     E = [AB(contrib, enonxc) for contrib, enonxc in zip(contribs, Enonxc)]
-    dE = (-1*E[4] + 8*E[3] - 8*E[1] + E[0])/(12*dx)
     ddE = (-1*E[4] + 16*E[3] - 30*E[2] + 16*E[1] - E[0])/(12*dx**2)
     Bulkmod = float(volume) * ev_a3_to_gpa * ddE
-    Vopt = AB(b=float(volume)) - dE/(ddE@coefs)
+
+    # dE = (-1*E[4] + 8*E[3] - 8*E[1] + E[0])/(12*dx)
+    # old_Vopt = AB(b=float(volume)) - dE/(ddE@coefs)
+
+    JohannesMagicQ = -1/(2*(ddE@coefs)*(dx**2))
+    v1prefactor = JohannesMagicQ*(-2*volume - dx)
+    v2prefactor = JohannesMagicQ*4*volume
+    v3prefactor = JohannesMagicQ*(-2*volume + dx)
+
+    Vopt = v1prefactor * E[1] + v2prefactor * E[2] + v3prefactor * E[3]
+    if name == 'Nb':
+        import pdb
+        pdb.set_trace()
     return str(Bulkmod), str(Vopt)

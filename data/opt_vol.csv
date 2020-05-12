@@ -68,7 +68,6 @@ CdO,beef,105.167256,4.720198,True,False,False
 CdO,pbe,109.427124,4.783088,True,False,False
 CdO,pbesol,104.351730,4.707965,True,False,False
 CdO,scan,105.054905,4.718516,True,False,False
-CeN,pbe,128.853699,5.050863,True,False,False
 Co,beef,20.713030,2.451590,True,True,True
 Co,pbe,21.722166,2.490774,True,True,True
 Co,pbesol,20.722537,2.451965,True,True,True
@@ -216,10 +215,6 @@ LiH,scan,64.043652,4.000909,True,True,True
 Mg,beef,45.369852,3.183602,True,True,True
 Mg,pbe,45.835997,3.194468,True,True,True
 Mg,pbesol,45.051569,3.176140,True,True,True
-MgCe,beef,53.750547,3.773934,True,False,False
-MgCe,pbe,55.701549,3.819054,True,False,False
-MgCe,pbesol,53.031749,3.757036,True,False,False
-MgCe,scan,54.394560,3.788947,True,False,False
 MgO,beef,75.514761,4.226789,True,True,True
 MgO,pbe,76.630666,4.247508,True,True,True
 MgO,pbesol,74.646859,4.210534,True,True,True

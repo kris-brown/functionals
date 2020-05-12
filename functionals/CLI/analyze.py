@@ -6,17 +6,18 @@ import csv
 import itertools
 import os
 import json
-import re
 import sys
 import numpy as np
 import plotly
 import plotly.graph_objs as go
 import ase.units as units
+import ase.io as aseio
 # Internal Modules
 import dbgen
 import functionals.fit.functional as fx
 import functionals.fit.data as fdata
 from functionals.CLI.submit import matdata
+from functionals.scripts.io.parse_job import parse_job
 
 """
 A CLI interface for common queries to the DB
@@ -86,12 +87,23 @@ def viz_plts(name: str, calc: str,  v_: str, e_: str,
                        name='stencil'))
 
 
+def eos1(mat: str, calc: str) -> None:
+    pth = '/Users/ksb/scp_tmp/vauto/bulks/%s/%s/eos' % (calc, mat)
+    print(os.listdir(pth))
+    pe = [(x[0], x[2]) for x in zip(*parse_job(pth)) if x[-1] == '']
+    assert pe, parse_job(pth)[-1]
+    p, e = zip(*pe)
+
+    v = [aseio.read(x+'/POSCAR').get_volume() for x in p]
+    go.Figure([go.Scatter(x=v,  y=e, mode='markers')]).show()
+
+
 def vizone(mat: str, calc: str) -> None:
     q = '''SELECT name, volumes,energies,eosbm,
                   expt_bm,bm,bulkmod_lstsq,expt_vol,lstsq_abc,vol,eng
            FROM bulks WHERE name=%s and calcname=%s'''
-    name, v, e, eosbm, expt_bm, bulkmod, bm_ls, expt_vol, abc, vol, \
-        eng = dbgen.sqlselect(default.connect(), q, [mat, calc])[0]
+    name, v, e, eosbm, expt_bm, bulkmod, bm_ls, expt_vol, \
+        abc, vol, eng = dbgen.sqlselect(default.connect(), q, [mat, calc])[0]
     title, p2, p3, p4 = viz_plts(name, calc, v, e, bulkmod, vol,
                                  eng, abc, eosbm, expt_vol, expt_bm, bm_ls)
     layout = go.Layout(hovermode='closest', showlegend=True, title=title,
@@ -134,28 +146,8 @@ def viz(calc: str = 'ms2') -> None:
 ###############
 
 
-beef = np.array(
-    [1.18029330e+00, 8.53027860e-03, -1.02312143e-01,
-     6.85757490e-02, -6.61294786e-03, -2.84176163e-02, 5.54283363e-03,
-     3.95434277e-03, -1.98479086e-03, 1.00339208e-01, -4.34643460e-02,
-     -1.82177954e-02, 1.62638575e-02, -8.84148272e-03, -9.57417512e-03,
-     9.40675747e-03, 6.37590839e-03, -8.79090772e-03, -1.50103636e-02,
-     2.80678872e-02, -1.82911291e-02, -1.88495102e-02, 1.69805915e-07,
-     -2.76524680e-07, 1.44642135e-03, -3.03347141e-03, 2.93253041e-03,
-     -8.45508103e-03, 6.31891628e-03, -8.96771404e-03, -2.65114646e-08,
-     5.05920757e-08, 6.65511484e-04, 1.19130546e-03, 1.82906057e-03,
-     3.39308972e-03, -7.90811707e-08, 1.62238741e-07, -4.16393106e-08,
-     5.54588743e-08, -1.16063796e-04, 8.22139896e-04, -3.51041030e-04,
-     8.96739466e-04, 2.09603871e-08, -3.76702959e-08, 2.36391411e-08,
-     -3.38128188e-08, -5.54173599e-06, -5.14204676e-05, 6.68980219e-09,
-     -2.16860568e-08, 9.12223751e-09, -1.38472194e-08, 6.94482484e-09,
-     -7.74224962e-09, 7.36062570e-07, -9.40351563e-06, -2.23014657e-09,
-     6.74910119e-09, -4.93824365e-09, 8.50272392e-09, -6.91592964e-09,
-     8.88525527e-09])
-
-
 def reset() -> None:
-    q = '''TRUNCATE const, fitparams, fit'''
+    q = '''TRUNCATE fitparams, fit'''
     dbgen.sqlexecute(default.connect(), q)
     os.system('rm -r /Users/ksb/scp_tmp/fitplt/*')
 
@@ -172,7 +164,7 @@ def errs(prop: str) -> None:
             FROM bulks
             WHERE {0}-expt_{0} IS NOT NULL
             GROUP BY calcname'''.format(prop)
-    q3 = '''SELECT name, ab_{0} FROM bulks WHERE calcname='beef'
+    q3 = '''SELECT name, ab_{0} FROM bulks WHERE calcname='ms2'
             AND ab_{0} IS NOT NULL AND expt_{1} IS NOT NULL
             '''.format(abprop, prop)
     fitx_ = dbgen.sqlselect(conn, q1)
@@ -182,7 +174,9 @@ def errs(prop: str) -> None:
     fitx = [(k, np.array(json.loads(v))) for k, v in fitx_]
     calcdata_all = {k: ast.literal_eval(v) for k, v in calcdata_}
     calcdata = {k: {e[0]: e[1] for e in v} for k, v in calcdata_all.items()}
-    exptvals = {e[0]: e[2] for e in calcdata_all['fx: pbe']}
+    exptvals = {e[0]: e[2]
+                for e in set.union(*map(set, calcdata_all.values()))}
+
     vecs = {k: json.loads(v) for k, v in vecs_}
     mats = sorted([n for n, _ in vecs_] or set([k for v in calcdata.values()
                                                 for k in v.keys()]))
@@ -203,12 +197,12 @@ def errs(prop: str) -> None:
 
 
 def maes() -> None:
-    q = '''SELECT name,mae_ce,mae_bm,mae_lat,isfx FROM errs'''
+    q = '''SELECT name,mae_ce,relmae_bm,relmae_lat,isfx FROM errs'''
     con = default.connect()
     fns, ces, bms, lats, fxs = map(list, zip(*dbgen.sqlselect(con, q)))
     datas = [ces, bms, lats]
     color = ['red' if x else 'blue' for x in fxs]
-    labs = ['MAE CE, eV', 'MAE BM error, GPa', 'MAE lattice error, A']
+    labs = ['Relative MAE %s error' % x for x in ['CE', 'BM', 'Lattice']]
     pairs = [(0, 1), (0, 2)]  # ,(1,2)]
     data = [go.Scatter(x=datas[x], y=datas[y],  mode='markers', text=fns,
                        marker=dict(color=color),  hoverinfo='text')
@@ -226,7 +220,8 @@ def maes() -> None:
 
 def mk_plt(retry: bool = False) -> None:
     q = '''SELECT fit_id, x, cv, fitdata
-            FROM fit JOIN calc   ON  calc=calc_id'''
+            FROM fit JOIN calc   ON  calc=calc_id
+            WHERE x IS NOT NULL'''
     res = dbgen.sqlselect(default.connect(), q)
     print('plotting fx2d')
     for name_, x_, _, _ in res:
@@ -348,42 +343,55 @@ def expt() -> None:
     '''Aggregates experimental data'''
     root = datapth+'%s.csv'
     kjmol_to_ev = units.kJ/units.mol
-    mRyd_to_eV = 0.013605691455111256
+    # mRyd_to_eV = 0.013605691455111256
     # Parse data from individual csvs
-    with open(root % 'atom_eform_coh', 'r') as f:
-        r = csv.reader(f)
-        next(r)
-        elem_form = {k: float(v) for k, v in r}
+    # -------------------------------
+    # with open(root % 'atom_eform_coh', 'r') as f:
+    #     r = csv.reader(f)
+    #     next(r)
+    #     elem_form = {k: float(v) for k, v in r}
 
-    with open(root % 'kubaschewski', 'r') as f:
+    with open(root % 'keld', 'r') as f:
         r = csv.reader(f)
         next(r)
-        kub = {k: float(v) for k, _, v in r}
+        keld = {k: (mbfloat(e), mbfloat(b), float(l), mbfloat(m))
+                for k, s, e, b, l, m in r}
 
-    with open(root % 'rungs_tran', 'r') as f:
+    with open(root % 'scheff', 'r') as f:
         r = csv.reader(f)
         next(r)
-        tran = {k: (mbfloat(a), mbfloat(b), mbfloat(c)) for k, a, b, c in r}
+        scheff = {row[0]: tuple(map(float, row[1:]))
+                  for row in r}
 
-    with open(root % 'errorestimate_lejaeghere', 'r') as f:
-        r = csv.reader(f)
-        next(r)
-        lej = {k: (float(a), float(b), float(c)) for k, a, b, c in r}
+    # with open(root % 'kubaschewski', 'r') as f:
+    #     r = csv.reader(f)
+    #     next(r)
+    #     kub = {k: float(v) for k, _, v in r}
 
-    with open(root % 'cohesive_guillermet', 'r') as f:
-        r = csv.reader(f)
-        next(r)
-        guil = {k: float(v) for k, v in r}
+    # with open(root % 'rungs_tran', 'r') as f:
+    #     r = csv.reader(f)
+    #     next(r)
+    #     tran = {k: (mbfloat(a), mbfloat(b), mbfloat(c)) for k, a, b, c in r}
 
-    with open(root % 'glasser_coh', 'r') as f:
-        r = csv.reader(f)
-        next(r)
-        glas = {k: float(v) for k, _, v in r}
+    # with open(root % 'errorestimate_lejaeghere', 'r') as f:
+    #     r = csv.reader(f)
+    #     next(r)
+    #     lej = {k: (float(a), float(b), float(c)) for k, a, b, c in r}
 
-    with open(root % 'hsesol_schimka', 'r') as f:
-        r = csv.reader(f)
-        next(r)
-        schim = {k: (float(bm), mbfloat(ce)) for k, _, bm, ce in r}
+    # with open(root % 'cohesive_guillermet', 'r') as f:
+    #     r = csv.reader(f)
+    #     next(r)
+    #     guil = {k: float(v) for k, v in r}
+
+    # with open(root % 'glasser_coh', 'r') as f:
+    #     r = csv.reader(f)
+    #     next(r)
+    #     glas = {k: float(v) for k, _, v in r}
+
+    # with open(root % 'hsesol_schimka', 'r') as f:
+    #     r = csv.reader(f)
+    #     next(r)
+    #     schim = {k: (float(bm), mbfloat(ce)) for k, _, bm, ce in r}
 
     with open(root % 'sol58lp_54coh', 'r') as f:
         r = csv.reader(f)
@@ -392,7 +400,7 @@ def expt() -> None:
                    mbfloat(b), r, u)
                for k, _, _, m, l, _, d, c, b, r, u in r}
 
-    dicts = [kub, tran, lej, guil, schim, glas, sol
+    dicts = [sol, keld, scheff  # kub, tran, lej, schim, glas, sol
              ]  # type: List[Dict[str, Any]]
     # Make list of mats
     Mat = collections.namedtuple(
@@ -401,34 +409,39 @@ def expt() -> None:
     mats = {k: Mat([], [], [], []) for k in itertools.chain(
         *[x.keys() for x in dicts])}  # type: Dict[str, Mat]
 
-    for k, (ecoh, bm, vol) in lej.items():
-        mats[k].ce.append(ecoh*kjmol_to_ev)
-        mats[k].bm.append(bm)
-        struct = matdata[k].struct
-        if struct != 'hcp':
-            ndict = dict(bcc=2, fcc=4, diamond=8, zincblende=8, rocksalt=8,
-                         cesiumchlordie=2)
-            mats[k].lc.append(((ndict[struct]*vol)**(1/3)))
-        else:
-            mats[k].lc.append((vol*matdata[k].ca_rat*(3**0.5)/4)**(1/3))
-    for k, vs in tran.items():
-        for key, val in zip(['lc', 'bm', 'ce'], vs):
-            getattr(mats[k], key).append(val)
+    # for k, (ecoh, bm, vol) in lej.items():
+    #     mats[k].ce.append(ecoh*kjmol_to_ev)
+    #     mats[k].bm.append(bm)
+    #     struct = matdata[k].struct
+    #     if struct != 'hcp':
+    #         ndict = dict(bcc=2, fcc=4, diamond=8, zincblende=8, rocksalt=8,
+    #                      cesiumchloride=2)
+    #         mats[k].lc.append(((ndict[struct]*vol)**(1/3)))
+    #     else:
+    #         mats[k].lc.append((vol*matdata[k].ca_rat*(3**0.5)/4)**(1/3))
+    # for k, vs in tran.items():
+    #     for key, val in zip(['lc', 'bm', 'ce'], vs):
+    #         getattr(mats[k], key).append(val)
 
-    for k, ce in guil.items():
-        mats[k].ce.append(mRyd_to_eV * ce)
+    # for k, ce in guil.items():
+    #     mats[k].ce.append(mRyd_to_eV * ce)
 
-    for k, ce in glas.items():
-        mats[k].ce.append(kjmol_to_ev * ce / 2)
+    # for k, ce in glas.items():
+    #     mats[k].ce.append(kjmol_to_ev * ce / 2)
 
-    for k, (bm, c) in schim.items():
-        mats[k].ce.append(kjmol_to_ev * c if c else None)
-        mats[k].bm.append(bm)
+    # for k, (bm, c) in schim.items():
+    #     mats[k].ce.append(kjmol_to_ev * c if c else None)
+    #     mats[k].bm.append(bm)
+    for k, (c, b, l, m) in keld.items():
+        mats[k].bm.append(b)
+        mats[k].ce.append(c)
+        mats[k].lc.append(l)
+        mats[k].mag.append(m)
 
-    for k, (m, l, debye, c, b, corr, unit) in sol.items():
+    for k, (m, lx, debye, c, b, corr, unit) in sol.items():
         mats[k].mag.append(m)
         mats[k].bm.append(b)
-        mats[k].lc.append(l)
+        mats[k].lc.append(lx)
         if c is not None:
             if unit == 'kcal/mol':
                 solce = c * units.kcal/units.mol
@@ -443,18 +456,26 @@ def expt() -> None:
                 solce += (9./8.)*units.kB*debye
             mats[k].ce.append(solce)
 
-    for k, ce in kub.items():
-        if not mats[k].ce:  # ONLY IF WE HAVE NO OTHER OPTION
-            elems = re.findall(r'[A-Z][^A-Z]*', k)
-            assert all([e in elem_form for e in elems]), elems
-            extra = sum(map(elem_form.get, elems))
-            assert extra
-            mats[k].ce.append(kjmol_to_ev * (ce+extra) / 2)
+    for k, (l1, l2, l3, b1, b2, b3, c1, c2, c3) in scheff.items():
+        for z in ['lc', 'ce', 'bm']:
+            getattr(mats[k], z).clear()  # remove other datatpoints
+        mats[k].lc.append(l3+l1-l2)
+        mats[k].ce.append(-(c3+c1-c2))  # flip sign
+        mats[k].bm.append(b3+b1-b2)
+
+    # for k, ce in kub.items():
+    #     if not mats[k].ce:  # ONLY IF WE HAVE NO OTHER OPTION
+    #         elems = re.findall(r'[A-Z][^A-Z]*', k)
+    #         assert all([e in elem_form for e in elems]), elems
+    #         extra = sum(map(elem_form.get, elems))
+    #         assert extra
+    #         mats[k].ce.append(kjmol_to_ev * (ce+extra) / 2)
 
     missingguess = set(mats.keys()) - set(matdata.keys())
-    assert not missingguess, missingguess
+    assert not missingguess, sorted(missingguess)
     missingdata = set(matdata.keys()) - set(mats.keys())
-    print("WARNING! Missing data for ", missingdata)
+    print("WARNING! Missing data for %d mats: %s" %
+          (len(missingdata), missingdata))
     # Write mats to expt csv
     with open(datapth+'expt.csv', 'w') as f:
         w = csv.writer(f)

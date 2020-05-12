@@ -8,11 +8,12 @@ from dbgen import (Model, Obj, Attr, Rel, Int, Varchar, Text, Decimal, Boolean,
 #################
 
 ###############################################################################
-mets = ['ce', 'bm', 'lat']
-funmetrics = ['mae_%s' % (x) for x in mets]
+mets = ['ce', 'bm', 'lat', 'vol', 'mag']
+funmetrics = [y+'mae_%s' % (x) for x in mets for y in ['', 'rel']]
+errmetrics = [y+'err_%s' % (x) for x in mets for y in ['', 'rel']]
 
 ms = [Attr(m, Decimal(), desc='Only True if results in for all mats')
-      for m in funmetrics+['mae_mag']]
+      for m in funmetrics]
 calc = Obj(
     name='calc',
     desc='Calculator details',
@@ -64,28 +65,6 @@ atoms = Obj(
     fks=[Rel('calc')]
 )
 
-##############################################################################
-# bulkjob = Obj(
-#     name='bulkjob',
-#     desc='Individual singlepoints for a bulk.',
-#     attrs=[
-#         Attr('stordir', Varchar(), identifying=True),
-#         Attr('parent', Varchar()),
-#         Attr('fx', Text()),
-#         Attr('contribs', Text()),
-#         Attr('int_occupation', Boolean(),
-#              desc='All orbitals have integer electron occupation'),
-#         Attr('energy', Decimal(), desc='Energy'),
-#         Attr('mag', Decimal(), desc='magnetic moment'),
-#         Attr('runtime', Int(), desc='Appx runtime, hours'),
-#         Attr('pw', desc='Planewave cutoff, eV'),
-#         Attr('econv', Decimal(), desc='EDIFF in the INCAR'),
-#         Attr('strain', Int(), desc='Relative strain, percent.'),
-#         Attr('volume', Decimal(), desc='A^3'),
-#         Attr('lattice', Decimal(), desc='A'),
-#         Attr('opt', Boolean(), desc='Whether this is one of the 5 opt jobs'),
-#     ])
-
 bulks = Obj(
     name='bulks',
     desc='Set of singlepoints on a particular material under strain',
@@ -132,6 +111,9 @@ bulks = Obj(
              desc='Experimental lattice parameter, A'),
         Attr('expt_vol', Decimal(), desc='Experimental volume, A^3'),
         Attr('expt_mag', Decimal(), desc='Experimental magnetic moment, bohr'),
+        Attr('hasdata', Boolean(), desc='We have any data for this'),
+
+        # Relative error
 
         # Fitting inputs
         Attr('ab_ce', Text(), desc='a vector+offset to be dotted w/ '\
@@ -139,7 +121,8 @@ bulks = Obj(
         Attr('ab_bm', Text(), desc='a vector+offset to be dotted w/ '\
              'BEEF coef + offset gives bulk modulus in GPa'),
         Attr('ab_vol', Text(), desc='a vector+offset to be dotted w/ '\
-             'BEEF coef + offset gives conventional lattice in A')],
+             'BEEF coef + offset gives conventional lattice in A')] +
+    [Attr(x, Decimal()) for x in errmetrics],
     fks=[Rel('calc')])
 
 
@@ -168,21 +151,25 @@ fitparams = Obj(
            Attr('bm_scale', Decimal(), identifying=True, desc='One cost unit'),
            Attr('lc_scale', Decimal(), identifying=True, desc='One cost unit'),
            Attr('consts', Text(), identifying=True,
-                desc='Sorted string list of constraints to be included')])
+                desc='Special weights or points to use'),
+           Attr('abdata', Text(), desc='computed from consts')])
 
-cons = Obj(
-    name='const', desc='CONSTRAINT',
-    attrs=[Attr('name', Varchar(), identifying=True),
-           Attr('abdata', Text()), Attr('kind', Varchar()),
-           Attr('points', Text()),
-           Attr('val', Decimal()), Attr('func', Varchar())]
-)
+# cons = Obj(
+#     name='const', desc='CONSTRAINT',
+#     attrs=[Attr('name', Varchar(), identifying=True),
+#            Attr('abdata', Text()), Attr('kind', Varchar()),
+#            Attr('points', Text()),
+#            Attr('val', Decimal()), Attr('func', Varchar())]
+# )
 
 fit = Obj(
     name='fit',
     desc='A constrained fit to some subset of cohesive/BM/lattice data',
     attrs=[Attr('x', Text(), desc='Coefficients of optimal point in the traj'),
-           Attr('cv', Text(), desc='Summary of cross validation data')]
+           Attr('cv', Text(), desc='Summary of cross validation data'),
+           Attr('err', Text(), desc='Scipy error message'),
+           Attr("step", Int(), identifying=True,
+                desc='Optimization iteration step')]
     + [Attr(m, Decimal(), desc='') for m in funmetrics],
     fks=[Rel('fitparams', identifying=True), Rel('calc', identifying=True)])
 
@@ -199,10 +186,15 @@ surf = Obj(
 # Views #
 
 err = RawView('errs', '''
-SELECT name,mae_ce,mae_bm,mae_lat,mae_mag, true as isfx
+SELECT name,mae_ce,mae_bm,mae_lat,mae_mag,
+       relmae_ce,relmae_bm,relmae_lat,relmae_mag,
+       true as isfx
 FROM calc
 UNION
-SELECT fit_id::text,mae_ce,mae_bm,mae_lat,NULL, false as isfx from fit
+SELECT fit_id::text,mae_ce,mae_bm,mae_lat,NULL,
+       relmae_ce,relmae_bm,relmae_lat, NULL,
+       false as isfx
+FROM fit
 ''')
 
 ##############################################################################
@@ -210,7 +202,7 @@ SELECT fit_id::text,mae_ce,mae_bm,mae_lat,NULL, false as isfx from fit
 ##############################################################################
 
 objs = [calc, atoms, bulks, fitparams, fit, expt_refs,
-        cons, surf]
+        surf]
 
 
 def new_model() -> Model:

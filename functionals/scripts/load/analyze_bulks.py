@@ -6,7 +6,11 @@ def analyze_bulks(pth: str
     import os
     from ase.io import read
 
-    atoms = read(os.path.join(pth, 'latopt/POSCAR'))
+    try:
+        atoms = read(os.path.join(pth, 'latopt/POSCAR'))
+    except Exception:
+        print('\n\n\n\nWeird pth ', pth, '\n\n\n')
+        return None, None, None, None, None, None, None
     n_atoms = len(atoms)
     elems = list(atoms.get_atomic_numbers())
     n_elems = len(set(elems))

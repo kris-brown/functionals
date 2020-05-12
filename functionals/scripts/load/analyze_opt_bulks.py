@@ -1,9 +1,10 @@
-from typing import Tuple as T
+from typing import Tuple as T, Optional as O
 from json import loads, dumps
 import numpy as np
 
 
-def analyze_opt_bulks(pth: str, vols_: str, engs_: str) -> T[float, float, str, float]:
+def analyze_opt_bulks(pth: str, vols_: str, engs_: str
+                      ) -> T[O[float], O[float], O[str], O[float]]:
     '''Analysis on serialized info about 5 jobs centered on optimum.'''
     import ase
     from ase.eos import EquationOfState
@@ -16,7 +17,7 @@ def analyze_opt_bulks(pth: str, vols_: str, engs_: str) -> T[float, float, str, 
     dxs = set(np.round(np.diff(s_vols), 7))
     if len(dxs) > 1:
         print('Bad spacings ', pth, dxs, vols_)
-        assert False, (pth, dxs, vols_)
+        return None, None, None, None
     dx = dxs.pop()
     stencil = (-1*s_engs[4] + 16*s_engs[3] - 30*s_engs[2]
                + 16*s_engs[1] - s_engs[0])/(12*dx**2)
@@ -28,10 +29,11 @@ def analyze_opt_bulks(pth: str, vols_: str, engs_: str) -> T[float, float, str, 
     bm_lstsq = float(-fit[1]) * ev_a3_to_gpa  # APPROXIMATE
 
     eos = EquationOfState(s_vols, s_engs)
-    _, __, eosbm = eos.fit()  # type: T[float,float,float]
+    try:
+        _, __, eosbm = eos.fit()  # type: T[float,float,float]
+    except Exception as e:
+        print("%s optbulkeos has error %s" % (pth, e))
+        return None, bm_lstsq, lstsq_abc, None
     eosbm = eosbm / ase.units.kJ * 1.0e24
 
-    if s_vols[0] == 43.420321409573106:
-        import pdb
-        pdb.set_trace()
     return bulkmod, bm_lstsq, lstsq_abc, eosbm

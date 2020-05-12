@@ -21,13 +21,7 @@ def bulk_analysis(mod: Model) -> None:
 
     def get_struct(mat: str) -> str:
         from functionals.CLI.submit import matdata
-        try:
-            return str(matdata[mat].struct)
-        except KeyError:
-            print('\n\n\n\n', mat)
-            import pdb
-            pdb.set_trace()
-            return ''
+        return str(matdata[mat].struct) if mat in matdata else ''
 
     sq = Query(dict(b=Bulks.id(), n=Bulks['name']()))
     sf = PyBlock(get_struct, args=[sq['n']])
@@ -35,29 +29,6 @@ def bulk_analysis(mod: Model) -> None:
         Gen(name='struct', query=sq, funcs=[sf],
             actions=[Bulks(bulks=sq['b'], struct=sf['out'])])
     ########################################################################
-
-    # biq = Query(dict(b=Bulkjob.id(), p=Bulkjob['stordir']()))
-
-    # bcols = ['parent', 'strain', 'volume', 'lattice', 'opt']
-
-    # def bifunc(pth: str) -> T[str, int, float, float, bool]:
-    #     from os.path import join
-    #     from ase.io import read
-    #     from numpy.linalg import norm
-    #     parent, strain = pth.split('/')[-2], pth.split('/')[-1]
-    #     atoms = read(join(pth, 'POSCAR'))
-    #     lat = norm(atoms.get_cell()[0])
-    #     s, o = int(strain.split('_')[-1]), 'optstrain' in pth
-    #     return parent, s, atoms.get_volume(), lat, o
-
-    # bipb = PyBlock(bifunc, args=[biq['p']], outnames=bcols)
-
-    # bulkinfo = \
-    #     Gen(name='bulkinfo',
-    #         desc='adds details to bulkjobs',
-    #         funcs=[bipb],
-    #         query=biq,
-    #   actions=[Bulkjob(bulkjob=biq['b'], **{x: bipb[x] for x in bcols})])
     ########################################################################
 
     pbkq = Query(exprs=dict(b=Bulks.id(), s=Bulks['stordir']()))
@@ -133,7 +104,15 @@ def bulk_analysis(mod: Model) -> None:
                 query=iq,
                 actions=[Bulks(bulks=iq['b'], irregular=iq['i'])])
     ########################################################################
+    expts = [p[1] for p in pairs]
+    hq = Query(dict(b=Bulks.id(), h=NOT(AND([NULL(e) for e in expts]))),
+               opt_attr=expts)
+    hasdata = Gen(name='hasdata',
+                  desc='True if we have any data for ce/bm/lat',
+                  query=hq,
+                  actions=[Bulks(bulks=hq['b'], hasdata=hq['h'])])
     ########################################################################
     ########################################################################
-    gens = [pop_bulks, opt_bulks, eos_diff, alloy, irreg, struct, suc]
+    ########################################################################
+    gens = [pop_bulks, opt_bulks, eos_diff, alloy, irreg, struct, suc, hasdata]
     mod.add(gens)

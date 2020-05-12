@@ -7,18 +7,31 @@ def parse_job(root: str,
     from os.path import join, exists
     from re import findall, search
     from functionals.scripts.load.parse_incar import parse_incar
+    from functionals.scripts.io.parse_procar import parse_procar
     from functionals.scripts.load.parse_contribs_vasp \
         import parse_contribs_vasp
     from functionals.scripts.load.parse_eigenval import parse_eigenval
+    from ase.io import read
 
     def err(x: str) -> T[O[str], O[float], O[float], str]:
         return None, None, None, x
 
     def process(pth: str) -> T[O[str], O[float], O[float], str]:
         incar = parse_incar(join(pth, 'INCAR'))
-        if float(incar['ediff']) > 1e-5:
+        if float(incar['ediff'] or 1e-4) > 1e-5:
             return err('Ediff %s' % incar['ediff'])
+        if incar['icharg'] == 11:
+            return err('ICHARG = 11')
+        if incar['ismear'] == -2:
+            return err('ISMEAR = %s' % incar['ismear'])
+        if incar['ldiag'] == False:
+            return err('LDIAG is set to false')
+
         # Verify job completed successfully
+        try:
+            read(join(pth, 'POSCAR'))
+        except Exception:
+            return err("Bad POSCAR")
         if all([exists(join(pth, 'OUTCAR')), exists(join(pth, 'OSZICAR'))]):
             with open(join(pth, 'OUTCAR'), 'r') as f:
                 outcar = f.read()
@@ -63,6 +76,13 @@ def parse_job(root: str,
             return err("Cannot parse energy %s - %s" % (match, pth))
         eng = float(match[-1])
 
+        # Validate PROCAR if atomic job
+        if '/atoms/' in pth:
+            pro_err = parse_procar(pth)
+            if incar['sigma'] is None or incar['sigma'] > 1e-4:
+                return err("atomic SIGMA = %s" % incar['sigma'])
+            if pro_err:
+                return err('PROCAR: '+pro_err)
         return cont, eng, magg, ''
 
     pths, contribs, engs, mags, errs = [
