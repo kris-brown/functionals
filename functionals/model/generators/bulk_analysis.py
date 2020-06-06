@@ -19,12 +19,20 @@ def bulk_analysis(mod: Model) -> None:
     ########################################################################
     ########################################################################
 
-    def get_struct(mat: str) -> str:
+    def get_struct(pth: str, mat: str) -> str:
         from functionals.CLI.submit import matdata
-        return str(matdata[mat].struct) if mat in matdata else ''
+        from ase.io import read
+        if mat not in matdata:
+            return ''
+        s = str(matdata[mat].struct)
+        alpha = read(pth + '/latopt/POSCAR').get_cell_lengths_and_angles()[3]
 
-    sq = Query(dict(b=Bulks.id(), n=Bulks['name']()))
-    sf = PyBlock(get_struct, args=[sq['n']])
+        if s.split('-')[0] in ['rocksalt', 'zincblende']:
+            s = s.split('-')[0] + ('' if alpha == 90 else "-prim")
+        return s
+
+    sq = Query(dict(b=Bulks.id(), s=Bulks['stordir'](), n=Bulks['name']()))
+    sf = PyBlock(get_struct, args=[sq['s'], sq['n']])
     struct = \
         Gen(name='struct', query=sq, funcs=[sf],
             actions=[Bulks(bulks=sq['b'], struct=sf['out'])])
@@ -33,8 +41,7 @@ def bulk_analysis(mod: Model) -> None:
 
     pbkq = Query(exprs=dict(b=Bulks.id(), s=Bulks['stordir']()))
 
-    bcols = ['n_atoms', 'n_elems', 'composition', 'elems',
-             'lat', 'vol', 'volrat']
+    bcols = ['n_atoms', 'n_elems', 'composition', 'elems', 'volrat']
 
     abpb = PyBlock(analyze_bulks, args=[pbkq['s']], outnames=bcols)
 
@@ -45,18 +52,18 @@ def bulk_analysis(mod: Model) -> None:
             actions=[Bulks(bulks=pbkq['b'], **{x: abpb[x] for x in bcols})])
 
     ########################################################################
-    pairs = [(Bulks[x](), Bulks['expt_'+x]()) for x in ['ce', 'bm', 'lat']]
+    pairs = [(Bulks[x](), Bulks['expt_' + x]()) for x in ['ce', 'bm', 'lat']]
     ss = [OR([NOT(NULL(y)), NULL(x)]) for y, x in pairs]
     ndq = Query(dict(b=Bulks.id(), s=AND(ss)),
                 opt_attr=[item for sl in pairs for item in sl])
     suc = Gen(name='suc', query=ndq,
               actions=[Bulks(bulks=ndq['b'], success=ndq['s'])])
     ########################################################################
-    obcols = ['bm', 'bulkmod_lstsq', 'lstsq_abc', 'eosbm']
+    obcols = ['bm', 'bulkmod_lstsq', 'lstsq_abc', 'eosbm', 'vol']
     obq = Query(exprs=dict(
         b=Bulks.id(), s=Bulks['stordir'](), v=Bulks['volumes'](),
-        e=Bulks['energies']()))
-    obpb = PyBlock(analyze_opt_bulks, args=[obq[x] for x in 'sve'],
+        e=Bulks['energies'](), t=Bulks['struct']()))
+    obpb = PyBlock(analyze_opt_bulks, args=[obq[x] for x in 'svet'],
                    outnames=obcols)
     opt_bulks = Gen(
         name='opt_bulks',
@@ -66,8 +73,19 @@ def bulk_analysis(mod: Model) -> None:
 
     ########################################################################
     eobm = Bulks['eosbm']()
+    vvq = Query(dict(b=Bulks.id(),
+                     v=(Bulks['vol']() / Bulks['volrat']()) ** Lit(1. / 3.)))
+
+    compute_lat = Gen(
+        name='compute_lat',
+        desc='Compute DFT lattice constant from optimum volume and vol ratio',
+        query=vvq,
+        actions=[Bulks(bulks=vvq['b'], lat=vvq['v'])])
+
+    ########################################################################
+    eobm = Bulks['eosbm']()
     eodq = Query(dict(b=Bulks.id(),
-                      d=(Bulks['bm']() - eobm)/eobm))
+                      d=(Bulks['bm']() - eobm) / eobm))
 
     eos_diff = Gen(
         name='eos_diff',
@@ -112,7 +130,16 @@ def bulk_analysis(mod: Model) -> None:
                   query=hq,
                   actions=[Bulks(bulks=hq['b'], hasdata=hq['h'])])
     ########################################################################
+    # gens = []  # type: List[Gen]
+    # for k in ['ce', 'bm', 'lat']:
+    #     eq = Query(dict(b=Bulks.id(), e=Bulks[k]()-Bulks['expt_'+k]()))
+    #     gens.append(Gen(name='err '+k, query=eq, actions=[
+    #         Bulks(bulks=eq['b'], **{'err_'+k: eq['e']})]))
+    # ec, eb, el = gens
     ########################################################################
     ########################################################################
-    gens = [pop_bulks, opt_bulks, eos_diff, alloy, irreg, struct, suc, hasdata]
+    ########################################################################
+    gens = [pop_bulks, opt_bulks, eos_diff, alloy, irreg, struct, suc, hasdata,
+            compute_lat]
+
     mod.add(gens)

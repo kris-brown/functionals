@@ -30,9 +30,9 @@ root = '/nfs/slac/g/suncatfs/ksb/beefjobs/'
 exe_root = '/nfs/slac/staas/fs1/g/suncat/ksb/vasp/'\
            'olsherlock/vasp.5.4.1beefcar/bin/vasp_'
 
-data_root = '/'+os.path.join(*__file__.split('/')[:-3])+'/data'
+data_root = '/' + os.path.join(*__file__.split('/')[:-3]) + '/data'
 struct_root = data_root + '/structures'
-vol_csv = data_root+'/opt_vol.csv'
+vol_csv = data_root + '/opt_vol.csv'
 beef_root = data_root + '/beefs'
 
 beefs = [x[:-5] for x in os.listdir(beef_root)]
@@ -41,7 +41,7 @@ atommag, n_electrons = {}, {}
 Mat = collections.namedtuple(
     'Mat', ['name', 'struct', 'lat', 'bm', 'mag', 'ca_rat'])
 
-with open(data_root+'/elements.csv', 'r') as f:
+with open(data_root + '/elements.csv', 'r') as f:
     r = csv.reader(f)
     next(r)
     for e, n, m in r:
@@ -53,7 +53,7 @@ with open(data_root + '/expt.csv', 'r') as f:
     has_data = {x: (bool(a), bool(b), bool(c), bool(d))
                 for x, a, b, c, d in r}
 
-with open(data_root+'/initialguess.csv', 'r') as f:
+with open(data_root + '/initialguess.csv', 'r') as f:
     r = csv.reader(f)
     next(r)
     matdata = {k: Mat(k, s, float(l), float(b), float(m or '0'),
@@ -83,7 +83,7 @@ def only_ce(m: Mat) -> bool:
 ##############################################################################
 # HELPER FUNCTIONS #
 n_dict = dict(fcc=4, bcc=2, hcp=2, cesiumchloride=2, diamond=8,
-              zincblende=8, rocksalt=8)
+              zincblende=8, rocksalt=8, **{"rocksalt-prim": 2})
 
 
 def mk_traj(m: Mat) -> ase.Atoms:
@@ -92,37 +92,52 @@ def mk_traj(m: Mat) -> ase.Atoms:
 
     if m.struct == 'fcc':
         n = 4
-        p = [[0, 0, 0], [0, 1/2, 1/2], [1/2, 0, 1/2], [1/2, 1/2, 0]]
+        p = [[0, 0, 0], [0, 1 / 2, 1 / 2], [1 / 2, 0, 1 / 2],
+             [1 / 2, 1 / 2, 0]]
     elif m.struct in ['bcc', 'cesiumchloride']:
         n = 2 if m.struct == 'bcc' else 1
-        p = [[0, 0, 0], [1/2, 1/2, 1/2]]
+        p = [[0, 0, 0], [1 / 2, 1 / 2, 1 / 2]]
     elif m.struct == 'hcp':
         n = 2
-        p = [[0, 0, 0], [1/3, 2/3, 1/2]]
-        c = [[1, 0, 0], [-0.5, 3**0.5/2, 0], [0, 0, m.ca_rat]]  # DIFFERENT
+        p = [[0, 0, 0], [1 / 3, 2 / 3, 1 / 2]]
+        c = [[1, 0, 0], [-0.5, 3**0.5 / 2, 0], [0, 0, m.ca_rat]]  # DIFFERENT
     elif m.struct in ['diamond', 'zincblende']:
         n = 8 if m.struct == 'diamond' else 4
-        p = [[0, 0, 0], [1/4, 1/4, 1/4], [0, 1/2, 1/2], [1/4, 3/4, 3/4],
-             [1/2, 0, 1/2], [3/4, 1/4, 3/4], [1/2, 1/2, 0], [3/4, 3/4, 1/4]]
+        p = [[0, 0, 0], [1 / 4, 1 / 4, 1 / 4], [0, 1 / 2, 1 / 2],
+             [1 / 4, 3 / 4, 3 / 4], [1 / 2, 0, 1 / 2], [3 / 4, 1 / 4, 3 / 4],
+             [1 / 2, 1 / 2, 0], [3 / 4, 3 / 4, 1 / 4]]
     elif m.struct == 'rocksalt':
         n = 4
-        p = [[0, 0, 0], [1/2, 0, 0], [0, 1/2, 1/2], [1/2, 1/2, 1/2],
-             [1/2, 0, 1/2], [0, 0, 1/2], [1/2, 1/2, 0], [0, 1/2, 0]]
+        p = [[0, 0, 0], [1 / 2, 0, 0], [0, 1 / 2, 1 / 2],
+             [1 / 2, 1 / 2, 1 / 2], [1 / 2, 0, 1 / 2], [0, 0, 1 / 2],
+             [1 / 2, 1 / 2, 0], [0, 1 / 2, 0]]
+    elif m.struct == 'zincblende-prim':
+        n = 1
+        p = [[0, 0, 0], [1 / 4, 1 / 4, 1 / 4]]
+        c = [[0., 1 / 2, 1 / 2], [1 / 2, 0, 1 / 2], [1 / 2, 1 / 2, 0]]
+    elif m.struct == 'rocksalt-prim':
+        n = 1
+        p = [[0, 0, 0], [1 / 2, 1 / 2, 1 / 2]]
+        c = [[0., 1 / 2, 1 / 2], [1 / 2, 0, 1 / 2], [1 / 2, 1 / 2, 0]]
     else:
         raise NotImplementedError(m.struct)
-    return ase.Atoms(m.name*n, cell=np.array(c)*m.lat, scaled_positions=p)
+    return ase.Atoms(m.name * n, cell=np.array(c) * m.lat, scaled_positions=p)
+
+
+def binary(m: Mat) -> bool:
+    return len(list(filter(str.isupper, m.name))) == 2
 
 
 def onezero(one: int) -> str:
-    return ('%d*1.0' % one if one else '') + ' %d*0.0' % (16-one)  # FERWE/DO
+    return ('%d*1.0' % one if one else '') + ' %d*0.0' % (16 - one)  # FERWE/DO
 
 
 def get_strain(mat: Mat, strain_int: int) -> float:
     '''Gives the *lattice* strain, in order to get a *volume* strain.'''
-    spacing = float(0.25/(mat.bm)**(1./3.))
+    spacing = float(0.25 / (mat.bm)**(1. / 3.))
     if mat in ['K', 'Ca', 'Rb', 'Sr']:
-        spacing*3
-    return (1 + strain_int * spacing)**(1/3)
+        spacing * 3
+    return (1 + strain_int * spacing)**(1 / 3)
 
 
 def current_jobs() -> Set[str]:
@@ -165,16 +180,16 @@ def mk_incar(d: Dict[str, Any], pth: str) -> None:
 
     with open(pth, 'w') as f:
         lines = ['{} = {}'.format(k.upper(), fmt(v)) for k, v in d.items()]
-        f.write('\n'.join(lines)+'\n')
+        f.write('\n'.join(lines) + '\n')
 
 
 def potpos(pth: str, atoms: ase.Atoms) -> None:
     poscar, potcar = [os.path.join(pth, x) for x in ['POSCAR', 'POTCAR']]
     ase.io.write(poscar, atoms)
-    elems = subprocess.check_output('head -n 1 '+poscar, encoding='UTF-8',
+    elems = subprocess.check_output('head -n 1 ' + poscar, encoding='UTF-8',
                                     shell=True).split()
-    potcmd = ('cat ' + ' '.join(['%s/%s/POTCAR' % (ppth, x) for x in elems])
-              + ' > ' + potcar)
+    potcmd = ('cat ' + ' '.join(['%s/%s/POTCAR' % (ppth, x) for x in elems]
+                                ) + ' > ' + potcar)
     os.system(potcmd)
 
 
@@ -186,7 +201,10 @@ def attempt(retry: bool, pth: str, curr: Set[str]) -> bool:
 
 def magdic(mat: Mat) -> Dict[str, str]:
     if mat.mag:
-        mm = ' '.join([str(mat.mag)]*n_dict[mat.struct])
+        n = n_dict[mat.struct]
+        b = binary(mat)
+        mm = ' '.join(['0' if (b and (i % 2)) else str(mat.mag)
+                       for i in range(n)])
         return {'ispin': "2", 'magmom': mm}
     else:
         return dict(ispin='1')
@@ -202,12 +220,13 @@ def submit_atom(name: str, time: int, xc: str, retry: bool,
     assert sunc == '3'
     elem = ase.data.chemical_symbols.index(name)
     atoms = ase.Atoms(numbers=[elem], positions=[[1., 2., 3.]],
-                      cell=[[13., 2., 1.],  [2., 14, 1.],  [5., 1, 15.]])
+                      cell=[[13., 2., 1.], [2., 14, 1.], [5., 1, 15.]])
     magmom, elec = atommag[name], n_electrons[name]
-    nb = max(16, int(math.ceil(0.6*elec+magmom if magmom else elec/2+0.5*1)))
+    nb = max(16, int(math.ceil(0.6 * elec + magmom
+                               if magmom else elec / 2 + 0.5 * 1)))
     ferwedo = orbitals if (orbitals is not None) else (elem > 56)
     if ferwedo and magmom and name not in ['Pt', 'Au']:
-        nup, ndn = (elec + magmom)//2, (elec - magmom)//2
+        nup, ndn = (elec + magmom) // 2, (elec - magmom) // 2
         magdic = dict(ldiag=False, ismear=-2, ferwe=onezero(nup),
                       ispin=2, ferdo=onezero(ndn))
 
@@ -258,20 +277,20 @@ def eos(mat: Mat, time: int, xc: str,
     if second and only_ce(mat):
         return print('No EOS round 2 on %s without bm/lat data' % mat.name)
     matpth = os.path.join(root, 'bulks', xc, mat.name,
-                          'eos'+('2' if second else ''))
+                          'eos' + ('2' if second else ''))
     os.makedirs(matpth, exist_ok=True)
 
     if not second:
-        outpth = matpth[:-3]+'latopt'
+        outpth = matpth[:-3] + 'latopt'
         if done(outpth):
             return print('Cannot do EOS for %s - ' % matpth + done(outpth))
         try:
-            orig_atoms = ase.io.read(outpth+'/OUTCAR')
+            orig_atoms = ase.io.read(outpth + '/OUTCAR')
         except Exception:
             return print('Cannot EOS for %s - ase parse error OUTCAR' % matpth)
     else:
         orig_atoms = copy.deepcopy(mk_traj(mat))
-        output = matpth[:-1]+'/strain_%d'
+        output = matpth[:-1] + '/strain_%d'
         vols, engs = [], []
         for strain_i in [-2, -1, 0, 1, 2]:
             atoms = ase.io.read((output % strain_i) + '/OUTCAR')
@@ -284,7 +303,7 @@ def eos(mat: Mat, time: int, xc: str,
         eos = ase.eos.EquationOfState(vols, engs)
         optvol, _, __ = eos.fit()  # type: Tuple[float,float,float]
         r = opt.root_scalar(f=lambda x: ase.atoms.Cell(
-            orig_atoms.get_cell()*x).volume-optvol, x0=0.5, x1=2)
+            orig_atoms.get_cell() * x).volume - optvol, x0=0.5, x1=2)
         orig_atoms.set_cell(
             orig_atoms.get_cell() * r.root, scale_atoms=True)
         v = orig_atoms.get_volume()
@@ -300,7 +319,7 @@ def eos(mat: Mat, time: int, xc: str,
         # Strained Traj
         lat_strain = get_strain(mat, strain_i)
         atoms = orig_atoms.copy()
-        atoms.set_cell(atoms.get_cell()*lat_strain, scale_atoms=True)
+        atoms.set_cell(atoms.get_cell() * lat_strain, scale_atoms=True)
         # Determine whether to submit again or not
         pth = os.path.join(matpth, 'strain_%d' % strain_i)
         os.makedirs(pth, exist_ok=True)
@@ -320,7 +339,7 @@ def _sub(pth: str, bash: str, time: int, sunc: str) -> None:
     with open(bashpth, 'w') as g:
         g.write(bash)
     os.chdir(pth)
-    os.system('chmod 755 '+bashpth)
+    os.system('chmod 755 ' + bashpth)
     args = [16 if sunc else 8, time, sunc, bashpth]
     cmd = 'bsub -n {} -W{}:09 -q suncat{} {}'.format(*args)
     os.system(cmd)
@@ -351,22 +370,24 @@ def setup(pth: str, atoms: ase.Atoms, incar: Dict[str, Any],
     potpos(pth, atoms)
 
 
-def restrain(pth: str, xc: str, strains: List[int]) -> None:
+def restrain(pth: str, xc: str, strains: List[float]) -> None:
     dirs = []
     for i, strain in zip(range(-2, 3), strains):
-        if strain != 0:
-            spth = os.path.join(pth, 'strain_%d' % i)
-            dirs.append(spth)
-            atoms = ase.io.read(spth+'/POSCAR')
-            vol = atoms.get_volume()
-            latrat = ((vol+strain)/vol)**(1/3)
-            atoms.set_cell(atoms.get_cell()*latrat, scale_atoms=True)
-            ase.io.write(spth+'/POSCAR', atoms)
-            for x in ['OUTCAR', 'WAVECAR', 'OSZICAR', 'EIGENVAL']:
-                try:
-                    os.remove(spth+'/'+x)
-                except OSError:
-                    pass
+        spth = os.path.join(pth, 'strain_%d' % i)
+        dirs.append(spth)
+        atoms = ase.io.read(spth + '/POSCAR')
+
+        res = opt.root_scalar(
+            f=lambda x: ase.atoms.Cell(atoms.get_cell() * x).volume - strain,
+            x0=0.5, x1=1.5)
+
+        atoms.set_cell(atoms.get_cell() * res.root, scale_atoms=True)
+        ase.io.write(spth + '/POSCAR', atoms)
+        for x in ['OUTCAR', 'WAVECAR', 'OSZICAR', 'EIGENVAL', 'REPORT']:
+            try:
+                os.remove(spth + '/' + x)
+            except OSError:
+                pass
     bash = gt('subAll.jinja').render(gam='', dirs=dirs)
     _sub(pth, bash, 10, '3')
 
@@ -407,8 +428,8 @@ def main() -> None:
     for xc in args.xc:
         if xc not in ['pbe', 'scan', 'pbesol']:
             assert xc in beefs
-            with open(os.path.join(beef_root, xc+'.json'), 'r') as f:
-                beef = ' '.join(map(str, json.load(f)+[0., 1.]))
+            with open(os.path.join(beef_root, xc + '.json'), 'r') as f:
+                beef = ' '.join(map(str, json.load(f) + [0., 1.]))
         else:
             beef = None  # type: ignore
         assert args.time > 0
@@ -426,7 +447,7 @@ def main() -> None:
             if args.strains:
                 [m], [xc] = args.mat, args.xc
                 eos = os.path.join(root, 'bulks', xc, m.name, 'eos')
-                eos2 = eos+'2'
+                eos2 = eos + '2'
                 assert not os.path.exists(eos2) or not os.listdir(eos2), eos2
                 assert args.strains.count(' ') == 4
                 restrain(eos, xc, list(map(int, args.strains.split())))
@@ -437,7 +458,7 @@ def main() -> None:
                     second = os.path.exists(matpth)
                     if second:
                         for strain_i in [-2, -1, 0, 1, 2]:
-                            strainpth = matpth+('strain_%d') % strain_i
+                            strainpth = matpth + ('strain_%d') % strain_i
                             if done(strainpth):
                                 # print('Cant do eos2 b/c incomplete %s - %s' %
                                 #       (strainpth, done(strainpth)))

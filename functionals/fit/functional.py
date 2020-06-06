@@ -17,7 +17,7 @@ bvec = C[[float, float], np.ndarray]
 # --------------------
 mu_pbe = 0.2195149727645171
 kappa = 0.804
-mu = 10./81
+mu = 10. / 81
 
 ###############################################################################
 
@@ -36,11 +36,13 @@ class Functional(object, metaclass=abc.ABCMeta):
     """
     @property
     @abc.abstractmethod
-    def name(self) -> str: pass
+    def name(self) -> str:
+        pass
 
     @property
     @abc.abstractmethod
-    def mgga(self) -> bool: pass
+    def mgga(self) -> bool:
+        pass
 
     @abc.abstractmethod
     @functools.lru_cache(maxsize=1000, typed=False)
@@ -73,10 +75,12 @@ class FromFunc(Functional):
         self._mgga = mgga
 
     @property
-    def name(self) -> str: return self._name
+    def name(self) -> str:
+        return self._name
 
     @property
-    def mgga(self) -> bool: return self._mgga
+    def mgga(self) -> bool:
+        return self._mgga
 
     @functools.lru_cache(maxsize=100, typed=False)
     def apply(self, s: float, a: float) -> float:
@@ -97,13 +101,16 @@ class FromMatrix(Functional):
         self._name = name or '<no name>'
 
     @property
-    def x(self) -> np.ndarray: return self.A.flatten()
+    def x(self) -> np.ndarray:
+        return self.A.flatten()
 
     @property
-    def name(self) -> str: return self._name
+    def name(self) -> str:
+        return self._name
 
     @property
-    def mgga(self) -> bool: return True
+    def mgga(self) -> bool:
+        return True
 
     @functools.lru_cache(maxsize=100, typed=False)
     def apply(self, s: float, a: float,) -> float:
@@ -147,8 +154,8 @@ class FromMatrix(Functional):
         else:
             denom = hii - lowi
             zi = -lowi / denom
-            colorscale = [[0., 'blue'], [zi/2, 'green'],  # type: ignore
-                          [zi, 'yellow'], [zi+hii/2/denom, 'red'],
+            colorscale = [[0., 'blue'], [zi / 2, 'green'],  # type: ignore
+                          [zi, 'yellow'], [zi + hii / 2 / denom, 'red'],
                           [1, 'black']]
         data = [go.Mesh3d(x=ss, y=als, z=fs, colorscale=colorscale,
                           intensity=i)]
@@ -185,36 +192,36 @@ def plots(ps: L['Functional'], plot: bool = False) -> go.Figure:
 
 
 PBE = FromFunc('PBE', mgga=False,
-               f=lambda s, _: 1. + kappa*(1. - 1./(1. + mu_pbe*s**2 / kappa)))
+               f=lambda s, _: 1. + kappa * (1. - 1. / (1. + mu_pbe * s**2 / kappa)))
 RPBE = FromFunc('RPBE', mgga=False,
-                f=lambda s, _: float(1.+kappa*(1.-np.exp(-mu_pbe*s**2/kappa))))
+                f=lambda s, _: float(1. + kappa * (1. - np.exp(-mu_pbe * s**2 / kappa))))
 PBEsol = FromFunc('PBEsol', mgga=False,
-                  f=lambda s, _: 1. + kappa*(1. - 1./(1.+mu*s**2 / kappa)))
+                  f=lambda s, _: 1. + kappa * (1. - 1. / (1. + mu * s**2 / kappa)))
 
 
 def fxSCAN(s: float, alpha: float) -> float:
     # Scan-specific constants
     h0x, c1x, c2x, dx, b3, k1, a1 = 1.174, 0.667, 0.8, 1.24, 0.5, 0.065, 4.9479
-    b2 = (5913/405000)**0.5
-    b1 = (511/13500) / (2*b2)
-    b4 = mu**2/k1 - 1606/18225 - b1**2
+    b2 = (5913 / 405000)**0.5
+    b1 = (511 / 13500) / (2 * b2)
+    b4 = mu**2 / k1 - 1606 / 18225 - b1**2
     # Edge conditions with numerical instability
     assert s >= 0 and alpha >= 0
     if s < 0.01:
         s = 0.01
-    if abs(alpha-1) < 0.01:
+    if abs(alpha - 1) < 0.01:
         alpha = 1.001
     # Intermediate values
     th_1a = float(np.heaviside(1. - alpha, 0.5))
     th_a1 = float(np.heaviside(alpha - 1., 0.5))
     s2 = s**2
-    x_ = (b1*s2 + b2*(1.-alpha)*np.exp(-b3*(1-alpha)**2))**2
-    x = mu*s2*(1. + b4*s2/mu) + x_
-    h1x = 1. + k1 - k1/(1.+x/k1)
-    gx = 1. - np.exp(-a1*s**(-0.5))
-    fx = np.exp(-c1x * alpha/(1.-alpha))*th_1a - dx*np.exp(c2x/(1-alpha))*th_a1
+    x_ = (b1 * s2 + b2 * (1. - alpha) * np.exp(-b3 * (1 - alpha)**2))**2
+    x = mu * s2 * (1. + b4 * s2 / mu) + x_
+    h1x = 1. + k1 - k1 / (1. + x / k1)
+    gx = 1. - np.exp(-a1 * s**(-0.5))
+    fx = np.exp(-c1x * alpha / (1. - alpha)) * th_1a - dx * np.exp(c2x / (1 - alpha)) * th_a1
     # Main output
-    return float((h1x + fx*(h0x-h1x))*gx)
+    return float((h1x + fx * (h0x - h1x)) * gx)
 
 
 SCAN = FromFunc('SCAN', fxSCAN)
@@ -223,18 +230,18 @@ SCAN = FromFunc('SCAN', fxSCAN)
 def fxMS2(s: float, alpha: float) -> float:
     k, c, b = 0.504, 0.14601, 4.0
     p = s**2
-    F1x = 1 + k - k/(1+mu*p/k)
-    F0x = 1 + k - k/(1+(mu*p+c)/k)
-    f = (1-alpha**2) / (1 + alpha**3 + b*alpha**6)
-    return F1x + f*(F0x-F1x)
+    F1x = 1 + k - k / (1 + mu * p / k)
+    F0x = 1 + k - k / (1 + (mu * p + c) / k)
+    f = (1 - alpha**2) / (1 + alpha**3 + b * alpha**6)
+    return F1x + f * (F0x - F1x)
 
 # (1 + .504 - .504/(1+(10/81)*x^2/.504)) + ((1-y**2) / (1 + y**3 + 4*y**6))*((1 + .504 - .504/(1+((10/81)*x^2+0.14601)/.504))-(1 + .504 - .504/(1+(10/81)*s**2/.504)))
 
 
 def ms2_s_curv(s: float, a: float) -> float:
-    return (16.7993-12.3452*s**2/(s**2+4.0824)**3
-            + ((12.3452*(s**2-1.75503)*(a**2-1))
-               / ((s**2+5.26508)**3*(4*a**6+a**3+1))))
+    return (16.7993 - 12.3452 * s**2 / (s**2 + 4.0824)**3
+            + ((12.3452 * (s**2 - 1.75503) * (a**2 - 1))
+               / ((s**2 + 5.26508)**3 * (4 * a**6 + a**3 + 1))))
 
 
 MS2 = FromFunc('MS2', fxMS2)
@@ -244,7 +251,7 @@ MS2 = FromFunc('MS2', fxMS2)
 # ---------
 def BEEF() -> FromMatrix:
     fi = 'data/beefs/beef.json'
-    beefpth = '/'+os.path.join(*__file__.split('/')[:-3], fi)
+    beefpth = '/' + os.path.join(*__file__.split('/')[:-3], fi)
     with open(beefpth, 'r') as f:
         beefcoeff = np.array(json.load(f))
     return FromMatrix(beefcoeff.reshape(8, 8), name='BEEF')
@@ -252,7 +259,7 @@ def BEEF() -> FromMatrix:
 
 def PBESOL() -> FromMatrix:
     fi = 'data/beefs/pbesol.json'
-    beefpth = '/'+os.path.join(*__file__.split('/')[:-3], fi)
+    beefpth = '/' + os.path.join(*__file__.split('/')[:-3], fi)
     with open(beefpth, 'r') as f:
         beefcoeff = np.array(json.load(f))
     return FromMatrix(beefcoeff.reshape(8, 8), name='PBESOL')
@@ -260,7 +267,7 @@ def PBESOL() -> FromMatrix:
 
 def Fsmooth() -> FromMatrix:
     fi = 'data/beefs/smooth.json'
-    beefpth = '/'+os.path.join(*__file__.split('/')[:-3], fi)
+    beefpth = '/' + os.path.join(*__file__.split('/')[:-3], fi)
     with open(beefpth, 'r') as f:
         beefcoeff = np.array(json.load(f))
     return FromMatrix(beefcoeff.reshape(8, 8), name='smooth')
@@ -270,7 +277,7 @@ if __name__ == '__main__':
     '''Mbeef at s=0,alpha=1 is 1.03'''
     beef = BEEF()
     beef.A = np.multiply(
-        beef.A, [[3**(i+j)/1500 for j in range(8)] for i in range(8)])
+        beef.A, [[3**(i + j) / 1500 for j in range(8)] for i in range(8)])
     beef.A[0][0] += 1
     plotly.offline.plot(plots([PBE, RPBE, PBEsol, beef]))
 

@@ -3,14 +3,13 @@ from typing import Optional as O, Tuple as T
 from os.path import join
 
 # Internal Modules
-from dbgen import (Model, Gen, PyBlock, Query, Const, GROUP_CONCAT, LEFT,
-                   Literal)
+from dbgen import (Model, Gen, PyBlock, Query, Const)
 
 from functionals.scripts.io.parse_job import parse_job
 from functionals.scripts.io.parse_bulks import parse_bulks
 from functionals.scripts.io.pop_surf import pop_surf
 from functionals.scripts.io.all_mats import all_mats
-from functionals.scripts.fit.pop_cons import pop_cons
+from functionals.scripts.io.scheffdiff import scheffdiff
 from functionals.scripts.fit.pop_fitp import pop_fitp
 
 ###################################################################
@@ -47,7 +46,7 @@ def io(mod: Model) -> None:
     pb_cols = ['stordir', 'name', 'calcname', 'eng', 'contrib',
                'mag', 'volumes', 'energies', 'contribs', 'err']
 
-    pbpb = PyBlock(parse_bulks, args=[Const(root+'bulks')], outnames=pb_cols)
+    pbpb = PyBlock(parse_bulks, args=[Const(root + 'bulks')], outnames=pb_cols)
     ibc = Calc(insert=True, name=pbpb['calcname'])
     ib = Bulks(insert=True, calc=ibc, **{x: pbpb[x] for x in pb_cols})
 
@@ -136,8 +135,22 @@ def io(mod: Model) -> None:
     beef = Gen(name='beef', query=bq, funcs=[bpb],
                actions=[Calc(calc=bq['c'], data=bpb['out'])])
     #######################################################################
+    scheffout = ['dscheff_'+k for k in ['ce', 'bm', 'lat']]
+    errs = [Bulks['err_'+k]() for k in ['ce', 'bm', 'lat']]
+    schq = Query(dict(z=Bulks.id(), n=Bulks['name'](), c=Bulks['calcname'](),
+                      e=errs[0], b=errs[1], t=errs[2]),
+                 opt_attr=errs)
+
+    schpb = PyBlock(scheffdiff, args=[Const(csvpth % "scheff"),
+                                      *[schq[k] for k in 'ncebt']],
+                    outnames=scheffout)
+    scheff = Gen(name='scheffdiff', query=schq, funcs=[schpb],
+                 actions=[Bulks(bulks=schq['z'],
+                          **{x: schpb[x] for x in scheffout})])
+    #######################################################################
     #######################################################################
 
-    gens = [pop_atoms, pop_bulkjobs, pop_expt, popfp, allmat, surf, beef]
+    gens = [pop_atoms, pop_bulkjobs, pop_expt, popfp, allmat, surf, beef,
+            scheff]
 
     mod.add(gens)

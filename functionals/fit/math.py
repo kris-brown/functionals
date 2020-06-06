@@ -4,7 +4,7 @@ import numpy as np
 import scipy.optimize as opt
 Unary = C[[float], float]
 ######################################################
-q = 0.804/(10./81.)
+q = 0.804 / (10. / 81.)
 
 
 # GENERAL DERIVATIVE FUNCTIONS
@@ -72,7 +72,7 @@ def t_s(s: float) -> float:
     if np.isinf(s):
         return 1.
     else:
-        return 2*s**2/(q+s**2) - 1
+        return 2 * s**2 / (q + s**2) - 1
 
 
 def t_alpha(alpha: float) -> float:
@@ -81,7 +81,7 @@ def t_alpha(alpha: float) -> float:
 
 
 def LegVal(x: float, i: int) -> float:
-    return float(np.polynomial.legendre.legval(x, [0]*i+[1]))
+    return float(np.polynomial.legendre.legval(x, [0] * i + [1]))
 
 
 def LegVals(x: float, n: int) -> L[float]:

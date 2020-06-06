@@ -186,7 +186,7 @@ def errs(prop: str) -> None:
               for k, v in calcdata.items()]
     # import pdb;pdb.set_trace()
     fitdata = [go.Bar(name=n, x=mats,
-                      y=[safe_sub(vecs[m][0]@x+vecs[m][1],
+                      y=[safe_sub(vecs[m][0]@x + vecs[m][1],
                                   exptvals.get(m)) for m in mats
                          ]) for n, x in fitx]
     data = fxdata + fitdata
@@ -204,17 +204,17 @@ def maes() -> None:
     color = ['red' if x else 'blue' for x in fxs]
     labs = ['Relative MAE %s error' % x for x in ['CE', 'BM', 'Lattice']]
     pairs = [(0, 1), (0, 2)]  # ,(1,2)]
-    data = [go.Scatter(x=datas[x], y=datas[y],  mode='markers', text=fns,
-                       marker=dict(color=color),  hoverinfo='text')
+    data = [go.Scatter(x=datas[x], y=datas[y], mode='markers', text=fns,
+                       marker=dict(color=color), hoverinfo='text')
             for x, y in pairs]
 
     fig = plotly.tools.make_subplots(rows=1, cols=2)
     for i, (x, y) in enumerate(pairs):
         # import pdb;pdb.set_trace()
-        fig.append_trace(data[i], 1, i+1)
-        fig['layout']['xaxis%d' % (i+1)].update(title=labs[x], zeroline=True)
-        fig['layout']['yaxis%d' % (i+1)].update(title=labs[y], zeroline=True,
-                                                rangemode='nonnegative')
+        fig.append_trace(data[i], 1, i + 1)
+        fig['layout']['xaxis%d' % (i + 1)].update(title=labs[x], zeroline=True)
+        fig['layout']['yaxis%d' % (i + 1)].update(title=labs[y], zeroline=True,
+                                                  rangemode='nonnegative')
     plotly.offline.plot(fig, filename='temp0.html')
 
 
@@ -226,7 +226,7 @@ def mk_plt(retry: bool = False) -> None:
     print('plotting fx2d')
     for name_, x_, _, _ in res:
         name = str(abs(name_))
-        d = '/Users/ksb/scp_tmp/fitplt/'+name
+        d = '/Users/ksb/scp_tmp/fitplt/' + name
         if os.path.exists(os.path.join(d)) and not retry:
             print('skipping ', d)
             continue
@@ -456,7 +456,8 @@ def expt() -> None:
                 solce += (9./8.)*units.kB*debye
             mats[k].ce.append(solce)
 
-    for k, (l1, l2, l3, b1, b2, b3, c1, c2, c3) in scheff.items():
+    for k, (l1, l2, _, _, l3, b1, b2, _, _, b3, c1, c2, _, _, c3
+            ) in scheff.items():
         for z in ['lc', 'ce', 'bm']:
             getattr(mats[k], z).clear()  # remove other datatpoints
         mats[k].lc.append(l3+l1-l2)

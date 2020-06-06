@@ -1,66 +1,61 @@
 from typing import List as L, Tuple as T
-from json import load,dumps
+from json import load, dumps
 
-def parse_bulks(root:str)->T[L[str],L[str],L[int],L[int],L[str],
+
+def parse_bulks(root: str) -> T[L[str],L[str],L[int],L[int],L[str],
                              L[str],L[str],L[str],L[str],L[str],L[int],L[int],
                              L[str],L[float],L[float],
                              L[int],L[int],L[int],L[str],L[bool]]:
 
-    from os        import listdir, environ, remove
-    from os.path   import join, exists
-    from re        import findall
-    from ase.io    import read  # type: ignore
-    from string    import ascii_lowercase
-    from random    import choices
+    from os import listdir
+    from os.path import join, exists
+    from re import findall
+    from ase.io import read
 
-    from base64    import b64encode
-    from ase.eos   import EquationOfState   # type: ignore
-    from ase.units import kJ                # type: ignore
+    from ase.eos import EquationOfState
+    from ase.units import kJ  # type: ignore
 
-    from   numpy        import polyfit,poly1d,mean,std,array # type: ignore
-    from   numpy.linalg import norm # type: ignore
-    import warnings; warnings.filterwarnings("ignore")
-    import matplotlib.pyplot as plt # type: ignore
+    from numpy.linalg import norm  # type: ignore
+    import warnings
+    warnings.filterwarnings("ignore")
 
     from functionals.scripts.load.parse_incar import parse_incar
     from functionals.scripts.load.parse_contribs_vasp import parse_contribs_vasp
     bf = '/Users/ksb/functionals/data/beefs/beef.json'
 
-    pths,names,rts,pws,fxs, \
-    alleng,allvol,allcontrib,n_atoms,n_elems,\
-    comps,eosbms,lats,\
-    sls,shs,mjs,incs,sucs \
-        = [],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[]
-
-    randroot = environ['HOME']
-    suffix   = 'tmp_'+''.join(choices(ascii_lowercase,k=8))+'.png'
-    randpth  = join(randroot,suffix)
+    pths, names, rts, pws, fxs,  \
+    alleng, allvol, allcontrib, n_atoms, n_elems, \
+    comps, eosbms, lats, \
+    sls, shs, mjs, incs, sucs \
+        = [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], []
 
     # Traverse directory hierarchy with 3 levels (overall,batch,element)
     stordirs = listdir(root)
-    for sd in stordirs: # xc
-        if sd[:3]== 'old': continue
-        folder = join(root,sd)
+    for sd in stordirs:  # xc
+        if sd[:3] == 'old':
+            continue
+        folder = join(root, sd)
         for bulk in listdir(folder):
-            pth = join(folder,bulk)
+            pth = join(folder, bulk)
             strains = listdir(pth)
 
             # NAME AND PATH
-            s_engs     = [] # complete vector of energies
-            s_vols     = [] # complete vector of volumes
-            s_contribs = [] # complete vector of xc contributions
-            s_lats     = [] # complete vector of lattice constants
-            s_coms     = set() # list of strains that have completed
-            rt,lo,hi   = 0,10000,-10000
-            atoms      = None
+            s_engs = []  # complete vector of energies
+            s_vols = []  # complete vector of volumes
+            s_contribs = []  # complete vector of xc contributions
+            s_lats = []  # complete vector of lattice constants
+            s_coms = set()  # list of strains that have completed
+            rt, lo, hi = 0, 10000, -10000
+            atoms = None
             # Things to do for every strain
             for strain in strains:
-                dir       = join(pth,strain)
+                dir = join(pth, strain)
                 strainval = int(strain.split('_')[-1])
-                lo = min(lo,strainval); hi = max(hi,strainval)
+                lo = min(lo, strainval)
+                hi = max(hi, strainval)
 
                 # Verify job completed successfully
-                if exists(join(dir,'OUTCAR')):
+                if exists(join(dir, 'OUTCAR')):
 
                     with open(join(dir,'OUTCAR'),'r')  as f: outcar = f.read()
                     with open(join(dir,'OSZICAR'),'r') as f: nsteps = sum(1 for _ in f) # counts # of lines in file

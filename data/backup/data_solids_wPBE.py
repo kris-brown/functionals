@@ -1,19 +1,19 @@
 from typing import Optional as O
 
-from ase.atoms import Atoms   # type: ignore
-from ase.io import write                      # type: ignore
-from ase.units import kB                      # type: ignore
-import numpy as np                            # type: ignore
+from ase.atoms import Atoms
+from ase.io import write
+from ase.units import kB
+import numpy as np
 
-qubic_solids_26 = ['Li_bcc','Na_bcc','K_bcc','Rb_bcc',
-                   'Ca_fcc','Sr_fcc','Ba_bcc',
-                   'Nb_bcc','Ta_bcc',
-                   'Mo_bcc','W_bcc','Fe_bcc',
-                   'Rh_fcc','Ir_fcc',
-                   'Ni_fcc','Pd_fcc','Pt_fcc',
-                   'Cu_fcc','Ag_fcc','Au_fcc',
-                   'Al_fcc','Pb_fcc',
-                   'C_diamond','Si_diamond','Ge_diamond','Sn_diamond']
+qubic_solids_26 = ['Li_bcc', 'Na_bcc', 'K_bcc', 'Rb_bcc',
+                   'Ca_fcc', 'Sr_fcc', 'Ba_bcc',
+                   'Nb_bcc', 'Ta_bcc',
+                   'Mo_bcc', 'W_bcc', 'Fe_bcc',
+                   'Rh_fcc', 'Ir_fcc',
+                   'Ni_fcc', 'Pd_fcc', 'Pt_fcc',
+                   'Cu_fcc', 'Ag_fcc', 'Au_fcc',
+                   'Al_fcc', 'Pb_fcc',
+                   'C_diamond', 'Si_diamond', 'Ge_diamond', 'Sn_diamond']
 qubic_solids_27 = np.append(qubic_solids_26, 'V_bcc')
 
 hcp_solids_10 = ['Cd_hcp', 'Co_hcp', 'Os_hcp', 'Ru_hcp', 'Zn_hcp',
@@ -39,8 +39,8 @@ haglund_compounds_31 = ['ScC_b1', 'MnC_b1', 'FeC_b1', 'CoC_b1', 'NiC_b1',
                         'ScN_b1', 'CrN_b1', 'MnN_b1', 'CoN_b1', 'NiN_b1',
                         'MoC_b1', 'CrC_b1', 'RuC_b1', 'RhC_b1', 'PdC_b1',
                         'MoN_b1', 'RuN_b1', 'RhN_b1', 'PdN_b1',
-                        'LaC_b1', 'TaC_b1', 'WC_b1', 'OsC_b1', 'IrC_b1',  'PtC_b1',
-                        'LaN_b1', 'TaN_b1', 'WN_b1', 'OsN_b1', 'IrN_b1',  'PtN_b1'] #'FeN_b1',
+                        'LaC_b1', 'TaC_b1', 'WC_b1', 'OsC_b1', 'IrC_b1', 'PtC_b1',
+                        'LaN_b1', 'TaN_b1', 'WN_b1', 'OsN_b1', 'IrN_b1', 'PtN_b1']  # 'FeN_b1',
 qubic_compounds_46 = np.append(pearson_compounds_15, haglund_compounds_31)
 
 solids_1 = np.append(qubic_solids_26, qubic_compounds_28)

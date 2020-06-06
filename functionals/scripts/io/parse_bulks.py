@@ -20,7 +20,7 @@ def parse_bulks(root: str
         try:
             return io.read(car)
         except Exception as e:
-            return "Exception:"+str(e)
+            return "Exception:" + str(e)
 
     def process(pth: str) -> T[
             O[float], O[str],
@@ -28,7 +28,7 @@ def parse_bulks(root: str
 
         latopt = read(os.path.join(pth, 'latopt/OUTCAR'))
         if latopt[:10] == "Exception:":
-            return err("latopt - "+latopt)
+            return err("latopt - " + latopt)
 
         rpth = os.path.join(pth, 'latopt/run.log')
         if not os.path.exists(rpth):
@@ -43,19 +43,19 @@ def parse_bulks(root: str
         for i in [-2, -1, 0, 1, 2]:
             strain = os.path.join(pth, 'eos/strain_%d' % i)
             if not os.path.exists(strain):
-                return err("Missing  "+strain)
+                return err("Missing  " + strain)
             _, [c_c_i], [c_e_i], [c_m_i], [z] = parse_job(strain)
             if z:
-                return err(strain+' '+z)
+                return err(strain + ' ' + z)
             if i == 0:
                 c_c = c_c_i
                 c_e = c_e_i
                 c_m = c_m_i
             if c_e_i is None:
-                return err("Bad EOS1 job "+strain)
+                return err("Bad EOS1 job " + strain)
             else:
                 eos1engs.append(c_e_i)
-                eos1vols.append(io.read(strain+'/POSCAR').get_volume())
+                eos1vols.append(io.read(strain + '/POSCAR').get_volume())
         for i, j in [(0, 1), (1, 2), (3, 2), (4, 3)]:
             if eos1engs[i] < eos1engs[j]:
                 estr = "Bad EOS1 eng ordering %i %s - %i %s"
@@ -108,6 +108,8 @@ def parse_bulks(root: str
     # Main loop
     for xc in os.listdir(root):
         for mat in os.listdir(os.path.join(root, xc)):
+            if 'CdS' in mat or 'CdT' in mat:
+                continue
             pth = os.path.join(root, xc, mat)
             pths.append(pth)
             mats.append(mat)

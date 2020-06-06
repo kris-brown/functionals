@@ -4,4 +4,6 @@ source /nfs/slac/g/suncatfs/ksb/vasp54_env.bash
 mpirun -n $LSB_MAX_NUM_PROCESSORS vasp{{ gam }} &>run.log
 {% if rm %}
 rm -f WAVECAR
+rm -f CHGCAR
+rm -f CHG
 {% endif %}

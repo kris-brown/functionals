@@ -14,6 +14,7 @@ def pop_surf() -> T[L[str], L[str], L[float], L[float]]:
                 out = os.path.join(root, xc, mat, site, 'OUTCAR')
                 with open(out, 'r') as f:
                     outcar = f.read()
+                assert 'General timing' in outcar
                 pat = r'TOTEN\s+=\s+([-+]?\d+\.\d+)'
                 match = re.findall(pat, outcar)
                 assert match

@@ -4,7 +4,7 @@ import os
 import ase
 from ase.build import fcc111, hcp0001, add_adsorbate
 from functionals.CLI.submit import (mk_incar, root, potpos, matdata,
-                                    _sub, exedic,
+                                    _sub,
                                     xcdict, mk_traj)
 import functionals.templates as temp
 
@@ -53,7 +53,7 @@ def subbulk(mat: str, xc: str) -> None:
         g.write(temp.jinja_env.get_template(
             'KPOINTS.jinja').render(kpts=(10, 10, 10)))
     bash = temp.jinja_env.get_template('subVASP.jinja'
-                                       ).render(exe=exedic[xc])
+                                       ).render(rm=True)
     _sub(pth, bash, 10, '')
 
 
@@ -79,7 +79,7 @@ def submit(mat: str, xc: str, site: str = None,
             'KPOINTS.jinja').render(kpts=(4, 4, 1)))
 
     bash = temp.jinja_env.get_template('subVASP.jinja'
-                                       ).render(exe=exedic[xc])
+                                       ).render(rm=True)
     _sub(pth, bash, time or 20, '3')
 
 

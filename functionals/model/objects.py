@@ -9,8 +9,8 @@ from dbgen import (Model, Obj, Attr, Rel, Int, Varchar, Text, Decimal, Boolean,
 
 ###############################################################################
 mets = ['ce', 'bm', 'lat', 'vol', 'mag']
-funmetrics = [y+'mae_%s' % (x) for x in mets for y in ['', 'rel']]
-errmetrics = [y+'err_%s' % (x) for x in mets for y in ['', 'rel']]
+funmetrics = [y + 'mae_%s' % (x) for x in mets for y in ['', 'rel']]
+errmetrics = [y + 'err_%s' % (x) for x in mets for y in ['', 'rel']]
 
 ms = [Attr(m, Decimal(), desc='Only True if results in for all mats')
       for m in funmetrics]
@@ -82,7 +82,6 @@ bulks = Obj(
 
         # Analysis Results from minimum 5 jobs
         Attr('success', Boolean(), desc='DFT data for each experiment data'),
-        # Attr('optstrains', Text(), desc='List of completed opt strains'),
         # Attr('energy', Decimal(),desc='Minimum energy according to quadfit'),
         Attr('mag', Decimal(), desc='Magmom of the minimum energy job'),
         Attr('contrib', Text('long'), desc='xc contribs of 5 optimal jobs'),
@@ -112,8 +111,12 @@ bulks = Obj(
         Attr('expt_vol', Decimal(), desc='Experimental volume, A^3'),
         Attr('expt_mag', Decimal(), desc='Experimental magnetic moment, bohr'),
         Attr('hasdata', Boolean(), desc='We have any data for this'),
-
-        # Relative error
+        Attr('dscheff_ce', Decimal(),
+             desc='Difference in error with Scheffler paper, if available'),
+        Attr('dscheff_bm', Decimal(),
+             desc='Difference in error with Scheffler paper, if available'),
+        Attr('dscheff_lat', Decimal(),
+             desc='Difference in error with Scheffler paper, if available'),
 
         # Fitting inputs
         Attr('ab_ce', Text(), desc='a vector+offset to be dotted w/ '\
@@ -121,7 +124,7 @@ bulks = Obj(
         Attr('ab_bm', Text(), desc='a vector+offset to be dotted w/ '\
              'BEEF coef + offset gives bulk modulus in GPa'),
         Attr('ab_vol', Text(), desc='a vector+offset to be dotted w/ '\
-             'BEEF coef + offset gives conventional lattice in A')] +
+             'BEEF coef + offset gives conventional lattice in A')] + \
     [Attr(x, Decimal()) for x in errmetrics],
     fks=[Rel('calc')])
 
@@ -169,8 +172,8 @@ fit = Obj(
            Attr('cv', Text(), desc='Summary of cross validation data'),
            Attr('err', Text(), desc='Scipy error message'),
            Attr("step", Int(), identifying=True,
-                desc='Optimization iteration step')]
-    + [Attr(m, Decimal(), desc='') for m in funmetrics],
+                desc='Optimization iteration step')] + [
+                    Attr(m, Decimal(), desc='') for m in funmetrics],
     fks=[Rel('fitparams', identifying=True), Rel('calc', identifying=True)])
 
 surf = Obj(

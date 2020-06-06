@@ -6,7 +6,7 @@ import numpy as np
 
 # Internal Modules
 from dbgen import (Model, Gen, Query, PyBlock, AND, Env, Import,
-                   Literal as Lit,  EQ, JPath, LEFT, One, SUM,
+                   Literal as Lit, EQ, LEFT, One, SUM,
                    CONCAT, AVG, LIKE, GROUP_CONCAT, ABS)
 
 from functionals.scripts.load.true_mag import true_mag
@@ -37,14 +37,9 @@ def analysis(mod: Model) -> None:
 
     ########################################################################
     xvq = Query(dict(b=Bulks.id(),
-                     v=(Bulks['expt_lat']()**Lit(3)*Bulks['volrat']())))
+                     v=(Bulks['expt_lat']()**Lit(3) * Bulks['volrat']())))
     xvol = Gen('xvol', query=xvq, actions=[Bulks(bulks=xvq['b'],
                                                  expt_vol=xvq['v'])])
-    ########################################################################
-    # cnq = Query(dict(b=Bulks.id(), n=Bulks['stordir']()))
-    # cnpb = PyBlock(lambda x: x.split('/')[-2], args=[cnq['n']])
-    # calcname = Gen('calcname', query=cnq, funcs=[cnpb],
-    #                actions=[Bulks(bulks=cnq['b'], calcname=cnpb['out'])])
     ########################################################################
     ibq = Query(exprs=dict(c=Calc.id(),
                            b=EQ(LEFT(Calc['data'](), One), Lit('['))))
@@ -57,7 +52,8 @@ def analysis(mod: Model) -> None:
     #####################################################################
     name = CONCAT([Lit('%,'), Atoms['num'](), Lit(',%')])
 
-    bcalc, acalc = [JPath('calc', [x]) for x in [bulks__calc, atoms__calc]]
+    bcalc, acalc = [mod.make_path('calc', [x]) for x in
+                    [bulks__calc, atoms__calc]]
 
     erq = Query(exprs=dict(b=Bulks.id(), a=Atoms.id(),
                            c=Bulks['composition'](),
@@ -83,7 +79,7 @@ def analysis(mod: Model) -> None:
 
     ########################################################################
     # Paths
-    refpth = JPath("refs", [refs__bulks])
+    refpth = mod.make_path("refs", [refs__bulks])
 
     eq = Query(exprs=dict(b=Bulks.id(),
                           e=Bulks['eng']() - SUM(Refs['energy'](refpth))),
@@ -99,7 +95,7 @@ def analysis(mod: Model) -> None:
     ########################################################################
 
     ceq = Query(exprs=dict(b=Bulks.id(),
-                           ce=Lit(-1)*Bulks['eform']()/Bulks['n_atoms']()))
+                           ce=Lit(-1) * Bulks['eform']() / Bulks['n_atoms']()))
     ce =                                                                     \
         Gen(name='ce',
             desc='Difference between a relaxed energy (per atom) and '
@@ -109,7 +105,7 @@ def analysis(mod: Model) -> None:
 
     ########################################################################
 
-    bpth = JPath('bulks', [bulks__calc])
+    bpth = mod.make_path('bulks', [bulks__calc])
     com = Lit(',')
     bname, bce, bbm = [Bulks[x](bpth) for x in ['name', 'ce', 'bm']]
     catargs = [bname, com, bce, com, bbm]
@@ -125,7 +121,7 @@ def analysis(mod: Model) -> None:
                 wce.remove(name)
             if bm and name in wbml:
                 wbml.remove(name)
-        missing = [x+'_ce' for x in wce] + [x+'_bml' for x in wbml]
+        missing = [x + '_ce' for x in wce] + [x + '_bml' for x in wbml]
         n = len(missing)
         return ' '.join(sorted(missing)), n, n == 0
 
@@ -139,17 +135,17 @@ def analysis(mod: Model) -> None:
             actions=[Calc(calc=dq['c'], **{x: dqpb[x] for x in dcols})])
 
     ########################################################################
-    refatom = JPath('atoms', [refs__atoms])
+    refatom = mod.make_path('atoms', [refs__atoms])
 
     rcq = Query(exprs=dict(r=Refs.id(),
                            c=Atoms['contribs'](refatom),
                            n=Refs['num'](),
-                           e=Refs['num']()*Atoms['energy'](refatom)),
+                           e=Refs['num']() * Atoms['energy'](refatom)),
                 basis=[Refs],
                 opt_attr=[Atoms['contribs'](refatom)])
 
     rcpb = PyBlock(
-        lambda c, n: dumps((n*np.array(loads(c))).tolist()) if c else None,
+        lambda c, n: dumps((n * np.array(loads(c))).tolist()) if c else None,
         args=[rcq[x] for x in 'cn'])
 
     refcontribs =                                                   \
@@ -163,10 +159,12 @@ def analysis(mod: Model) -> None:
 
     ########################################################################
     mets = ['ce', 'bm', 'lat', 'vol', 'mag']
-    errcols = {x+'err_'+k: (Bulks.get(k)()-Bulks.get('expt_'+k)())/(
-        Bulks.get('expt_'+k)() if x else Lit(1)) for x in ['rel', ''] for k in mets}
+    errcols = {x + 'err_' + k: (Bulks.get(k)() - Bulks.get('expt_' + k)()) / (
+        Bulks.get('expt_' + k)() if x else Lit(1)) for x in ['rel', '']
+        for k in mets}
     errq = Query(dict(bulks=Bulks.id(), **errcols),
-                 opt_attr=[Bulks.get(x+k)() for x in ['', 'expt_'] for k in mets])
+                 opt_attr=[Bulks.get(x + k)() for x in ['', 'expt_']
+                 for k in mets])
 
     errs = Gen('errs', desc='Difference btw computed and expt',
                query=errq,
@@ -174,18 +172,19 @@ def analysis(mod: Model) -> None:
     ########################################################################
     # cols = dict(ce=('ce', 'expt_ce'), bm=('bm', 'expt_bm'),
     #             lat=('lat', 'expt_lat'),  mag=('mag', 'expt_mag'))
-    cbp = JPath('bulks', [bulks__calc])
+    cbp = mod.make_path('bulks', [bulks__calc])
     msegens = []
     for m in mets:
-        mae, relmae = [Bulks.get(x+'err_'+m)(cbp) for x in ['', 'rel']]
+        mae, relmae = [Bulks.get(x + 'err_' + m)(cbp) for x in ['', 'rel']]
 
-        mseq = Query(exprs=dict(c=Calc.id(), m=AVG(ABS(mae)), r=AVG(ABS(relmae))),
+        mseq = Query(exprs=dict(c=Calc.id(), m=AVG(ABS(mae)),
+                                r=AVG(ABS(relmae))),
                      basis=[Calc],
                      aggcols=[Calc.id()])
         msegens.append(Gen(
-            name='mae_'+m, query=mseq, tags=['mae'],
+            name='mae_' + m, query=mseq, tags=['mae'],
             actions=[Calc(calc=mseq['c'], **{
-                'mae_'+m: mseq['m'], 'relmae_'+m:mseq['r']})]))
+                'mae_' + m: mseq['m'], 'relmae_' + m:mseq['r']})]))
     msec, mseb, msel, msev, msem = msegens
     #####################################################################
 
@@ -237,9 +236,9 @@ def analysis(mod: Model) -> None:
 
     def sef(m: str, o: float, h: float) -> float:
         if m == 'Pd':
-            return h-o
+            return h - o
         else:
-            return o-h
+            return o - h
     sepb = PyBlock(sef, args=[seq[x] for x in 'moh'])
     surfan = \
         Gen(name='surferr',

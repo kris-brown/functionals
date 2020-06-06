@@ -2,8 +2,7 @@ from os.path import join
 
 # Internal Modules
 from dbgen import (Model, Gen, Query, PyBlock, Expr, Literal as Lit, COALESCE,
-                   Text, JPath, GROUP_CONCAT, MAX, AND, CONVERT,
-                   NOT)
+                   Text, GROUP_CONCAT, MAX, AND, CONVERT, NOT)
 
 from functionals.scripts.fit.db_data import db_data
 from functionals.scripts.fit.a_ce import a_ce
@@ -13,7 +12,7 @@ from functionals.scripts.fit.runfit import runfit
 ############################################################################
 ############################################################################
 ############################################################################
-functionals_db = '/'+join(*__file__.split('/')[:-3], 'data/functionals.json')
+functionals_db = '/' + join(*__file__.split('/')[:-3], 'data/functionals.json')
 
 
 def fit(mod: Model) -> None:
@@ -31,8 +30,8 @@ def fit(mod: Model) -> None:
     ########################################################################
     ########################################################################
 
-    refpth = JPath("refs", [refs__bulks])
-    beefpth = JPath('calc', [bulks__calc])
+    refpth = mod.make_path("refs", [refs__bulks])
+    beefpth = mod.make_path('calc', [bulks__calc])
     aceq = Query(exprs=dict(
         b=Bulks.id(),
         r=GROUP_CONCAT(Refs['energy'](refpth)),
@@ -55,7 +54,7 @@ def fit(mod: Model) -> None:
             actions=[Bulks(bulks=aceq['b'], ab_ce=acepb['out'])])
 
     ########################################################################
-    vecout = ['ab_'+x for x in ['bm', 'vol']]
+    vecout = ['ab_' + x for x in ['bm', 'vol']]
 
     aceq = Query(exprs=dict(b=Bulks.id(),
                             r=GROUP_CONCAT(Refs['energy'](refpth)),
@@ -91,7 +90,7 @@ def fit(mod: Model) -> None:
 
     ########################################################################
 
-    bpth = JPath('bulks', [bulks__calc])
+    bpth = mod.make_path('bulks', [bulks__calc])
     names = ['ab_ce', 'ab_bm', 'ab_vol', 'expt_ce', 'expt_bm', 'expt_vol',
              'name', 'ce']
     fdgbs = dict(zip('abcdefgh', names))
@@ -122,7 +121,7 @@ def fit(mod: Model) -> None:
 
     ########################################################################
 
-    funmetrics = [y+'mae_%s' % (x)
+    funmetrics = [y + 'mae_%s' % (x)
                   for x in ['ce', 'bm', 'lat', 'vol', 'mag']
                   for y in ['', 'rel']]
 

@@ -23,7 +23,7 @@ def parse_csv(root: str, mat: str, volrat: float
         for mat_, ce_, bm_, _ in r:
             if mat_ == mat and ce is None:
                 ce, bm = map(float, [ce_, bm_])
-                ce *= units.kJ/units.mol
+                ce *= units.kJ / units.mol
 
     with open(root % 'cohesive_guillermet', 'r') as f:
         r = reader(f)
@@ -42,13 +42,13 @@ def parse_csv(root: str, mat: str, volrat: float
 
                 if ce is None and ce_:
                     if unit == 'kcal/mol':
-                        ce = float(ce_) * units.kcal/units.mol
+                        ce = float(ce_) * units.kcal / units.mol
                     elif unit == 'kJ/mol':
-                        ce = float(ce_) * units.kJ/units.mol
+                        ce = float(ce_) * units.kJ / units.mol
                     else:
                         raise ValueError
                     if corr == 'False':
-                        ce += (9./8.)*units.kB*float(debye)
+                        ce += (9. / 8.) * units.kB * float(debye)
                 if bm is None and bm_:
                     bm = float(bm_)
                 if lat is None and lp_:

@@ -2,7 +2,7 @@ from typing import Tuple as T, Optional as O
 
 
 def analyze_bulks(pth: str
-                  ) -> T[int, int, str, str, O[float], O[float], O[float]]:
+                  ) -> T[int, int, str, str, O[float]]:
     import os
     from ase.io import read
 
@@ -10,7 +10,7 @@ def analyze_bulks(pth: str
         atoms = read(os.path.join(pth, 'latopt/POSCAR'))
     except Exception:
         print('\n\n\n\nWeird pth ', pth, '\n\n\n')
-        return None, None, None, None, None, None, None
+        return 0, 0, '', '', None
     n_atoms = len(atoms)
     elems = list(atoms.get_atomic_numbers())
     n_elems = len(set(elems))
@@ -22,8 +22,7 @@ def analyze_bulks(pth: str
         atoms = read(os.path.join(pth, 'latopt/OUTCAR'))
         a = atoms.get_cell_lengths_and_angles()[0]
         vol = atoms.get_volume()
-        volrat = vol/a**3
+        volrat = vol / a**3
     except Exception:
         a = vol = volrat = None
-    return (n_atoms, n_elems,  composition, elemstr, a,
-            vol, volrat)
+    return (n_atoms, n_elems, composition, elemstr, volrat)

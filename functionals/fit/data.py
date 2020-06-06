@@ -50,15 +50,15 @@ class Datum(object):
             pdb.set_trace()
         y = (np.array(self.vec) @ x) + self.offset
         if vol or self.kind != 'lc':
-            div = 1/self.target if rel else 1
-            return float(y - self.target)*div
+            div = 1 / self.target if rel else 1
+            return float(y - self.target) * div
         else:
             hcp = 'hcp' in self.mat
-            factor = 1./1.4142 if hcp else 1
-            new_y = (max(y, 0)*factor)**(1/3)
-            new_tar = (self.target*factor)**(1/3)
-            div = 1/new_tar if rel else 1
-            return float(new_y - new_tar)*div
+            factor = 1. / 1.4142 if hcp else 1
+            new_y = (max(y, 0) * factor)**(1 / 3)
+            new_tar = (self.target * factor)**(1 / 3)
+            div = 1 / new_tar if rel else 1
+            return float(new_y - new_tar) * div
 
 
 class Data(object):
@@ -69,14 +69,16 @@ class Data(object):
                          key=lambda x: x.mat)
         self.lc = sorted([d for d in data if d.kind == 'lc'],
                          key=lambda x: x.mat)
-        assert self.ce and self.bm and self.lc
+        if full:
+            assert self.ce and self.bm and self.lc
 
     def __eq__(self, other: object) -> bool:
         return False if not isinstance(other, Data) else \
             all([getattr(self, x) == getattr(other, x)
                  for x in ['ce', 'bm', 'lc']])
 
-    def __len__(self) -> int: return len(self.ce) + len(self.bm) + len(self.lc)
+    def __len__(self) -> int:
+        return len(self.ce) + len(self.bm) + len(self.lc)
 
     def remove(self, key: str, mat: str) -> bool:
         n = len(getattr(self, key))
@@ -91,17 +93,22 @@ class Data(object):
     def mae2(self, x: np.ndarray, key: str, rel: bool = True) -> float:
         '''This should give the same result as mae'''
         a, b = self._xy(getattr(self, key), rel)
-        return float(np.sum(np.abs(a@x-b)))/len(b)
+        return float(np.sum(np.abs(a@x - b))) / len(b)
 
     def mae(self, x: np.ndarray, key: str, rel: bool = True) -> float:
         '''Mean average error'''
         assert key in ['ce', 'bm', 'lc', 'vol']
         if key in ['ce', 'bm', 'lc']:
+            ln = len(getattr(self, key))
+            if ln == 0:
+                return 0.
             return sum(abs(d.err(x, rel=rel)) for d in
-                       getattr(self, key))/len(getattr(self, key))
+                       getattr(self, key)) / ln
         elif key == 'vol':
+            if not self.lc:
+                return 0.
             return sum(abs(d.err(x, rel=rel, vol=True))
-                       for d in self.lc)/len(self.lc)
+                       for d in self.lc) / len(self.lc)
         else:
             raise ValueError()
 
@@ -110,10 +117,10 @@ class Data(object):
         assert key in ['ce', 'bm', 'lc', 'vol']
         if key in ['ce', 'bm', 'lc']:
             return (sum(d.err(x)**2 for d in
-                        getattr(self, key))/len(getattr(self, key)))**0.5
+                        getattr(self, key)) / len(getattr(self, key)))**0.5
         elif key == 'vol':
-            return (sum(abs(d.err(x, vol=True)) for d in self.lc)/len(self.lc)
-                    )**(0.5)
+            return (sum(abs(d.err(x, vol=True)) for d in self.lc
+                        ) / len(self.lc))**(0.5)
         else:
             raise ValueError()
 
@@ -125,9 +132,9 @@ class Data(object):
     def _xy(self, ds: S[Datum], rel: bool) -> T[np.ndarray, np.ndarray]:
         X, Y = np.empty((0, 64)), []
         for d in ds:
-            div = 1/d.target if rel else 1
-            X = np.vstack((X, np.array([d.vec])*div))
-            Y.append((d.target - d.offset)*div)
+            div = 1 / d.target if rel else 1
+            X = np.vstack((X, np.array([d.vec]) * div))
+            Y.append((d.target - d.offset) * div)
         return X, np.array(Y)
 
     @classmethod
@@ -147,8 +154,8 @@ class Data(object):
         random.shuffle(lc)
 
         def chunks(lst: L[Datum]) -> L[L[Datum]]:
-            m = math.floor(len(lst)/n)
-            return [lst[i*m:(i+1)*m] for i in range(n)]
+            m = math.floor(len(lst) / n)
+            return [lst[i * m:(i + 1) * m] for i in range(n)]
 
         ces, bms, lcs = map(chunks, [ce, bm, lc])
         datas = []
