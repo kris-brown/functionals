@@ -15,6 +15,8 @@ import ase.eos
 import numpy as np
 import functionals.templates as temp
 import scipy.optimize as opt
+from ase.calculators.calculator import kptdensity2monkhorstpack
+
 ########
 # DATA #
 ########
@@ -61,7 +63,7 @@ with open(data_root + '/initialguess.csv', 'r') as f:
                for k, s, l, b, m, ca in r
                if k in has_data}
 
-mGGAincar = dict(NELMETA1=30, NELMETA2=10)
+mGGAincar = dict(NELMETA1=10, NELMETA2=10)
 xcdict = dict(pbe=dict(gga='PE'), scan=dict(metagga='SCAN', **mGGAincar),
               pbesol=dict(gga='PS'),
               )  # type: Dict[str,Dict[str,Any]]
@@ -73,11 +75,12 @@ def only_ce(m: Mat) -> bool:
     ce, bm, lat, _ = has_data[m.name]
     return ce and not (bm or lat)
 
-# def opt_vol() -> Dict[Tuple[str, str], Tuple[float, bool, bool, bool]]:
-#     with open(vol_csv, 'r') as f:
-#         dic = {(a, b): (float(c), str2bool(x), str2bool(y), str2bool(z))
-#                for a, b, c, _, x, y, z in csv.reader(f)}
-#     return dic
+
+def set_vol(a: ase.Atoms, v: float) -> None:
+    r = opt.root_scalar(f=lambda x: ase.atoms.Cell(
+        a.get_cell() * x).volume - v, x0=0.5, x1=2)
+    a.set_cell(
+        a.get_cell() * r.root, scale_atoms=True)
 
 
 ##############################################################################
@@ -86,46 +89,59 @@ n_dict = dict(fcc=4, bcc=2, hcp=2, cesiumchloride=2, diamond=8,
               zincblende=8, rocksalt=8, **{"rocksalt-prim": 2})
 
 
+def read_outcar(pth: str) -> ase.Atoms:
+    '''Zr gets mangled in CONTCAR which screws up OUTCAR parsing'''
+    os.system("sed -i 's/ r/Zr/g' " + pth + '/CONTCAR')
+    return ase.io.read(pth + '/OUTCAR')
+
+
 def mk_traj(m: Mat) -> ase.Atoms:
     '''Create an Atoms object from name, structure, and lattice constant.'''
     c = [[1., 0, 0], [0, 1, 0], [0, 0, 1]]
 
-    if m.struct == 'fcc':
-        n = 4
-        p = [[0, 0, 0], [0, 1 / 2, 1 / 2], [1 / 2, 0, 1 / 2],
-             [1 / 2, 1 / 2, 0]]
-    elif m.struct in ['bcc', 'cesiumchloride']:
-        n = 2 if m.struct == 'bcc' else 1
-        p = [[0, 0, 0], [1 / 2, 1 / 2, 1 / 2]]
-    elif m.struct == 'hcp':
-        n = 2
-        p = [[0, 0, 0], [1 / 3, 2 / 3, 1 / 2]]
-        c = [[1, 0, 0], [-0.5, 3**0.5 / 2, 0], [0, 0, m.ca_rat]]  # DIFFERENT
-    elif m.struct in ['diamond', 'zincblende']:
-        n = 8 if m.struct == 'diamond' else 4
-        p = [[0, 0, 0], [1 / 4, 1 / 4, 1 / 4], [0, 1 / 2, 1 / 2],
-             [1 / 4, 3 / 4, 3 / 4], [1 / 2, 0, 1 / 2], [3 / 4, 1 / 4, 3 / 4],
-             [1 / 2, 1 / 2, 0], [3 / 4, 3 / 4, 1 / 4]]
-    elif m.struct == 'rocksalt':
-        n = 4
-        p = [[0, 0, 0], [1 / 2, 0, 0], [0, 1 / 2, 1 / 2],
-             [1 / 2, 1 / 2, 1 / 2], [1 / 2, 0, 1 / 2], [0, 0, 1 / 2],
-             [1 / 2, 1 / 2, 0], [0, 1 / 2, 0]]
-    elif m.struct == 'zincblende-prim':
+    if m.struct == 'bcc':
         n = 1
+        p = [[0., 0, 0]]
+        c = [[-1 / 2, 1 / 2, 1 / 2], [1 / 2, -1 / 2, 1 / 2],
+             [1 / 2, 1 / 2, -1 / 2]]
+    elif m.struct == 'cesiumchloride':
+        n = 1
+        p = [[0, 0, 0], [1 / 2, 1 / 2, 1 / 2]]
+    elif m.struct in ['hcp', 'wurtzite']:
+        n = 2
+        p = ([[0, 0, 0], [1 / 3, 2 / 3, 1 / 2]] if m.struct == 'hcp' else
+             [[1 / 3, 2 / 3, 0], [1 / 3, 2 / 3, 0.376],
+              [2 / 3, 1 / 3, 1 / 2], [2 / 3, 1 / 3, 0.876]])
+        c = [[1, 0, 0], [-0.5, 3**0.5 / 2, 0], [0, 0, m.ca_rat]]  # DIFFERENT
+    elif m.struct in ['zincblende', 'diamond']:
+        n = 1 if m.struct == 'zincblende' else 2
         p = [[0, 0, 0], [1 / 4, 1 / 4, 1 / 4]]
         c = [[0., 1 / 2, 1 / 2], [1 / 2, 0, 1 / 2], [1 / 2, 1 / 2, 0]]
-    elif m.struct == 'rocksalt-prim':
+    elif m.struct in ['rocksalt', 'fcc']:
         n = 1
         p = [[0, 0, 0], [1 / 2, 1 / 2, 1 / 2]]
         c = [[0., 1 / 2, 1 / 2], [1 / 2, 0, 1 / 2], [1 / 2, 1 / 2, 0]]
+        if m.struct == 'fcc':
+            p = p[:1]
     else:
         raise NotImplementedError(m.struct)
-    return ase.Atoms(m.name * n, cell=np.array(c) * m.lat, scaled_positions=p)
+    return ase.Atoms(m.name * n, cell=np.array(c) * m.lat, scaled_positions=p,
+                     pbc=[1, 1, 1],)
 
 
 def binary(m: Mat) -> bool:
     return len(list(filter(str.isupper, m.name))) == 2
+
+
+def snake(name: str) -> str:
+    """Snake case materials with multiple elements"""
+    newmat = name[0]
+    for char in name[1:]:
+        if char.isupper():
+            newmat += "_" + char
+        else:
+            newmat += char
+    return newmat
 
 
 def onezero(one: int) -> str:
@@ -209,6 +225,10 @@ def magdic(mat: Mat) -> Dict[str, str]:
     else:
         return dict(ispin='1')
 
+
+def mk_kpts(a: ase.Atoms) -> Tuple[int, int, int]:
+    x, y, z = kptdensity2monkhorstpack(a, 6)
+    return int(x), int(y), int(z)
 ##############################################################################
 # MAIN FUNCTIONS #
 
@@ -219,19 +239,18 @@ def submit_atom(name: str, time: int, xc: str, retry: bool,
                 beef: Optional[str]) -> None:
     assert sunc == '3'
     elem = ase.data.chemical_symbols.index(name)
-    atoms = ase.Atoms(numbers=[elem], positions=[[1., 2., 3.]],
+    atoms = ase.Atoms(numbers=[elem], positions=[[1., 2., 3.]], pbc=[0, 0, 0],
                       cell=[[13., 2., 1.], [2., 14, 1.], [5., 1, 15.]])
     magmom, elec = atommag[name], n_electrons[name]
     nb = max(16, int(math.ceil(0.6 * elec + magmom
                                if magmom else elec / 2 + 0.5 * 1)))
-    ferwedo = orbitals if (orbitals is not None) else (elem > 56)
-    if ferwedo and magmom and name not in ['Pt', 'Au']:
-        nup, ndn = (elec + magmom) // 2, (elec - magmom) // 2
-        magdic = dict(ldiag=False, ismear=-2, ferwe=onezero(nup),
-                      ispin=2, ferdo=onezero(ndn))
-
-    else:
-        magdic = dict(sigma=0.0001, nupdown=magmom, ispin=2 if magmom else 1)
+    # ferwedo = orbitals if (orbitals is not None) else (elem > 56)
+    # if ferwedo and magmom and name not in ['Pt', 'Au']:
+    #     nup, ndn = (elec + magmom) // 2, (elec - magmom) // 2
+    #     magdic = dict(ldiag=False, ismear=-2, ferwe=onezero(nup),
+    #                   ispin=2, ferdo=onezero(ndn))
+    # else:
+    magdic = dict(sigma=0.0001, nupdown=magmom, ispin=2 if magmom else 1)
 
     magcar = dict(
         isym=-1, amix=0.1 if xc == 'scan' else 0.2,
@@ -241,7 +260,8 @@ def submit_atom(name: str, time: int, xc: str, retry: bool,
     pth = os.path.join(root, 'atoms', xc, name)
     os.makedirs(pth, exist_ok=True)
     if attempt(retry, pth, curr):
-        setup(pth=pth, atoms=atoms, incar={**incar, **magcar},
+        setup(pth=pth, atoms=atoms, incar={**incar, **magcar,
+                                           **dict(sigma=1e-4)},
               kpts=(1, 1, 1), beef=beef)
         bash = temp.jinja_env.get_template(
             'subVASP.jinja').render(gam='_gam', rm=True)
@@ -259,13 +279,13 @@ def latopt(mat: Mat, time: int, xc: str,
            beef: Optional[str]) -> None:
     new = dict(ediff=1e-5, nsw=500, ediffg=-0.001, addgrid=True, algo='N',
                ismear=0, ivdw=0, lreal=False, ibrion=2, sigma=0.01,
-               isif=3 if mat.struct == 'hcp' else 7)
+               isif=3 if mat.struct in ['hcp', 'wurtzite'] else 7)
     atoms = mk_traj(mat)
-    pth = os.path.join(root, 'bulks', xc, mat.name, 'latopt')
+    pth = os.path.join(root, 'bulks', xc, snake(mat.name), 'latopt')
     os.makedirs(pth, exist_ok=True)
     if attempt(retry, pth, curr):
         setup(pth=pth, atoms=atoms, incar={**incar, **new, **magdic(mat)},
-              kpts=(10, 10, 10), beef=beef)
+              kpts=mk_kpts(atoms), beef=beef)
         bash = temp.jinja_env.get_template('subVASP.jinja'
                                            ).render(gam='', rm=False)
         _sub(pth, bash, time, sunc)
@@ -276,7 +296,7 @@ def eos(mat: Mat, time: int, xc: str,
         beef: Optional[str], second: bool) -> None:
     if second and only_ce(mat):
         return print('No EOS round 2 on %s without bm/lat data' % mat.name)
-    matpth = os.path.join(root, 'bulks', xc, mat.name,
+    matpth = os.path.join(root, 'bulks', xc, snake(mat.name),
                           'eos' + ('2' if second else ''))
     os.makedirs(matpth, exist_ok=True)
 
@@ -285,7 +305,10 @@ def eos(mat: Mat, time: int, xc: str,
         if done(outpth):
             return print('Cannot do EOS for %s - ' % matpth + done(outpth))
         try:
-            orig_atoms = ase.io.read(outpth + '/OUTCAR')
+            orig_atoms = read_outcar(outpth)
+            strain_vols = [ase.cell.Cell(orig_atoms.get_cell() *
+                           get_strain(mat, i)).volume for i in range(-2, 3)]
+
         except Exception:
             return print('Cannot EOS for %s - ase parse error OUTCAR' % matpth)
     else:
@@ -293,39 +316,59 @@ def eos(mat: Mat, time: int, xc: str,
         output = matpth[:-1] + '/strain_%d'
         vols, engs = [], []
         for strain_i in [-2, -1, 0, 1, 2]:
-            atoms = ase.io.read((output % strain_i) + '/OUTCAR')
+            atoms = read_outcar((output % strain_i))
             vols.append(atoms.get_volume())
             engs.append(atoms.get_potential_energy())
+        dx = vols[1] - vols[0]
+
         for i, j in [(0, 1), (1, 2), (3, 2), (4, 3)]:
             if engs[i] < engs[j]:
-                return print('BAD ENG ORDER: ',
-                             ','.join(['%.2f' % x for x in engs]))
+                print('BAD ENG ORDER: ',
+                      ','.join(['%.2f' % x for x in engs]))
+                return print('VOL ORDER: ',
+                             ','.join(['%.2f' % x for x in vols]))
+            if abs(abs(vols[i] - vols[j]) - dx) > .01:
+                return print("UNEQUAL SPACING",
+                             ','.join(['%.2f' % x for x in vols]))
+
         eos = ase.eos.EquationOfState(vols, engs)
-        optvol, _, __ = eos.fit()  # type: Tuple[float,float,float]
+        optvol, _, eosbm = eos.fit()  # type: Tuple[float,float,float]
+
+        stencil = (-1 * engs[4] + 16 * engs[3] - 30 * engs[2] +
+                   16 * engs[1] - engs[0]) / (12 * dx**2)
+        ev_a3_to_gpa = (10**-9) * (1.602 * 10**-19) * (10**10)**3
+
+        bulkmod = stencil * vols[2] * ev_a3_to_gpa  # APPROXIMATE
+        eosbm = eosbm / ase.units.kJ * 1.0e24
+        err = abs(bulkmod - eosbm) / eosbm
+        # if err > 0.20:
+        #     return print(xc, mat.name, " Irregular!", bulkmod, eosbm)
+
         r = opt.root_scalar(f=lambda x: ase.atoms.Cell(
             orig_atoms.get_cell() * x).volume - optvol, x0=0.5, x1=2)
         orig_atoms.set_cell(
             orig_atoms.get_cell() * r.root, scale_atoms=True)
         v = orig_atoms.get_volume()
-        # pdb.set_trace()
         assert round(v, 5) == round(optvol, 5), (output, v, optvol)
+
+        shift = vols[2] - optvol
+        strain_vols = [v - shift for v in vols]
 
     # Bulk-specific INCAR settings
     magcar = dict(sigma=0.01, ismear=0, **magdic(mat))
 
     dirs = []
 
-    for strain_i in [-2, -1, 0, 1, 2]:
+    for svol, strain_i in zip(strain_vols, range(-2, 3)):
         # Strained Traj
-        lat_strain = get_strain(mat, strain_i)
         atoms = orig_atoms.copy()
-        atoms.set_cell(atoms.get_cell() * lat_strain, scale_atoms=True)
+        set_vol(atoms, svol)
         # Determine whether to submit again or not
         pth = os.path.join(matpth, 'strain_%d' % strain_i)
         os.makedirs(pth, exist_ok=True)
         if done(pth) != '':
             setup(pth=pth, atoms=atoms, incar={**incar, **magcar},
-                  kpts=(10, 10, 10), beef=beef)
+                  kpts=mk_kpts(atoms), beef=beef)
             dirs.append(pth)
 
     if dirs and attempt(retry, matpth, curr):
@@ -348,11 +391,6 @@ def _sub(pth: str, bash: str, time: int, sunc: str) -> None:
 def setup(pth: str, atoms: ase.Atoms, incar: Dict[str, Any],
           kpts: Tuple[int, int, int], beef: Optional[str]) -> None:
     '''General setup of directory for atomic or bulk (at a strain).'''
-    # Copy PBE wavecar if possible
-    # pbejob = pth.replace('/beef/', '/pbe/').replace('/scan/', '/pbe/')
-    # if all(['pbe' not in pth, 'opt' not in pth, done(pbejob),
-    #         not os.path.exists(os.path.join(pth, 'WAVECAR'))]):
-    #     os.system('cp {}/WAVECAR {}/WAVECAR'.format(pbejob, pth))
 
     # Write INCAR
     mk_incar(incar, os.path.join(pth, 'INCAR'))
@@ -435,7 +473,7 @@ def main() -> None:
         assert args.time > 0
         curr = current_jobs()
 
-        incar = dict(encut=900., ediff=1e-5, algo='FAST', istart=2,
+        incar = dict(encut=900., ediff=1e-6, algo='N', istart=2,
                      addgrid=True, ibrion=-1, npar=1 if args.mat else 4,
                      lasph=True, nelm=800, lorbit=10,
                      lcharg=False, lwave=True, prec='ACCURATE', **xcdict[xc])
@@ -446,7 +484,7 @@ def main() -> None:
             assert (not args.elems) and args.type, args
             if args.strains:
                 [m], [xc] = args.mat, args.xc
-                eos = os.path.join(root, 'bulks', xc, m.name, 'eos')
+                eos = os.path.join(root, 'bulks', xc, snake(m.name), 'eos')
                 eos2 = eos + '2'
                 assert not os.path.exists(eos2) or not os.listdir(eos2), eos2
                 assert args.strains.count(' ') == 4
@@ -454,7 +492,8 @@ def main() -> None:
                 return None
             for m in args.mat:
                 if args.type == 'eos':
-                    matpth = os.path.join(root, 'bulks', xc, m.name, 'eos/')
+                    matpth = os.path.join(root, 'bulks', xc, snake(m.name),
+                                          'eos/')
                     second = os.path.exists(matpth)
                     if second:
                         for strain_i in [-2, -1, 0, 1, 2]:
@@ -478,3 +517,8 @@ if __name__ == '__main__':
     main()
 
 # HCP: Be Cd Co Hf In Mg Os Re Ru Sc Tc Ti Tl Y Zn Zr
+# Ba_O Be Ca Ca_O Ca_S Ca_Se Cd Co Cr_C Cr_N Cs_F Fe_N Ga_N In_Sb Ir_C Ir_N K K_Br La_C La_N Li Mg Mg_O Mg_S Mn_C Mn_N Mn_O Mo Na Na_F Nb Nb_N Ni Ni_C Os_C Os_N Pd_C Pd_N Rb Rh Rh_N Ru_N Sc Sc_C Se_As Si_C Sn Ta_N Ti Ti_C Ti_N V V_N W W_C W_N Zn Zn_S Zn_Se Zn_Te Zr Zr_N
+# BaO Be Ca CaO CaS CaSe Cd Co CrC CrN CsF FeN GaN InSb IrC IrN K KBr LaC LaN Li Mg MgO MgS MnC MnN MnO Mo Na NaF Nb NbN Ni NiC OsC OsN PdC PdN Rb Rh RhN RuN Sc ScC SeAs SiC Sn TaN Ti TiC TiN V VN W WC WN Zn ZnS ZnSe ZnTe Zr ZrN
+
+# Pt LiH InP MoN Al NaCl ZrC Ge AgCl NiAl PtC CoN Sr AlAs FeC HfN CoAl RbI PtN BN GaAs Fe RhC FeAl HfC LiI NiN RuC MoC Ru CoC InAs BaSe GaP CdO BP TaC Si Pd GaSb LiF VC Ag Cu Au Ir NbC CsI Os Ta C MnS ScN LiCl BaO Be Ca CaO CaS CaSe Cd Co CrC CrN CsF FeN GaN InSb IrC IrN K KBr LaC LaN Li Mg MgO MgS MnC MnN MnO Mo Na NaF Nb NbN Ni NiC OsC OsN PdC PdN Rb Rh RhN RuN Sc ScC SeAs SiC Sn TaN Ti TiC TiN V VN W WC WN Zn ZnS ZnSe ZnTe Zr ZrN
+# Pt Li_H In_P Mo_N Al Na_Cl Zr_C Ge Ag_Cl Ni_Al Pt_C Co_N Sr Al_As Fe_C Hf_N Co_Al Rb_I Pt_N B_N Ga_As Fe Rh_C Fe_Al Hf_C Li_I Ni_N Ru_C Mo_C Ru Co_C In_As Ba_Se Ga_P Cd_O B_P Ta_C Si Pd Ga_Sb Li_F V_C Ag Cu Au Ir Nb_C Cs_I Os Ta C Mn_S Sc_N Li_Cl

@@ -31,7 +31,7 @@ Metric = U[str, D[str, float]]
 errtypes = ['ce', 'bm', 'lc']
 
 # unequally weigh matrix elements in imporance
-bias = np.array([1.2**(x % 8 + x//8) for x in range(64)])
+bias = np.array([1.2**(x % 8 + x // 8) for x in range(64)])
 
 root = '/'+os.path.join(*__file__.split('/')[:-3])
 
@@ -84,7 +84,7 @@ def hash_(x: Any) -> str:
         minmax = [[self.test_err[x][i] for i in [0, -1]] for x in errtypes]
         heights = [1.9, 2., 2.1, 2.2]
         names = ['(α=0)', '(α=1)']
-        # import pdb; pdb.set_trace()
+        # ; breakpoint()
         for i, (a0, a1, err, cv, n_sat) in enumerate(it):
             As, stys = [a0, a1], ['solid', 'dot']
             zip1 = zip(As, stys, names)

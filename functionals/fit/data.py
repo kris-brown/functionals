@@ -3,7 +3,8 @@ from typing import (Any,
                     Set as S,
                     Dict as D,
                     List as L,
-                    Tuple as T)
+                    Tuple as T,
+                    Optional as O)
 import random
 import math
 import numpy as np
@@ -22,14 +23,16 @@ class Datum(object):
     '''Something to be fit: a CE/BM/LC'''
 
     def __init__(self, mat: str, kind: str, vec: L[float], offset: float,
-                 target: float) -> None:
+                 target: float, volrat: O[float]) -> None:
         assert kind in ['ce', 'bm', 'lc']
+        assert (kind == 'lc') == bool(volrat)
         assert len(vec) == 64
         self.mat = mat
         self.kind = kind
         self.vec = vec
         self.offset = offset
         self.target = target
+        self.volrat = volrat
 
     def __eq__(self, other: object) -> bool:
         return False if not isinstance(other, Datum) else \
@@ -46,17 +49,15 @@ class Datum(object):
            - for lc, compute either vol or lattice constant
         '''
         if len(self.vec) != 64 or len(x) != 64:
-            import pdb
-            pdb.set_trace()
+            breakpoint()
         y = (np.array(self.vec) @ x) + self.offset
         if vol or self.kind != 'lc':
             div = 1 / self.target if rel else 1
             return float(y - self.target) * div
         else:
-            hcp = 'hcp' in self.mat
-            factor = 1. / 1.4142 if hcp else 1
-            new_y = (max(y, 0) * factor)**(1 / 3)
-            new_tar = (self.target * factor)**(1 / 3)
+            assert self.volrat
+            new_y = (max(y, 0) / self.volrat)**(1 / 3)
+            new_tar = (self.target / self.volrat)**(1 / 3)
             div = 1 / new_tar if rel else 1
             return float(new_y - new_tar) * div
 
@@ -124,10 +125,14 @@ class Data(object):
         else:
             raise ValueError()
 
-    def xy(self, rel: bool = True) -> T[L[np.ndarray], L[np.ndarray]]:
+    def xy(self, rel: O[bool] = None) -> T[L[np.ndarray], L[np.ndarray]]:
         '''Matrices for fast computation of cost func, weighted by scale.'''
-        return map(list, zip(*[self._xy(getattr(self, x), rel)  # type: ignore
-                               for x in ['ce', 'bm', 'lc']]))
+        if rel is None:
+            rels = [False, True, True]
+        else:
+            rels = [rel, rel, rel]
+        return map(list, zip(*[self._xy(getattr(self, x), r)  # type: ignore
+                               for x, r in zip(['ce', 'bm', 'lc'], rels)]))
 
     def _xy(self, ds: S[Datum], rel: bool) -> T[np.ndarray, np.ndarray]:
         X, Y = np.empty((0, 64)), []

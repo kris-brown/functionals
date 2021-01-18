@@ -1,10 +1,11 @@
 # Internal
 from dbgen import (Model, Gen, Query, PyBlock, NOT, AND,
                    Literal as Lit, CASE, OR, LIKE, NULL,
-                   GT, ABS)
+                   EQ)
 
 from functionals.scripts.load.analyze_bulks import analyze_bulks
 from functionals.scripts.load.analyze_opt_bulks import analyze_opt_bulks
+from functionals.scripts.load.primcell import primcell
 
 
 """
@@ -19,37 +20,18 @@ def bulk_analysis(mod: Model) -> None:
     ########################################################################
     ########################################################################
 
-    def get_struct(pth: str, mat: str) -> str:
-        from functionals.CLI.submit import matdata
-        from ase.io import read
-        if mat not in matdata:
-            return ''
-        s = str(matdata[mat].struct)
-        alpha = read(pth + '/latopt/POSCAR').get_cell_lengths_and_angles()[3]
+    pbkq = Query(exprs=dict(b=Bulks.id(), s=Bulks['stordir'](),
+                            t=Bulks['name']()))
 
-        if s.split('-')[0] in ['rocksalt', 'zincblende']:
-            s = s.split('-')[0] + ('' if alpha == 90 else "-prim")
-        return s
+    bcols = ['n_atoms', 'n_elems', 'composition', 'elems', 'struct']
 
-    sq = Query(dict(b=Bulks.id(), s=Bulks['stordir'](), n=Bulks['name']()))
-    sf = PyBlock(get_struct, args=[sq['s'], sq['n']])
-    struct = \
-        Gen(name='struct', query=sq, funcs=[sf],
-            actions=[Bulks(bulks=sq['b'], struct=sf['out'])])
-    ########################################################################
-    ########################################################################
-
-    pbkq = Query(exprs=dict(b=Bulks.id(), s=Bulks['stordir']()))
-
-    bcols = ['n_atoms', 'n_elems', 'composition', 'elems', 'volrat']
-
-    abpb = PyBlock(analyze_bulks, args=[pbkq['s']], outnames=bcols)
+    abpb = PyBlock(analyze_bulks, args=[pbkq['s'], pbkq['t']], outnames=bcols)
 
     pop_bulks =                                                            \
         Gen(name='pop_bulks',
             desc='populates Bulks by aggregating over material+calc info',
-            query=pbkq, funcs=[abpb],
-            actions=[Bulks(bulks=pbkq['b'], **{x: abpb[x] for x in bcols})])
+            query=pbkq, transforms=[abpb],
+            loads=[Bulks(bulks=pbkq['b'], **{x: abpb[x] for x in bcols})])
 
     ########################################################################
     pairs = [(Bulks[x](), Bulks['expt_' + x]()) for x in ['ce', 'bm', 'lat']]
@@ -57,43 +39,65 @@ def bulk_analysis(mod: Model) -> None:
     ndq = Query(dict(b=Bulks.id(), s=AND(ss)),
                 opt_attr=[item for sl in pairs for item in sl])
     suc = Gen(name='suc', query=ndq,
-              actions=[Bulks(bulks=ndq['b'], success=ndq['s'])])
+              loads=[Bulks(bulks=ndq['b'], success=ndq['s'])])
     ########################################################################
-    obcols = ['bm', 'bulkmod_lstsq', 'lstsq_abc', 'eosbm', 'vol']
+    obcols = ['bm', 'cellvol', 'bulkmod_lstsq', 'lstsq_abc']
     obq = Query(exprs=dict(
         b=Bulks.id(), s=Bulks['stordir'](), v=Bulks['volumes'](),
-        e=Bulks['energies'](), t=Bulks['struct']()))
+        e=Bulks['energies'](), t=Bulks['struct']()),
+        constr=EQ(Bulks['err'](), Lit('')))
     obpb = PyBlock(analyze_opt_bulks, args=[obq[x] for x in 'svet'],
                    outnames=obcols)
     opt_bulks = Gen(
         name='opt_bulks',
         desc='populates Bulk properties from optimum bulk jobs',
-        funcs=[obpb], query=obq,
-        actions=[Bulks(bulks=obq['b'], **{x: obpb[x] for x in obcols})])
+        transforms=[obpb], query=obq,
+        loads=[Bulks(bulks=obq['b'], **{x: obpb[x] for x in obcols})])
 
     ########################################################################
-    eobm = Bulks['eosbm']()
-    vvq = Query(dict(b=Bulks.id(),
-                     v=(Bulks['vol']() / Bulks['volrat']()) ** Lit(1. / 3.)))
+    vvq = Query(dict(b=Bulks.id(), p=Bulks['stordir'](),
+                     v=Bulks['vol'](), r=Bulks['volrat'](),
+                     s=Bulks['struct']()))
 
+    def get_lat(st: str, v: float, vr: float, pth: str) -> float:
+        a = (float(v) / float(vr))**(1 / 3)
+        if 'prim' not in st:
+            return a
+        elif True:  # 'zincblende' in st or 'rocksalt' in st:
+            return a * 2 ** 0.5
+        else:
+            breakpoint()
+            raise ValueError()
+
+    glpb = PyBlock(get_lat, args=[vvq[x] for x in 'svrp'])
     compute_lat = Gen(
         name='compute_lat',
         desc='Compute DFT lattice constant from optimum volume and vol ratio',
-        query=vvq,
-        actions=[Bulks(bulks=vvq['b'], lat=vvq['v'])])
+        query=vvq, transforms=[glpb],
+        loads=[Bulks(bulks=vvq['b'], lat=glpb['out'])])
 
     ########################################################################
-    eobm = Bulks['eosbm']()
-    eodq = Query(dict(b=Bulks.id(),
-                      d=(Bulks['bm']() - eobm) / eobm))
-
-    eos_diff = Gen(
-        name='eos_diff',
-        desc='Compute Bulks.eos_diff by taking ratio of finite bulkmod '
-        'to the eos bulkmod',
-        query=eodq,
-        actions=[Bulks(bulks=eodq['b'], eos_diff=eodq['d'])])
-
+    pcq = Query(dict(b=Bulks.id(), p=Bulks['stordir'](), s=Bulks['struct'](),
+                     v=Bulks['cellvol'](), r=Bulks['volprimrat']()))
+    pccols = ['volrat', 'vol', 'prim']
+    pcpb = PyBlock(primcell, args=[pcq[x] for x in 'psvr'], outnames=pccols)
+    primcell_ = Gen(
+        name='primcell',
+        desc='Compute DFT lattice constant from optimum volume and vol ratio',
+        query=pcq, transforms=[pcpb],
+        loads=[Bulks(bulks=pcq['b'], **{x: pcpb[x] for x in pccols})])
+    ########################################################################
+    vpq = Query(dict(b=Bulks.id(), s=Bulks['struct']()))
+    vppb = PyBlock(
+        (lambda z: {**{"": 0}, **dict(
+            fcc=4, bcc=2, rocksalt=4, diamond=4, zincblende=4, hcp=1,
+            cesiumchloride=1, wurtzite=0)}[z]),
+        args=[vpq['s']])
+    vprat = Gen(
+        name='volprimrat',
+        desc='Look up ratio of primative volume to conventional volume',
+        query=vpq, transforms=[vppb],
+        loads=[Bulks(bulks=vpq['b'], volprimrat=vppb['out'])])
     ########################################################################
     cd = dict(Hydride=['H'], III=['Al'], IV=['C', 'Se', 'As'],
               V=['N', 'V', 'P'], VI=['S', 'O'], VII=['I', 'F', 'Br'])
@@ -110,17 +114,9 @@ def bulk_analysis(mod: Model) -> None:
         name='alloy',
         desc='Populates bulks.alloy',
         query=aq,
-        actions=[Bulks(bulks=aq['b'], alloy=aq['k'])]
+        loads=[Bulks(bulks=aq['b'], alloy=aq['k'])]
     )
 
-    ########################################################################
-
-    iq = Query(dict(b=Bulks.id(), i=GT(ABS(Bulks['eos_diff']()), Lit(0.15))),
-               opt_attr=[Bulks['expt_bm']()])
-    irreg = Gen(name='irreg',
-                desc='Sets Bulks.irregular',
-                query=iq,
-                actions=[Bulks(bulks=iq['b'], irregular=iq['i'])])
     ########################################################################
     expts = [p[1] for p in pairs]
     hq = Query(dict(b=Bulks.id(), h=NOT(AND([NULL(e) for e in expts]))),
@@ -128,18 +124,18 @@ def bulk_analysis(mod: Model) -> None:
     hasdata = Gen(name='hasdata',
                   desc='True if we have any data for ce/bm/lat',
                   query=hq,
-                  actions=[Bulks(bulks=hq['b'], hasdata=hq['h'])])
+                  loads=[Bulks(bulks=hq['b'], hasdata=hq['h'])])
     ########################################################################
     # gens = []  # type: List[Gen]
     # for k in ['ce', 'bm', 'lat']:
     #     eq = Query(dict(b=Bulks.id(), e=Bulks[k]()-Bulks['expt_'+k]()))
-    #     gens.append(Gen(name='err '+k, query=eq, actions=[
+    #     gens.append(Gen(name='err '+k, query=eq, loads=[
     #         Bulks(bulks=eq['b'], **{'err_'+k: eq['e']})]))
     # ec, eb, el = gens
     ########################################################################
     ########################################################################
     ########################################################################
-    gens = [pop_bulks, opt_bulks, eos_diff, alloy, irreg, struct, suc, hasdata,
+    gens = [pop_bulks, opt_bulks, alloy, suc, hasdata, primcell_, vprat,
             compute_lat]
 
     mod.add(gens)

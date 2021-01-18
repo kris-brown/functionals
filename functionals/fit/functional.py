@@ -49,8 +49,8 @@ class Functional(object, metaclass=abc.ABCMeta):
     def apply(self, s: float, a: float) -> float:
         raise NotImplementedError
 
-    def plot(self, color: str) -> L[Any]:
-        ss = np.arange(0., 5, 0.1)
+    def plot(self, color: str, long: bool = False) -> L[Any]:
+        ss = np.arange(0., 100 if long else 5, 1 if long else 0.1)
         alphas = np.array([0, 1]) if self.mgga else [1]
         styles = ['solid', 'dot', 'dash', 'dashdot']
         out = []
@@ -99,6 +99,14 @@ class FromMatrix(Functional):
         # self.a1 = a1 self.msb = msb
         assert self.A.shape == (8, 8)
         self._name = name or '<no name>'
+
+    @staticmethod
+    def frompath(n: str) -> 'FromMatrix':
+        fi = 'data/beefs/%s.json' % n
+        beefpth = '/' + os.path.join(*__file__.split('/')[:-3], fi)
+        with open(beefpth, 'r') as f:
+            beefcoeff = np.array(json.load(f))
+        return FromMatrix(beefcoeff.reshape(8, 8), name=n)
 
     @property
     def x(self) -> np.ndarray:
@@ -154,9 +162,12 @@ class FromMatrix(Functional):
         else:
             denom = hii - lowi
             zi = -lowi / denom
-            colorscale = [[0., 'blue'], [zi / 2, 'green'],  # type: ignore
-                          [zi, 'yellow'], [zi + hii / 2 / denom, 'red'],
-                          [1, 'black']]
+            if denom:
+                colorscale = [[0., 'blue'], [zi / 2, 'green'],  # type: ignore
+                              [zi, 'yellow'], [zi + hii / 2 / denom, 'red'],
+                              [1, 'black']]
+            else:
+                colorscale = [[0., 'white'], [1, 'black']]  # type: ignore
         data = [go.Mesh3d(x=ss, y=als, z=fs, colorscale=colorscale,
                           intensity=i)]
         scene = dict(xaxis=dict(title='s'), yaxis=dict(title='alpha'),
@@ -169,11 +180,12 @@ class FromMatrix(Functional):
         return fig
 
 
-def plots(ps: L['Functional'], plot: bool = False) -> go.Figure:
+def plots(ps: L['Functional'], plot: bool = False, long: bool = False
+          ) -> go.Figure:
     assert len(ps) < 7
     cs = ['rgb(255,0,0)', 'rgb(0,255,0)', 'rgb(0,0,255)', 'rgb(153,0,153)',
           'rgb(0,0,0)', 'rgb(255,255,0)']
-    data = flatten([p.plot(color=c) for p, c in zip(ps, cs)])
+    data = flatten([p.plot(color=c, long=long) for p, c in zip(ps, cs)])
     layout = go.Layout(title='Functionals', xaxis=dict(title='s'),
                        yaxis=dict(title='Fx'))
     fig = go.Figure(data=data, layout=layout)
@@ -246,40 +258,18 @@ def ms2_s_curv(s: float, a: float) -> float:
 
 MS2 = FromFunc('MS2', fxMS2)
 
-
 # From data
 # ---------
-def BEEF() -> FromMatrix:
-    fi = 'data/beefs/beef.json'
-    beefpth = '/' + os.path.join(*__file__.split('/')[:-3], fi)
-    with open(beefpth, 'r') as f:
-        beefcoeff = np.array(json.load(f))
-    return FromMatrix(beefcoeff.reshape(8, 8), name='BEEF')
-
-
-def PBESOL() -> FromMatrix:
-    fi = 'data/beefs/pbesol.json'
-    beefpth = '/' + os.path.join(*__file__.split('/')[:-3], fi)
-    with open(beefpth, 'r') as f:
-        beefcoeff = np.array(json.load(f))
-    return FromMatrix(beefcoeff.reshape(8, 8), name='PBESOL')
-
-
-def Fsmooth() -> FromMatrix:
-    fi = 'data/beefs/smooth.json'
-    beefpth = '/' + os.path.join(*__file__.split('/')[:-3], fi)
-    with open(beefpth, 'r') as f:
-        beefcoeff = np.array(json.load(f))
-    return FromMatrix(beefcoeff.reshape(8, 8), name='smooth')
+BEEF = FromMatrix.frompath('mbeef')
+PBESOL = FromMatrix.frompath('pbesol')
 
 
 if __name__ == '__main__':
     '''Mbeef at s=0,alpha=1 is 1.03'''
-    beef = BEEF()
-    beef.A = np.multiply(
-        beef.A, [[3**(i + j) / 1500 for j in range(8)] for i in range(8)])
-    beef.A[0][0] += 1
-    plotly.offline.plot(plots([PBE, RPBE, PBEsol, beef]))
+    BEEF.A = np.multiply(
+        BEEF.A, [[3**(i + j) / 1500 for j in range(8)] for i in range(8)])
+    BEEF.A[0][0] += 1
+    plotly.offline.plot(plots([PBE, RPBE, PBEsol, BEEF]))
 
     # beef = Fsmooth()
     # for x in ['fx']:

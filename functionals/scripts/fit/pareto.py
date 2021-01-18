@@ -1,8 +1,8 @@
 from typing import List as L, Tuple as T, Any
 
 
-def pareto(Xs: L[Any], Ys: L[Any]) -> T[L[Any], L[Any]]:
-    maxX, maxY = False, False
+def pareto(Xs: L[Any], Ys: L[Any], maxX: bool = False, maxY: bool = False
+           ) -> T[L[Any], L[Any]]:
     myList = sorted([[Xs[i], Ys[i]] for i in range(len(Xs))], reverse=maxX)
     p_front = [myList[0]]
     for pair in myList[1:]:

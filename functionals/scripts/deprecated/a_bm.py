@@ -1,17 +1,18 @@
 from typing import Tuple as T
-import numpy as np # type: ignore
-from numpy.linalg import inv # type: ignore
+import numpy as np
+from numpy.linalg import inv
 from json import dumps, loads
 
-def a_bm(engs_     : str,
-         vols_     : str,
-         contribs_ : str,
-         coefs_    : str,
-         bm_expt_  : float,
-         allengs_  : str,
-         allvols_  : str,
-         vol:float,xvol:float
-         ) -> T[str,float,str,float]:
+
+def a_bm(engs_: str,
+         vols_: str,
+         contribs_: str,
+         coefs_: str,
+         bm_expt_: float,
+         allengs_: str,
+         allvols_: str,
+         vol: float, xvol: float
+         ) -> T[str, float, str, float]:
     '''
     E(Vol) = Ex(Vol) + Enx(Vol) = A * Vol² + B * Vol + C
      - A :: eV/A^-6, B :: eV/A^-3, C :: eV
@@ -33,7 +34,7 @@ def a_bm(engs_     : str,
     so = (Aᵗ·A)⁻¹·Aᵗ·e
     or A = [1,0,0] · (Aᵗ·A)⁻¹·Aᵗ·e
 
-    we just need the energy vector as a function of an arbitrary beef coef vector
+    we just need the energy vector as a function of an arbitrary beef coef vect
     we need to hold the non-x energy constant and add in the variable x part
     E = Enx + C · x̅ = Edft - C·x̅_old + C· x̅
 
@@ -62,37 +63,36 @@ def a_bm(engs_     : str,
     '''
 
     # Common stuff to preprocessing both BM and Lattice data
-    #----------------------------------------------------------
-    bm_conv  = (10**-9) * (1.602 * 10**-19) * (10**10)**3
+    # ----------------------------------------------------------
+    bm_conv = (10**-9) * (1.602 * 10**-19) * (10**10)**3
 
-    volumes  = np.array(loads(vols_))             # 5 element array, A^3
+    volumes = np.array(loads(vols_))             # 5 element array, A^3
     energies = np.array(loads(engs_))             # 5 element array, eV
 
     contribs = np.array(loads(contribs_))
-    N = len(volumes) # number of jobs used
-    coefs    = np.array(loads(coefs_))            # 64 element array
+    N = len(volumes)  # number of jobs used
+    coefs = np.array(loads(coefs_))            # 64 element array
 
-    fit = np.polyfit(loads(allvols_),loads(allengs_),2)
-    if True: #bm_expt_ is None:
-        bm_expt = 2 * fit[0] * volumes[0] * bm_conv # APPROXIMATE
+    fit = np.polyfit(loads(allvols_), loads(allengs_), 2)
+    if True:  # bm_expt_ is None:
+        bm_expt = 2 * fit[0] * volumes[0] * bm_conv  # APPROXIMATE
     else:
-        bm_expt  = float(bm_expt_)
+        bm_expt = float(bm_expt_)
 
-    c = np.vstack(contribs) # n points x 64
-    e_nonx  = energies - c @ coefs # len-5 vector
+    c = np.vstack(contribs)  # n points x 64
+    e_nonx = energies - c @ coefs  # len-5 vector
 
-    vander = np.vstack((np.ones(N),volumes,volumes**2)).T  # 5 x 3
-    vinv   = inv(vander.T @ vander)                        # 3 x 3
-    solver = vinv @ vander.T                              # 3 x 5
+    vander = np.vstack((np.ones(N), volumes, volumes**2)).T  # 5 x 3
+    vinv = inv(vander.T @ vander)                            # 3 x 3
+    solv = vinv @ vander.T                                   # 3 x 5
 
-
-    bm_base = 2 * bm_conv * volumes[0] * (np.array([0,0,1]) @ solver)
+    bm_base = 2 * bm_conv * volumes[0] * (np.array([0, 0, 1]) @ solv)
     a_bm = bm_base @ c
     b_bm = bm_base @ e_nonx
 
     bm_expt = bm_base @ c @ coefs + (bm_base @ e_nonx)
-    lattice_base = -bm_conv* volumes[0] /bm_expt * (np.array([0,1,0]) @ solver)
-    a_l = lattice_base @ c
-    b_l = lattice_base @ e_nonx
+    lat_base = -bm_conv * volumes[0] / bm_expt * (np.array([0, 1, 0]) @ solv)
+    a_l = lat_base @ c
+    b_l = lat_base @ e_nonx
 
-    return dumps(a_bm.tolist()),b_bm, dumps(a_l.tolist()),b_l
+    return dumps(a_bm.tolist()), b_bm, dumps(a_l.tolist()), b_l

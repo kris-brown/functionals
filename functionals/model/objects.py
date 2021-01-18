@@ -12,7 +12,7 @@ mets = ['ce', 'bm', 'lat', 'vol', 'mag']
 funmetrics = [y + 'mae_%s' % (x) for x in mets for y in ['', 'rel']]
 errmetrics = [y + 'err_%s' % (x) for x in mets for y in ['', 'rel']]
 
-ms = [Attr(m, Decimal(), desc='Only True if results in for all mats')
+ms = [Attr(m, Decimal(), desc='error metric')
       for m in funmetrics]
 calc = Obj(
     name='calc',
@@ -76,18 +76,19 @@ bulks = Obj(
         Attr('composition', Varchar(), desc='Species composition'),
         Attr('elems', Varchar(), desc='common separated list of atomic nums'),
         Attr('struct', Varchar(), desc='fcc/bcc/rocksalt/etc.'),
+        Attr('prim', Boolean(), desc='False means conventional unit cell'),
         Attr('n_atoms', desc='Number of atoms in unit cell'),
         Attr('n_elems', desc='Number of distinct chemical species'),
         Attr('alloy', Varchar(), desc='What type of alloy it is, if any'),
-
+        Attr('volprimrat', Int(), desc='Ratio of conventional to primative vol'),
         # Analysis Results from minimum 5 jobs
         Attr('success', Boolean(), desc='DFT data for each experiment data'),
-        # Attr('energy', Decimal(),desc='Minimum energy according to quadfit'),
         Attr('mag', Decimal(), desc='Magmom of the minimum energy job'),
         Attr('contrib', Text('long'), desc='xc contribs of 5 optimal jobs'),
         Attr('eng', Decimal(), desc='unit cell lattice from quadfit'),
         Attr('lat', Decimal(), desc='unit cell lattice from quadfit'),
-        Attr('vol', Decimal(), desc='Volume from quad fit'),
+        Attr('vol', Decimal(), desc='Volume CONVENTIONAL CELL of optjob, stencil'),
+        Attr('cellvol', Decimal(), desc='Volume (possibly prim) of optjob, stencil'),
         Attr('volrat', Decimal(), desc='lattice/vol^1/3'),
 
         Attr('volumes', Text('long'), desc='volumes of the 5 optimal jobs'),
@@ -99,7 +100,6 @@ bulks = Obj(
         Attr('eform', Decimal(), desc='Formation energy, eV, given ENG'),
         Attr('ce', Decimal(), desc='Cohesive  energy, eV'),
         # Analysis from ase.eos
-        Attr('eosbm', Decimal(), desc='Bulk modulus, GPa, from ASE EOS'),
         Attr('eos_diff', Decimal(), desc='Ratio of discrete BM to EOS BM'),
         Attr('irregular', Boolean(), desc='discrete BM differs from EOS'),
 
@@ -152,10 +152,10 @@ fitparams = Obj(
     desc='Input parameters to a fit',
     attrs=[Attr('ce_scale', Decimal(), identifying=True, desc='One cost unit'),
            Attr('bm_scale', Decimal(), identifying=True, desc='One cost unit'),
-           Attr('lc_scale', Decimal(), identifying=True, desc='One cost unit'),
-           Attr('consts', Text(), identifying=True,
-                desc='Special weights or points to use'),
-           Attr('abdata', Text(), desc='computed from consts')])
+           Attr('lc_scale', Decimal(), identifying=True, desc='One cost uni')])
+# Attr('consts', Text(), identifying=True,
+# desc='Special weights or points to use'),
+# Attr('abdata', Text(), desc='computed from consts')])
 
 # cons = Obj(
 #     name='const', desc='CONSTRAINT',
@@ -171,6 +171,8 @@ fit = Obj(
     attrs=[Attr('x', Text(), desc='Coefficients of optimal point in the traj'),
            Attr('cv', Text(), desc='Summary of cross validation data'),
            Attr('err', Text(), desc='Scipy error message'),
+           Attr('bump', Int(), desc='# of bumps in a predefined grid'),
+           Attr('code', Text(), desc='Abbreviation of ID, hopefully unique'),
            Attr("step", Int(), identifying=True,
                 desc='Optimization iteration step')] + [
                     Attr(m, Decimal(), desc='') for m in funmetrics],
@@ -191,12 +193,12 @@ surf = Obj(
 err = RawView('errs', '''
 SELECT name,mae_ce,mae_bm,mae_lat,mae_mag,
        relmae_ce,relmae_bm,relmae_lat,relmae_mag,
-       true as isfx
+       true as isfx, NULL as step
 FROM calc
 UNION
 SELECT fit_id::text,mae_ce,mae_bm,mae_lat,NULL,
        relmae_ce,relmae_bm,relmae_lat, NULL,
-       false as isfx
+       false as isfx, step
 FROM fit
 ''')
 

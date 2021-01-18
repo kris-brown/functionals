@@ -104,7 +104,7 @@ def parse_bulks(root: str) -> T[L[str],L[str],L[int],L[int],L[str],
             mjs.append(-1 if left else (1 if right else 0))
             centered = not (left or right)
             #print('\n\n\n',pth)
-            #import pdb;pdb.set_trace()
+            #;breakpoint()
 
             suc =  bool((len(s_engs) > 5) and centered and (eosvol > 0))
             sucs.append(suc)
@@ -143,15 +143,15 @@ def parse_bulks(root: str) -> T[L[str],L[str],L[int],L[int],L[str],
                 elif incar['metagga'] is None and incar['gga']=='PE':
                     fxs.append('PBE')
                 else:
-                    import pdb;pdb.set_trace()
+                    ;breakpoint()
                     raise ValueError()
     print(list(map(len, [pths,names,rts,pws,fxs,alleng,allvol,allcontrib,n_atoms,n_elems, # type: ignore
             comps,eosbms,lats,sls,shs,mjs,incs,sucs])))
-    import pdb;pdb.set_trace()
+    ;breakpoint()
 
     return (pths,names,rts,pws,fxs,alleng,allvol,allcontrib,n_atoms,n_elems, # type: ignore
             comps,eosbms,lats,sls,shs,mjs,incs,sucs)
 
     # except Exception as e:
     #     import traceback,pdb
-    #     traceback.print_exc(); print(pth,e);pdb.set_trace(); assert False
+    #     traceback.print_exc(); print(pth,e);breakpoint(); assert False

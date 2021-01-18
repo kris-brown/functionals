@@ -26,9 +26,15 @@ def parse_bulks(root: str
             O[float], O[str],
             O[float], O[str], O[str], O[str], str]:
 
+        latopt = read(os.path.join(pth, 'latopt/POSCAR'))
+        if latopt[:10] == "Exception:":
+            return err("latopt POSCAR - " + latopt)
+
+        os.system("sed -i.bak 's/ r/Zr/g' " + pth + '/latopt/CONTCAR')
+
         latopt = read(os.path.join(pth, 'latopt/OUTCAR'))
         if latopt[:10] == "Exception:":
-            return err("latopt - " + latopt)
+            return err("latopt OUTCAR - " + latopt)
 
         rpth = os.path.join(pth, 'latopt/run.log')
         if not os.path.exists(rpth):
@@ -39,62 +45,84 @@ def parse_bulks(root: str
                     return err('fatal error in latopt run.log')
 
         # Analyze eos
-        eos1engs, eos1vols = [], []
-        for i in [-2, -1, 0, 1, 2]:
-            strain = os.path.join(pth, 'eos/strain_%d' % i)
-            if not os.path.exists(strain):
-                return err("Missing  " + strain)
-            _, [c_c_i], [c_e_i], [c_m_i], [z] = parse_job(strain)
-            if z:
-                return err(strain + ' ' + z)
-            if i == 0:
-                c_c = c_c_i
-                c_e = c_e_i
-                c_m = c_m_i
-            if c_e_i is None:
-                return err("Bad EOS1 job " + strain)
-            else:
-                eos1engs.append(c_e_i)
-                eos1vols.append(io.read(strain + '/POSCAR').get_volume())
-        for i, j in [(0, 1), (1, 2), (3, 2), (4, 3)]:
-            if eos1engs[i] < eos1engs[j]:
-                estr = "Bad EOS1 eng ordering %i %s - %i %s"
-                return err(estr % (i, eos1engs[i], j, eos1engs[j]),
-                           str(eos1engs), str(eos1vols))
+        # eos1engs, eos1vols = [], []
+        # for i in [-2, -1, 0, 1, 2]:
+        #     strain = os.path.join(pth, 'eos/strain_%d' % i)
+        #     if not os.path.exists(strain):
+        #         return err("Missing  " + strain)
+        #     _, [c_c_i], [c_e_i], [c_m_i], [z] = parse_job(strain)
+        #     if z:
+        #         return err(strain + ' ' + z)
+        #     if c_e_i is None:
+        #         return err("Bad EOS1 job " + strain)
+        #     else:
+        #         eos1engs.append(c_e_i)
+        #         eos1vols.append(io.read(strain + '/POSCAR').get_volume())
+        # for i, j in [(0, 1), (1, 2), (3, 2), (4, 3)]:
+        #     if eos1engs[i] < eos1engs[j]:
+        #         estr = "Bad EOS1 eng ordering %i %s - %i %s"
+        #         return err(estr % (i, eos1engs[i], j, eos1engs[j]),
+        #                    str(eos1engs), str(eos1vols))
 
-        # Analyze eos2
-        if not os.path.exists(os.path.join(pth, 'eos2')):
-            vols = engs = conts = None
+        # dx = eos1vols[1] - eos1vols[0]
+        # eos = EquationOfState(eos1vols, eos1engs)
+        # __, ___, eosbm = eos.fit()  # type: T[float,float,float]
+        # stencil = (-1 * eos1engs[4] + 16 * eos1engs[3] - 30 * eos1engs[2] +
+        #            16 * eos1engs[1] - eos1engs[0]) / (12 * dx**2)
+        # ev_a3_to_gpa = (10**-9) * (1.602 * 10**-19) * (10**10)**3
+        # bulkmod = stencil * eos1vols[2] * ev_a3_to_gpa  # APPROXIMATE
+        # eosbm = eosbm / ase.units.kJ * 1.0e24
+        # if abs(bulkmod - eosbm) / eosbm > 0.2:
+        #     estr = " Irregular! %f %f" % (bulkmod, eosbm)
+        #     return err(estr)
+
+        # Analyze eos
+        if not os.path.exists(os.path.join(pth, 'eos')):
+            return err("No EOS ")
         else:
             vols_, engs_, conts_ = [], [], []
             for i in [-2, -1, 0, 1, 2]:
-                strain = os.path.join(pth, 'eos2/strain_%d' % i)
+                strain = os.path.join(pth, 'eos/strain_%d' % i)
                 if not os.path.exists(strain):
-                    return err("Missing  "+strain)
-                _, [cont], [eng_], [y], [z] = parse_job(strain)
+                    return err("Missing  " + strain)
+                _, [cont], [eng_], [mag_], [z] = parse_job(strain)
+                if i == 0:
+                    c_c = cont
+                    c_e = eng_
+                    c_m = mag_
                 if z:
-                    return err(strain+' '+z)
+                    return err(strain + ' ' + z)
                 if eng_ is None:
-                    return err("Bad EOS1 job "+strain)
+                    return err("Bad EOS job " + strain)
                 else:
                     engs_.append(eng_)
                 conts_.append(json.loads(cont) if cont else [])
-                vols_.append(io.read(strain+'/POSCAR').get_volume())
+                vols_.append(io.read(strain + '/POSCAR').get_volume())
 
-            if len(set(np.round(np.diff(vols_), 6))) > 1:
+            if len(set(np.round(np.diff(vols_), 3))) > 1:
                 return err('Irregular spacing of EOS %s' % np.diff(vols_))
 
             assert len(vols_) == 5
-            vols, engs, conts = map(   # type: ignore
+            vols, engs, conts = map(
                 json.dumps, [vols_, engs_, conts_])
 
             for i, j in [(0, 1), (1, 2), (3, 2), (4, 3)]:
                 if engs_[i] < engs_[j]:
-                    estr = "Bad EOS2 eng ordering %i %s - %i %s"
-                    return err(estr % (i, engs_[i], j, engs_[j]))
+                    estr = "Bad EOS eng ordering %i %s - %i %s"
+                    return err(estr % (i, engs_[i], j, engs_[j]), engs, vols)
+
+        # stencil = (-1 * engs_[4] + 16 * engs_[3] - 30 * engs_[2] +
+        #            16 * engs_[1] - engs_[0]) / (12 * dx**2)
+        # bm2 = stencil * eos1vols[2] * ev_a3_to_gpa  # APPROXIMATE
+        # eos = EquationOfState(vols_, engs_)
+        # __2, ___2, eosbm2 = eos.fit()  # type: T[float,float,float]
+        # eosbm2 = eosbm2 / ase.units.kJ * 1.0e24
+        # if abs(bm2 - eosbm2) / eosbm2 > 0.2:
+        #     return err('Bulkmod: ase.eos2 %.1f eos2 %.1f' % (
+        #         eosbm2, bm2))
 
         if isinstance(conts, str) and conts[:3] == '[[]':
-            conts = None
+            conts = None  # type: ignore
 
         # Analyze phonon
         # TODO
@@ -106,13 +134,11 @@ def parse_bulks(root: str
         eosconts, errs = [], [], [], [], [], [], [], [], [], []
 
     # Main loop
-    for xc in os.listdir(root):
-        for mat in os.listdir(os.path.join(root, xc)):
-            if 'CdS' in mat or 'CdT' in mat:
-                continue
+    for xc in filter(lambda x: '.' not in x, os.listdir(root)):
+        for mat in filter(lambda x: '.' not in x, os.listdir(os.path.join(root, xc))):
             pth = os.path.join(root, xc, mat)
             pths.append(pth)
-            mats.append(mat)
+            mats.append(mat.replace('_', ''))
             xcs.append(xc)
             a, b, c, d, e, f, g = process(pth)
             engs.append(a)

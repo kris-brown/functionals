@@ -1,12 +1,20 @@
-import pdb
+
 from typing import Tuple as T, Optional as O
 import numpy as np
 
 
 def fit_vectors(engs_: str, vols_: str, contribs_: str, coefs_: str,
-                volume: float, name: str
-                ) -> T[O[str], O[str]]:
-    '''Ax=b fit vectors for experimental CE, BM, and volume.
+                volume: float, name: str, dft_bm: float, volprimrat: float,
+                prim: bool) -> T[O[str], O[str]]:
+    '''
+    engs_/vols_ = JSON'd 5-element vects for the energies and volumes from DFT
+    contribs_ = JSON'd 5x64 matrix for the exchange contribs from each of the
+                5 DFT jobs
+    coefs_ = JSON'd 64 element BEEFCAR used to compute the DFT.
+    volume = volume of CONVENTIONAL UNIT CELL according to DFT
+             (equal to vols_[2] * ratio of # of atoms)
+    dft_bm = the stencil-calculated bulk modulus from engs_/vols_
+    Ax=b fit vectors for experimental BM and volume.
 
     Quadratic approximation around center point: Eng = Av^2 + Bv + C
 
@@ -35,7 +43,7 @@ def fit_vectors(engs_: str, vols_: str, contribs_: str, coefs_: str,
     if len(engs) != 5:
         return None, None
     dx = np.mean(np.diff(vols))
-    assert np.max(np.diff(vols)-dx) < 0.0001, vols  # check even spacing
+    assert np.max(np.diff(vols) - dx) < 0.0001, vols  # check even spacing
     volume = float(volume)
 
     class AB(object):
@@ -45,32 +53,42 @@ def fit_vectors(engs_: str, vols_: str, contribs_: str, coefs_: str,
             self.A = A if A is not None else np.zeros(64,)
             self.b = b or 0.
 
-        def __str__(self) -> str: return dumps([self.A.tolist(), self.b])
-        def __add__(self, ab: 'AB') -> 'AB': return AB(self.A +
-                                                       ab.A, self.b+ab.b)
-        def __sub__(self, ab: 'AB') -> 'AB': return AB(self.A -
-                                                       ab.A, self.b-ab.b)
+        def __str__(self) -> str:
+            return dumps([self.A.tolist(), self.b])
 
-        def __rmul__(self, z: float) -> 'AB': return AB(self.A*z, self.b*z)
-        def __truediv__(self, z: float) -> 'AB': return AB(self.A/z, self.b/z)
-        def __matmul__(
-            self, v: np.array) -> float: return float(self.A @ v + self.b)
+        def __add__(self, ab: 'AB') -> 'AB':
+            return AB(self.A + ab.A, self.b + ab.b)
 
-    Enonxc = [e-contrib@coefs for e, contrib in zip(engs, contribs)]
+        def __sub__(self, ab: 'AB') -> 'AB':
+            return AB(self.A - ab.A, self.b - ab.b)
+
+        def __rmul__(self, z: float) -> 'AB':
+            return AB(self.A * z, self.b * z)
+
+        def __truediv__(self, z: float) -> 'AB':
+            return AB(self.A / z, self.b / z)
+
+        def __matmul__(self, v: np.array) -> float:
+            return float(self.A @ v + self.b)
+
+    Enonxc = [e - contrib@coefs for e, contrib in zip(engs, contribs)]
     E = [AB(contrib, enonxc) for contrib, enonxc in zip(contribs, Enonxc)]
-    ddE = (-1*E[4] + 16*E[3] - 30*E[2] + 16*E[1] - E[0])/(12*dx**2)
-    Bulkmod = float(volume) * ev_a3_to_gpa * ddE
+    ddE = (-1 * E[4] + 16 * E[3] - 30 * E[2] + 16 * E[1] - E[0]) / (12 * dx**2)
+    Bulkmod = vols[2] * ev_a3_to_gpa * ddE
 
     # dE = (-1*E[4] + 8*E[3] - 8*E[1] + E[0])/(12*dx)
     # old_Vopt = AB(b=float(volume)) - dE/(ddE@coefs)
 
-    JohannesMagicQ = -1/(2*(ddE@coefs)*(dx**2))
-    v1prefactor = JohannesMagicQ*(-2*volume - dx)
-    v2prefactor = JohannesMagicQ*4*volume
-    v3prefactor = JohannesMagicQ*(-2*volume + dx)
+    JohannesMagicQ = -1 / (2 * (ddE @ coefs) * (dx**2)) * (
+        float(volprimrat) if prim else 1)
+    v1prefactor = JohannesMagicQ * (-2 * vols[2] - dx)
+    v2prefactor = JohannesMagicQ * 4 * vols[2]
+    v3prefactor = JohannesMagicQ * (-2 * vols[2] + dx)
 
     Vopt = v1prefactor * E[1] + v2prefactor * E[2] + v3prefactor * E[3]
-    if name == 'Nb':
-        import pdb
-        pdb.set_trace()
+
+    # Sanity check
+    assert (round((Bulkmod @ coefs) - float(dft_bm), 5) == 0)
+    assert (round((Vopt @ coefs) - float(volume), 5) == 0)
+
     return str(Bulkmod), str(Vopt)

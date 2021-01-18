@@ -1,4 +1,4 @@
-from typing import List as L, Tuple as T,  Optional as O
+from typing import List as L, Tuple as T, Optional as O
 
 
 def parse_job(root: str,
@@ -24,7 +24,7 @@ def parse_job(root: str,
             return err('ICHARG = 11')
         if incar['ismear'] == -2:
             return err('ISMEAR = %s' % incar['ismear'])
-        if incar['ldiag'] == False:
+        if incar['ldiag'] is False:
             return err('LDIAG is set to false')
 
         # Verify job completed successfully
@@ -65,7 +65,7 @@ def parse_job(root: str,
             natom = int(search(pat2, outcar).groups()  # type: ignore
                         [0])
             mags_ = list(findall(pat, outcar))
-            magg = float(mags_[-2])/natom or None
+            magg = float(mags_[-2]) / natom or None
         else:
             magg = None
 
@@ -82,7 +82,7 @@ def parse_job(root: str,
             if incar['sigma'] is None or incar['sigma'] > 1e-4:
                 return err("atomic SIGMA = %s" % incar['sigma'])
             if pro_err:
-                return err('PROCAR: '+pro_err)
+                return err('PROCAR: ' + pro_err)
         return cont, eng, magg, ''
 
     pths, contribs, engs, mags, errs = [

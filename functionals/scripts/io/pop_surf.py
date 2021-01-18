@@ -7,8 +7,8 @@ def pop_surf() -> T[L[str], L[str], L[float], L[float]]:
     root = '/Users/ksb/scp_tmp/vauto/surf'
     mats, xcs, ots, hos = [], [], [], []
 
-    for xc in os.listdir(root):
-        for mat in os.listdir(os.path.join(root, xc)):
+    for xc in filter(lambda x: '.' not in x, os.listdir(root)):
+        for mat in filter(lambda x: '.' not in x, os.listdir(os.path.join(root, xc))):
 
             def geteng(site: str) -> float:
                 out = os.path.join(root, xc, mat, site, 'OUTCAR')

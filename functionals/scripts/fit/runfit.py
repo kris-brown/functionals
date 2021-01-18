@@ -2,40 +2,50 @@
 from typing import Tuple as T, List as L
 
 
-def runfit(data_: str, ce_: float, bm_: float, lc_: float, consts_: str
+def runfit(data_: str, ce_: float, bm_: float, lc_: float, ref: str
            ) -> T[L[str], L[int], str, L[str], L[str], L[str],
-                  L[str], L[str], L[str], str]:
+                  L[str], L[str], L[str], L[int], str]:
     '''
-    consts is serialized A*x<B matrices
+    Arguments:
+        data_ is serialized A*x<B matrices
+        ce_, bm_, and lc_ are relative weights on the three datasets
+            (lower = more weight)
+        ref is the serialized functional that was used to generate the
+            DFT data (i.e. the starting guess)
 
-    Returns res_vector, cv_data, mae_ce relmae_ce mae_bm relmae_bm
-    mae_lat relmae_lat mae_vol relmae_vol mae_mag relmae_mag err
+    Returns:
+        xs_out: trajectory of functionals discovered by fitting
+        opt_xs: indices into the above list - the subset that seem good
+        (and other things)
     '''
     import json
     import functionals.fit.data as fdata
     import functionals.fit.functional as fx
     import functionals.scripts.fit.pareto as pareto
+    import functionals.fit.math as math
     import plotly
     import plotly.graph_objs as go
-    import pdb
     import numpy as np
     import scipy.optimize as opt
+    from functionals.scripts.fit.legcountzeros import countzeros_in_s_at_alpha
 
-    ms2 = x = np.array([
-        1.2909350231501469, 0.2465804012284167, -0.03821209014569475, 0.00529705394712429, -0.0007238997245930972, 5.328792422471612e-05, -5.1621942345037315e-05, -4.815694813585898e-05, 0.03151729199875705, -0.05207745850199544, 0.024414808963883195, -0.004361104048983925, 0.0006958550589244329, 1.23444049029741e-05, 0.00011675664799358277, 0.00012931051714575557, -3.984507626043427e-05, 2.0741293699137517e-05, 4.910807626956804e-05, -0.00011955322579136519, -5.192392243427056e-05, -0.00012842806378204823, -0.00013417985726866814, -0.00016678490487096736, 3.6804163267903376e-05, -1.917776957893514e-05, -4.540134087044211e-05, 0.00011033504367016455, 4.820973545648982e-05, 0.00011878859525861501, 0.00012397649516404196, 0.00015431369857345442, -2.6467618673671896e-05, 1.3812919294735846e-05, 3.269598858826801e-05, -7.924699408094865e-05, -3.493487062077754e-05, -8.559944901719986e-05, -8.920008924544498e-05, -0.00011125176685256548, 1.4614502947494727e-05, -7.640968977915107e-06, -1.8083052316753068e-05, 4.3690618400164006e-05, 1.9466090227040113e-05, 4.738006039082977e-05, 4.928000817903369e-05, 6.161257946776035e-05, -6.048969514884463e-06, 3.1746395247115385e-06, 7.510695728058644e-06, -1.8034616473329203e-05, -8.18734544611087e-06, -1.9696146222487697e-05, -2.0423598530726044e-05, -2.5643594612769123e-05, 1.544954038475419e-06, -8.163516253199092e-07, -1.9309474669922123e-06, 4.586015422460599e-06, 2.145156585619744e-06, 5.066002704462669e-06, 5.230302978950324e-06, 6.6110885027564675e-06])
     #############
     # Constants #
     #############
     n_cv = 0
     errtypes = ['ce', 'bm', 'lc', 'vol']
-
-    boundpenalty = 10
-    num_maxiter = 100000
-    tol = 1e-7
+    num_maxiter = 300
+    tol = 5e-6
+    bounds = [(.5, 1.5)] + [(-.1, 0.1)] * 63
+    rels = [False, True, True]
+    #
+    ms2fx = fx.FromMatrix.frompath('ms2')
+    ms2 = ms2fx.x
+    reffx = fx.FromMatrix(json.loads(ref))
 
     with open('/Users/ksb/scp_tmp/vi.json', 'r') as f:
         vi = json.load(f)
-    viinv = np.linalg.inv(vi)
+        viinv = np.linalg.inv(vi)
 
     leg_0 = np.array([
         -1., -1., -0.9491079123427593, -0.9324695142031523, -0.9061798459386646, -0.861136311594052, -0.7745966692414833, -0.7415311855993938, -0.6612093864662645, -0.5773502691896257, -0.5384693101056833, -0.40584515137739774, -0.3399810435848562, -0.238619186083197, -0.11, -0.0, 0.23861918608319707, 0.3399810435848562, 0.4058451513773972, 0.538469310105683, 0.577350269189626, 0.6612093864662646, 0.7415311855993948, 0.7745966692414835, 0.8611363115940525, 0.9061798459386636, 0.9324695142031525, 0.9491079123427586, 1.0, 1.0])
@@ -47,23 +57,22 @@ def runfit(data_: str, ce_: float, bm_: float, lc_: float, consts_: str
 
     midpointsb = (leg_0b[1:] + leg_0b[:-1]) / 2.
 
+    # apoints = [math.t_alpha(a) for a in np.linspace(0, 2, 10)]
+    # spoints = [math.t_s(s) for s in np.linspace(0, 5.5, 55)]
+
     x_s = np.roll(range(len(midpoints)), len(midpoints) // 2 + 1
                   ) - float(int(len(midpoints) // 2))
-
     x_alpha = np.roll(range(len(midpointsb)), len(midpointsb) // 2 + 1
                       ) - float(int(len(midpointsb) // 2))
-
     m_x, m_y = np.meshgrid(x_s, x_alpha)
-
     l_s = np.log(x_s[1:len(x_s) // 2 + 1])
     l_alpha = np.log(x_alpha[1:len(x_alpha) // 2 + 1])
     l_x, l_y = np.meshgrid(l_s, l_alpha)
 
-    llx = l_x.flatten()
-    lly = l_y.flatten()
-
-    linreg2dX_ = np.array([llx, lly]).T
-    linreg2dX = np.c_[linreg2dX_, np.ones(linreg2dX_.shape[0])]
+    # print("mpts based on initial guess, not ms2")
+    # mpts = np.polynomial.legendre.leggrid2d(apoints, spoints,
+    #                                         np.reshape(reffx.x, (8, 8))
+    #                                         ).flatten()
 
     ################################################
     # Deserialize experimental and constraint data #
@@ -72,9 +81,10 @@ def runfit(data_: str, ce_: float, bm_: float, lc_: float, consts_: str
     data = fdata.Data.from_list(json.loads(data_))
     print('\nData len %d' % len(data))
 
-    ce, bm, lc = refs = [1, 8, 4]  # list(map(float, [ce_, bm_, lc_]))
+    ce, bm, lc = refs = list(map(float, [ce_, bm_, lc_]))
+    print('hyperparams are ', refs)
 
-    As, Bs = data.xy(rel=True)
+    As, Bs = data.xy()  # absolute CE, relative BM/LC
     Ax = np.vstack([a / w for a, w in zip(As, refs)])
     Bx = np.concatenate([b / w for b, w in zip(Bs, refs)])
 
@@ -82,9 +92,14 @@ def runfit(data_: str, ce_: float, bm_: float, lc_: float, consts_: str
     # Helper funcs #
     ################
     def data_penalty(x: np.ndarray) -> float:
-        '''scipy-cookbook.readthedocs.io/items/robust_regression.html'''
         res = (Ax @ x) - Bx
-        return float(np.sqrt(res @ res))  # float(np.sum(np.sqrt(1 + np.square(res)) - 1))  # L1 norm
+        return float(np.sqrt(res @ res))
+
+    def data_penalty_jac(x: np.ndarray) -> np.ndarray:
+        res = (Ax @ x - Bx)
+        num = res.T @ Ax
+        denom = np.sqrt(res@res + 1)
+        return num / denom
 
     def bound_penalty(x: np.ndarray) -> float:
         bcoeff = np.reshape(x, (8, 8))
@@ -93,76 +108,127 @@ def runfit(data_: str, ce_: float, bm_: float, lc_: float, consts_: str
         poscheck = check[check > 1.804]
         return float(np.sum(negcheck**2) + np.sum(poscheck**2))
 
-    def curv_penalty(x: np.ndarray) -> float:
-        # Curvature Penalty #
-        bcoeff = np.reshape(x, (8, 8))
-        check = np.polynomial.legendre.leggrid2d(midpointsb, midpoints, bcoeff)
-        fft = np.log(np.abs(np.fft.fft2(check))[(m_x > 0) * (m_y > 0)])
-        plane = np.linalg.lstsq(linreg2dX, fft, rcond=-1)
+    alphas = np.array([0, 0.5, 1, 1.5, 2, 100])
+    ms2bmps = countzeros_in_s_at_alpha(ms2, alphas)
+    bmpweight = np.array([10, 5, 3, 1, 0, 0, 0, 0])
 
-        SSres = np.sum(plane[1]**2)
-        fftave = np.mean(fft)
-        SStot = np.sum((fft - fftave)**2)
-        Rsquared = 1. - SSres / SStot
-        return float(1. - Rsquared)**2
+    def count_bumps(x: np.ndarray) -> int:
+        a0 = sum([bmpweight @ np.clip(np.array(bumpvec) - ms2bmp, 0, 10)
+                  for ms2bmp, bumpvec
+                  in zip(ms2bmps, countzeros_in_s_at_alpha(x, alphas))])
+        return a0
+
+    # def count_bumps(x: np.ndarray, debug: bool = False, lim: int = 0) -> int:
+    #     '''Punish extra sign changes in 1st/2nd/3rd/4th derivative, relative
+    #        to MS2'''
+    #     bcoeff = np.reshape(x, (8, 8))
+    #     check = np.polynomial.legendre.leggrid2d(apoints, spoints, bcoeff)
+    #     penalty = []  # L[float]
+    #     for deriv_bumps in [0, 1, 1, 2]:
+    #         check = np.diff(check, axis=1)  # n'th derivative approximation
+    #         bumps = np.abs(np.diff(np.sign(check))) / 2  # 1 for every bump
+    #       penalty.append(sum([max(0, r.sum() - deriv_bumps) for r in bumps]))
+    #         if deriv_bumps == 0:
+    #             check = check[:, :60]
+    #     return sum(penalty)
+
+    # def curv_penalty(x: np.ndarray) -> float:
+    #     '''Punish deviations from MS2'''
+    #     bcoeff = np.reshape(x, (8, 8))
+    #     check = np.polynomial.legendre.leggrid2d(apoints, spoints, bcoeff)
+    #     res = check.flatten() - mpts
+    #     return float(res @ res)
 
     def transform(x0: np.ndarray) -> np.ndarray:
         x1 = np.dot(viinv, x0)
         x1[:3] = [1., 6.696148885203612e+00, -2.351163592512346e-01]
         return np.dot(vi, x1)
 
-    def fitfun_(x0: np.ndarray, fftpenalty: float) -> float:
-        x = transform(x0)
+    # def fitfun_(x0: np.ndarray, bumps: int, penalty: float) -> np.ndarray:
+    #     def ff(z: np.ndarray) -> float:
+    #         z = transform(z)
+    #         bad = max(0., count_bumps(z) - bumps)
+    #         bad += bound_penalty(z)
+    #         bad += max(0., curv_penalty(z) - penalty)
+    #         return 10000 * bad + data_penalty(z)
+    #     sol = opt.minimize(ff, x0=x0,
+    #                        method='nelder-mead', tol=tol,
+    #                        options=dict(disp=True, maxiter=num_maxiter))
+    #     out = transform(sol.x)
+    #     return x0 if data_penalty(out) > data_penalty(x0) else out
 
-        # residual with data
-        datares = data_penalty(x)
-        # inequality constraints
-        bcheck = boundpenalty * bound_penalty(x)
-        # Curvature constraints
-        fftres = fftpenalty * curv_penalty(x)
+    def fitfun(x0: np.ndarray, bumps: int, penalty: float) -> np.ndarray:
 
-        return float(datares + fftres + bcheck)
+        cons = [
+            opt.NonlinearConstraint(
+                lb=-1, ub=bumps, keep_feasible=True,
+                fun=lambda z: count_bumps(transform(z))),
+            opt.NonlinearConstraint(
+                lambda z: bound_penalty(transform(z)),
+                lb=-1, ub=0.1, keep_feasible=True),
+            # opt.NonlinearConstraint(
+            #     lambda z: curv_penalty(transform(z)),
+            #     lb=-1, ub=penalty, keep_feasible=True)
+        ]
 
-    def fitfun(x0: np.ndarray, fftpenalty: float) -> np.ndarray:
-        sol = opt.minimize(fun=fitfun_, x0=x, args=(fftpenalty,),
-                           method='nelder-mead', tol=tol,
-                           options=dict(disp=True, maxiter=num_maxiter))
-        return transform(sol.x)
+        sol = opt.minimize(
+            fun=lambda z: data_penalty(transform(z)),
+            jac=lambda z: data_penalty_jac(transform(z)),
+            x0=x0, constraints=cons,
+            method='trust-constr', tol=tol, bounds=bounds,
+            options=dict(disp=2, maxiter=num_maxiter))
+        out = transform(sol.x)
+        return x0 if data_penalty(out) > data_penalty(x0) else out
+
+    def show(x: np.ndarray, name: str = '') -> None:
+        e = [data.mae(x, k, rel=r) for k, r in zip(errtypes, rels)]
+        print('\n%s errs' % name, '  '.join(
+            ['%s %.3f' % (k, e) for k, e in zip(errtypes, e)]))
+
     ##############
     # Initialize #
     ##############
     Lf = L[float]
-    (xs, mcs, rmcs, mls, rmls, mvs, rmvs, mbs, rmbs, agg_err, curvs) = (
-        [], [], [], [], [], [], [], [], [], [], []
-    )  # type: T[L[np.ndarray],Lf,Lf,Lf,Lf,Lf,Lf,Lf,Lf,Lf,Lf]
+    (xs, mcs, rmcs, mls, rmls, mvs, rmvs, mbs, rmbs, agg_err, curvs, bs) = (
+        [], [], [], [], [], [], [], [], [], [], [], []
+    )  # type: T[L[np.ndarray],Lf,Lf,Lf,Lf,Lf,Lf,Lf,Lf,Lf,Lf, L[int]]
     lists = [mcs, rmcs, mbs, rmbs, mls, rmls, mvs, rmvs]
 
     ###############################
     # Generate trajectory of fits #
     ###############################
+    # ASSERT THAT THE INITIAL GUESS IS W/IN INITIAL CONSTRAINTS
+    assert count_bumps(reffx.x) < 20
+    # assert curv_penalty(reffx.x) < 1
+    x = reffx.x
+    for bump in [50, 100, 150]:
+        # for curv_pen in [1, 2]:
 
-    for curv_pen in np.logspace(0, 5, 5):
-        x = fitfun(ms2, curv_pen)
+        x = fitfun(x, bump, 0)
         xs.append(x)
-
         maes = [data.mae(x, k, r)
                 for k in errtypes for r in [False, True]]
+        print(bump, 0, maes)
         for lis, val in zip(lists, maes):
             lis.append(round(val, 3))
         agg_err.append(data_penalty(x))
-        curvs.append(curv_penalty(x))
+        curvs.append(count_bumps(x))
+        bs.append(count_bumps(x))
 
     #####################
     # VISUALIZE RESULTS #
     #####################
     datas, steps = [], []
+
     inds = [z[1] for z in pareto.pareto(
         [(cv, i) for i, cv in enumerate(curvs)], agg_err)[0]]
+    inds = list(range(len(curvs)))  # comment out to only save pareto optimal
 
     for real_i, i in enumerate(sorted(inds)):
         p1, p2 = fx.FromMatrix(xs[i], name=str(i)).plot('black')
         datas.extend([p1, p2])
-        title = 'Step %d curv %.2E err %.2f' % (i, curvs[i], agg_err[i])
+        tstr = 'Step %d curv %.2E err %.2f bump %d'
+        title = tstr % (i, curvs[i], agg_err[i], bs[i])
         args = [dict(visible=[False] * 2 * len(inds)), {'title.text': title}]
         args[0]['visible'][2 * real_i:  # type: ignore
                            2 * real_i + 2] = [True, True]
@@ -182,19 +248,17 @@ def runfit(data_: str, ce_: float, bm_: float, lc_: float, consts_: str
     for fig in [fig2, fig3]:
         plotly.offline.plot(fig)
 
-    initerr = [data.mae(ms2, k, rel=True) for k in errtypes]
-    fiterr = [data.mae(x, k, rel=True) for k in errtypes]
-    print('\ninitial errs', '  '.join(
-        ['%s %.3f' % (k, e) for k, e in zip(errtypes, initerr)]))
-    print('\a\nfinal errs', '  '.join(
-        ['%s %.3f' % (k, e) for k, e in zip(errtypes, fiterr)]))
+    show(ms2, 'ms2')
+    show(reffx.x, 'initial')
+    show(x, 'final')
 
-    opt_xs = list(map(int, input('\n\nWhich index is optimum?\n\n').split()))
+    opt_xs = list(range(len(xs)))  # all of them
+    # list(map(int, input('\n\nWhich index is optimum?\n\n').split()))
 
     xs_out = [json.dumps(xs[i].tolist()) for i in opt_xs]
-    stats = [[lst[i] for i in opt_xs] for lst in lists]
+    bumps = [int(bs[i]) for i in opt_xs]
 
-    pdb.set_trace()
+    stats = [[lst[i] for i in opt_xs] for lst in lists]
 
     #####################################
     # Cross validation - rewrite this? #
@@ -212,7 +276,7 @@ def runfit(data_: str, ce_: float, bm_: float, lc_: float, consts_: str
             #         cv[i][k].append(test.mae(xx, k))
 
     return (xs_out, opt_xs, json.dumps(cv),   # type: ignore
-            *stats, None, None, '')
+            *stats, None, None, bumps, '')
 
     # def l1(x: np.ndarray) -> float:
     #     '''scipy-cookbook.readthedocs.io/items/robust_regression.html'''
@@ -239,3 +303,14 @@ def runfit(data_: str, ce_: float, bm_: float, lc_: float, consts_: str
     # jac=dl1, hess=hess,
     #         options=dict(disp=True, maxiter=5000))
     #     return res.x
+
+    # def fft_difference(x: np.ndarray) -> float:
+    #     bcoeff = np.reshape(x, (8, 8))
+    #     check = np.polynomial.legendre.leggrid2d(apoints, spoints, bcoeff)
+    #     fft = np.log(np.abs(np.fft.fft2(check))[(m_x > 0) * (m_y > 0)])
+    #     plane = np.linalg.lstsq(linreg2dX, fft, rcond=-1)
+    #     SSres = np.sum(plane[1]**2)
+    #     fftave = np.mean(fft)
+    #     SStot = np.sum((fft - fftave)**2)
+    #     Rsquared = 1. - SSres / SStot
+    #     return float(1. - Rsquared)**2

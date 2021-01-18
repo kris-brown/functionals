@@ -32,13 +32,13 @@ def analysis(mod: Model) -> None:
     tmagpb = PyBlock(true_mag, args=[tmagq['n']])
     tmag = Gen(name='truemag',
                desc='populates atoms.true_mag',
-               query=tmagq, funcs=[tmagpb],
-               actions=[Atoms(atoms=tmagq['i'], true_mag=tmagpb['out'])])
+               query=tmagq, transforms=[tmagpb],
+               loads=[Atoms(atoms=tmagq['i'], true_mag=tmagpb['out'])])
 
     ########################################################################
     xvq = Query(dict(b=Bulks.id(),
                      v=(Bulks['expt_lat']()**Lit(3) * Bulks['volrat']())))
-    xvol = Gen('xvol', query=xvq, actions=[Bulks(bulks=xvq['b'],
+    xvol = Gen('xvol', query=xvq, loads=[Bulks(bulks=xvq['b'],
                                                  expt_vol=xvq['v'])])
     ########################################################################
     ibq = Query(exprs=dict(c=Calc.id(),
@@ -47,7 +47,7 @@ def analysis(mod: Model) -> None:
         Gen(name='isbeef',
             desc='Check whether fx was BEEF - if fx is a word or array',
             query=ibq,
-            actions=[Calc(calc=ibq['c'], beef=ibq['b'])])
+            loads=[Calc(calc=ibq['c'], beef=ibq['b'])])
 
     #####################################################################
     name = CONCAT([Lit('%,'), Atoms['num'](), Lit(',%')])
@@ -71,8 +71,8 @@ def analysis(mod: Model) -> None:
     exptref =                                                                \
         Gen(name='refs',
             desc='Populates expt_refs mapping table',
-            query=erq, funcs=[erpb],
-            actions=[Refs(insert=True,
+            query=erq, transforms=[erpb],
+            loads=[Refs(insert=True,
                           bulks=erq['b'],
                           atoms=erq['a'],
                           num=erpb['out'])])
@@ -90,7 +90,7 @@ def analysis(mod: Model) -> None:
     eform =                                                                  \
         Gen(name='eform',
             desc='Diff between a relaxed energy the sum of reference engs ',
-            query=eq, actions=[Bulks(bulks=eq['b'], eform=eq['e'])])
+            query=eq, loads=[Bulks(bulks=eq['b'], eform=eq['e'])])
 
     ########################################################################
 
@@ -101,7 +101,7 @@ def analysis(mod: Model) -> None:
             desc='Difference between a relaxed energy (per atom) and '
                  'the sum of reference energies (divided by # of atoms)',
             query=ceq,
-            actions=[Bulks(bulks=ceq['b'], ce=ceq['ce'])])
+            loads=[Bulks(bulks=ceq['b'], ce=ceq['ce'])])
 
     ########################################################################
 
@@ -131,8 +131,8 @@ def analysis(mod: Model) -> None:
     done =                                                                  \
         Gen(name='done',
             desc='Determines if calculator is ready for fitting (has data)',
-            query=dq, funcs=[dqpb],
-            actions=[Calc(calc=dq['c'], **{x: dqpb[x] for x in dcols})])
+            query=dq, transforms=[dqpb],
+            loads=[Calc(calc=dq['c'], **{x: dqpb[x] for x in dcols})])
 
     ########################################################################
     refatom = mod.make_path('atoms', [refs__atoms])
@@ -152,8 +152,8 @@ def analysis(mod: Model) -> None:
         Gen(name='refcontribs',
             desc='Takes atomic contribs and multiplies by stoichiometry',
             query=rcq,
-            funcs=[rcpb],
-            actions=[Refs(refs=rcq['r'],
+            transforms=[rcpb],
+            loads=[Refs(refs=rcq['r'],
                           energy=rcq['e'],
                           contribs=rcpb['out'])])
 
@@ -168,7 +168,7 @@ def analysis(mod: Model) -> None:
 
     errs = Gen('errs', desc='Difference btw computed and expt',
                query=errq,
-               actions=[Bulks(**{x: errq[x] for x in errq.exprs.keys()})])
+               loads=[Bulks(**{x: errq[x] for x in errq.exprs.keys()})])
     ########################################################################
     # cols = dict(ce=('ce', 'expt_ce'), bm=('bm', 'expt_bm'),
     #             lat=('lat', 'expt_lat'),  mag=('mag', 'expt_mag'))
@@ -179,11 +179,12 @@ def analysis(mod: Model) -> None:
 
         mseq = Query(exprs=dict(c=Calc.id(), m=AVG(ABS(mae)),
                                 r=AVG(ABS(relmae))),
+                     constr=EQ(Bulks['err'](cbp), Lit("")),
                      basis=[Calc],
                      aggcols=[Calc.id()])
         msegens.append(Gen(
             name='mae_' + m, query=mseq, tags=['mae'],
-            actions=[Calc(calc=mseq['c'], **{
+            loads=[Calc(calc=mseq['c'], **{
                 'mae_' + m: mseq['m'], 'relmae_' + m:mseq['r']})]))
     msec, mseb, msel, msev, msem = msegens
     #####################################################################
@@ -200,8 +201,8 @@ def analysis(mod: Model) -> None:
         Gen(name='atom_namenum',
             desc='populate atoms.name and atoms.num',
             query=annq,
-            funcs=[annpb],
-            actions=[Atoms(atoms=annq['a'], name=annpb['n'], num=annpb['m'])])
+            transforms=[annpb],
+            loads=[Atoms(atoms=annq['a'], name=annpb['n'], num=annpb['m'])])
 
     ########################################################################
 
@@ -217,8 +218,8 @@ def analysis(mod: Model) -> None:
     #             with open(os.path.join(root, beef), 'r') as f:
     #                 if json.load(f) == data_:
     #                     return beef
-    #         import pdb
-    #         pdb.set_trace()
+    #
+    #         breakpoint()
     #         assert False
     #         return ''
     #     else:
@@ -228,8 +229,8 @@ def analysis(mod: Model) -> None:
     # calcname2 =                                                           \
     #     Gen(name='calcname2',
     #         desc='Figures out the name of a BEEF calculator from its coefs',
-    #         query=cnq, funcs=[cnpb],
-    #         actions=[Calc(calc=cnq['c'], name=cnpb['out'])])
+    #         query=cnq, transforms=[cnpb],
+    #         loads=[Calc(calc=cnq['c'], name=cnpb['out'])])
     ########################################################################
     seq = Query(dict(s=Surf.id(), m=Surf['mat'](
     ), o=Surf['ontop'](), h=Surf['hollow']()))
@@ -242,8 +243,8 @@ def analysis(mod: Model) -> None:
     sepb = PyBlock(sef, args=[seq[x] for x in 'moh'])
     surfan = \
         Gen(name='surferr',
-            query=seq, funcs=[sepb], tags=['surf'],
-            actions=[Surf(surf=seq['s'], err=sepb['out'])])
+            query=seq, transforms=[sepb], tags=['surf'],
+            loads=[Surf(surf=seq['s'], err=sepb['out'])])
     ########################################################################
     ########################################################################
     ########################################################################

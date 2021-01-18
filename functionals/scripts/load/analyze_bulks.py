@@ -1,28 +1,28 @@
-from typing import Tuple as T, Optional as O
+from typing import Tuple as T
 
 
-def analyze_bulks(pth: str
-                  ) -> T[int, int, str, str, O[float]]:
+def analyze_bulks(pth: str, mat: str
+                  ) -> T[int, int, str, str, str]:
     import os
     from ase.io import read
+    from functionals.CLI.submit import matdata
 
+    # Get an arbitrary POSCAR if possible
     try:
-        atoms = read(os.path.join(pth, 'latopt/POSCAR'))
+        struct = matdata[mat].struct
+        try:
+            atoms = read(os.path.join(pth, 'eos2/strain_0/POSCAR'))
+        except Exception:
+            atoms = read(os.path.join(pth, 'latopt/POSCAR'))
     except Exception:
         print('\n\n\n\nWeird pth ', pth, '\n\n\n')
-        return 0, 0, '', '', None
+        return (0, 0, '', '', '')
+
+    # Compute facts about elemental composition
     n_atoms = len(atoms)
     elems = list(atoms.get_atomic_numbers())
     n_elems = len(set(elems))
     composition = str({elem: elems.count(elem) for elem in sorted(set(elems))})
     elemstr = ',%s,' % ','.join(map(str, sorted(elems)))
-    try:
-        with open(os.path.join(pth, 'latopt/OUTCAR'), 'r') as f:
-            assert 'General timing' in f.read()
-        atoms = read(os.path.join(pth, 'latopt/OUTCAR'))
-        a = atoms.get_cell_lengths_and_angles()[0]
-        vol = atoms.get_volume()
-        volrat = vol / a**3
-    except Exception:
-        a = vol = volrat = None
-    return (n_atoms, n_elems, composition, elemstr, volrat)
+
+    return (n_atoms, n_elems, composition, elemstr, struct)

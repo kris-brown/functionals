@@ -181,7 +181,7 @@ def main() -> None:
     output = [(int(n),float(o),float(c))
                 for n,_,_,o,_,_,c,_,_,_ in reader(lines,delimiter='|')]
 
-    import pdb;pdb.set_trace()
+    ;breakpoint()
 
     with open('output.json','w') as fi:
         dump(output,fi)

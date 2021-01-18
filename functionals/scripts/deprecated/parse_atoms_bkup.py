@@ -3,7 +3,7 @@ from json import load, dumps
 
 def parse_atoms(root: str) -> T[L[str], L[str], L[int], L[int], L[str], L[str], L[float], L[bool], L[int], L[int], L[float]]:
     from os import listdir, environ
-    import pdb
+    
     from os.path import join, exists
     from re import findall, compile, MULTILINE
     from functionals.scripts.load.parse_incar import parse_incar
@@ -64,7 +64,7 @@ def parse_atoms(root: str) -> T[L[str], L[str], L[int], L[int], L[str], L[str], 
                     elif incar['metagga'] is None and incar['gga'] == 'PE':
                         fxs.append('PBE')
                     else:
-                        pdb.set_trace()
+                        breakpoint()
                         raise ValueError()
 
                 # GET ENERGY
@@ -92,4 +92,4 @@ def parse_atoms(root: str) -> T[L[str], L[str], L[int], L[int], L[str], L[str], 
     return pths, names, rts, pws, fxs, contribs, engs, intoccs, nums, tmags, mags
     # except Exception as e:
     #     import traceback,pdb
-    #     traceback.print_exc(); print(pth,e);pdb.set_trace(); assert False
+    #     traceback.print_exc(); print(pth,e);breakpoint(); assert False

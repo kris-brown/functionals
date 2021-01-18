@@ -42,7 +42,7 @@ def opt(pth: str) -> T[str, str]:
             if dl > threshold:
                 break
 
-        #plt.scatter(cv,lo); plt.show();plt.scatter(cv,dlo); plt.show();import pdb;pdb.set_trace()
+        #plt.scatter(cv,lo); plt.show();plt.scatter(cv,dlo); plt.show();;breakpoint()
         return dic[c]
 
     inds = [f(x[1:]) for x in steps]

@@ -1,8 +1,9 @@
-from typing import Set as S
+from typing import Set as S, Optional as O
 from json import dumps, loads
 
 
-def db_data(ab_ce: str, ab_bm: str, ab_lc: str, ce_: str, bm_: str, lc_: str, name: str, ce_calc_: str) -> str:
+def db_data(ab_ce: str, ab_bm: str, ab_lc: str, ce_: str, bm_: str, lc_: str,
+            name: str, ce_calc_: str, vr_: str, calcname: str) -> O[str]:
     '''
     Assemble datasets given a database connection
     '''
@@ -12,22 +13,22 @@ def db_data(ab_ce: str, ab_bm: str, ab_lc: str, ce_: str, bm_: str, lc_: str, na
     data = set()  # type: S[Datum]
 
     # '$' delimited arrays on a per-material basis
-    arrs = [ab_ce, ab_bm, ab_lc, name, ce_, bm_, lc_, ce_calc_]
+    arrs = [ab_ce, ab_bm, ab_lc, name, ce_, bm_, lc_, ce_calc_, vr_]
 
-    for abce_, abbm_, ablc_, n, _ce, _bm, _lc, _ce_calc in zip(*map(lambda x: x.split('$'), arrs)):
+    for abce_, abbm_, ablc_, n, _ce, _bm, _lc, _ce_calc, _vr in zip(*map(lambda x: x.split('$'), arrs)):
         # Convert strings to arrays (of length 5) or floats if they are defined
         abce, abbm, ablc = map(lambda x: loads(
-            x) if x else '',  [abce_, abbm_, ablc_])
+            x) if x else '', [abce_, abbm_, ablc_])
         ce, bm, lc, ce_calc = map(lambda x: float(
             x) if x else None, [_ce, _bm, _lc, _ce_calc])
         if abce and ce and ce_calc:
-            data.add(Datum(n, 'ce', abce[0], abce[1], float(ce)))
+            data.add(Datum(n, 'ce', abce[0], abce[1], float(ce), None))
         if abbm and bm:
-            data.add(Datum(n, 'bm', abbm[0], abbm[1], float(bm)))
+            data.add(Datum(n, 'bm', abbm[0], abbm[1], float(bm), None))
         if ablc and lc:
-            data.add(Datum(n, 'lc', ablc[0], ablc[1], float(lc)))
+            data.add(Datum(n, 'lc', ablc[0], ablc[1], float(lc), float(_vr)))
     try:
         return dumps(Data(data).to_list())
     except AssertionError:
-        print('Not enough fitting data for a calculator')
+        print('Not enough fitting data for calculator ' + calcname)
         return None

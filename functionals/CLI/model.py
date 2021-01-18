@@ -10,15 +10,15 @@ Run the model defined in /functionals/model.
 ##############################################################################
 
 
-root = '/'+join(*__file__.split('/')[:-3], 'data/')
+root = '/' + join(*__file__.split('/')[:-3], 'data/')
 
 
 def main(args: D[str, Any]) -> None:
     """Run the model with no extensi/ons from command line."""
 
     m = make_model()
-    db = ConnectInfo.from_file(root+'functionals.json')
-    mdb = ConnectInfo.from_file(root+'functionals_log.json')
+    db = ConnectInfo.from_file(root + 'functionals.json')
+    mdb = ConnectInfo.from_file(root + 'functionals_log.json')
     m.run(db, mdb, **args)
 
 

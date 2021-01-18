@@ -51,7 +51,7 @@ def a_ce(atom_engs_     : str,
         coefs         = np.array(loads(coefs_))
     except Exception as e:
         print(e)
-        import pdb;pdb.set_trace()
+        ;breakpoint()
         assert False
     dC = atom_contribs - bulk_contribs
     dE = atom_engs - bulk_eng
