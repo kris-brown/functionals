@@ -17,18 +17,16 @@ ms = [Attr(m, Decimal(), desc='error metric')
 calc = Obj(
     name='calc',
     desc='Calculator details',
-    attrs=[Attr('allmat', Text(), desc='List of all (bulk) mats with data'),
-           Attr('done', Boolean(),
-                desc='Whether or not all calculations have been finished'),
-           Attr('missing', Text(),
-                desc='Materials not yet finished (bulk or atom related)'),
-           Attr('n_missing', Int(),
-                desc='Materials not yet finished (bulk or atom related)'),
-           Attr('fitdata', Text(),
-                desc='For a BEEF calc, the input data to fitting'),
-           Attr('name', Text(), identifying=True, desc='Functional nickname'),
-           Attr('data', Text(), desc='BEEF coefs, if any'),
-           Attr('beef', Boolean(), desc='True if BEEF style')] + ms)
+    attrs=[  # Attr('allmat', Text(), desc='List of all (bulk) mats with data')
+        Attr('done', Boolean(),
+             desc='Whether or not all calculations have been finished'),
+        Attr('n_missing', Int(),
+             desc='Materials not yet finished'),
+        Attr('fitdata', Text(),
+             desc='For a BEEF calc, the input data to fitting'),
+        Attr('name', Text(), identifying=True, desc='Functional nickname'),
+        Attr('data', Text(), desc='BEEF coefs, if any'),
+        Attr('beef', Boolean(), desc='True if BEEF style')] + ms)
 # fks=[Rel('functional', identifying=True)])
 
 ##############################################################################
@@ -80,15 +78,15 @@ bulks = Obj(
         Attr('n_atoms', desc='Number of atoms in unit cell'),
         Attr('n_elems', desc='Number of distinct chemical species'),
         Attr('alloy', Varchar(), desc='What type of alloy it is, if any'),
-        Attr('volprimrat', Int(), desc='Ratio of conventional to primative vol'),
+        Attr('volprimrat', Int(), desc='Ratio of conventional to prim vol'),
         # Analysis Results from minimum 5 jobs
         Attr('success', Boolean(), desc='DFT data for each experiment data'),
         Attr('mag', Decimal(), desc='Magmom of the minimum energy job'),
         Attr('contrib', Text('long'), desc='xc contribs of 5 optimal jobs'),
         Attr('eng', Decimal(), desc='unit cell lattice from quadfit'),
         Attr('lat', Decimal(), desc='unit cell lattice from quadfit'),
-        Attr('vol', Decimal(), desc='Volume CONVENTIONAL CELL of optjob, stencil'),
-        Attr('cellvol', Decimal(), desc='Volume (possibly prim) of optjob, stencil'),
+        Attr('vol', Decimal(), desc='Volume CONV CELL of optjob, stencil'),
+        Attr('cellvol', Decimal(), desc='Vol (poss. prim) of optjob, stencil'),
         Attr('volrat', Decimal(), desc='lattice/vol^1/3'),
 
         Attr('volumes', Text('long'), desc='volumes of the 5 optimal jobs'),
@@ -100,8 +98,7 @@ bulks = Obj(
         Attr('eform', Decimal(), desc='Formation energy, eV, given ENG'),
         Attr('ce', Decimal(), desc='Cohesive  energy, eV'),
         # Analysis from ase.eos
-        Attr('eos_diff', Decimal(), desc='Ratio of discrete BM to EOS BM'),
-        Attr('irregular', Boolean(), desc='discrete BM differs from EOS'),
+        Attr('eos', Decimal(), desc='EOS BM'),
 
         # Experimental results
         Attr('expt_ce', Decimal(15, 3), desc='Expt cohesive energy, eV'),
@@ -171,8 +168,9 @@ fit = Obj(
     attrs=[Attr('x', Text(), desc='Coefficients of optimal point in the traj'),
            Attr('cv', Text(), desc='Summary of cross validation data'),
            Attr('err', Text(), desc='Scipy error message'),
-           Attr('bump', Int(), desc='# of bumps in a predefined grid'),
+           Attr('bump', Int(), desc='# of bumps'),
            Attr('code', Text(), desc='Abbreviation of ID, hopefully unique'),
+           Attr('name', Text(), desc='For specific named fits'),
            Attr("step", Int(), identifying=True,
                 desc='Optimization iteration step')] + [
                     Attr(m, Decimal(), desc='') for m in funmetrics],

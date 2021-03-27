@@ -28,7 +28,7 @@ def parse_incar(pth: str) -> dict:
     # make sure unique
     out = {k: maybe(f)(d.get(k)) for k, f in keys.items()}
     if out['magmom']:
-        out['magmom'] = float(out['magmom'].split()[0])
+        out['magmom'] = float(out['magmom'].replace('1*', '').split()[0])
     elif out['nupdown']:
         out['magmom'] = out['nupdown']
     return out

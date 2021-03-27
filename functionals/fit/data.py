@@ -14,9 +14,8 @@ import plotly.graph_objs as go
 '''Data Preprocessing for nonlinear fitting.'''
 
 ###############################################################################
-
-mags = ['MnC_b1', 'MnO_b1', 'FeN_b1', 'Fe_bcc', 'CrC_b1', 'CrN_b1', 'Ni_fcc',
-        'FeAl_b2', 'Co_hcp', 'MnS_b1', 'MnN_b1']
+allmats = set(["AgBr", "AgCl", "AgF", "AlSb", "BaO", "BaSe", "CaS", "CaSe", "CdO", "CdS", "CdSe", "CdTe", "CoC", "CoN", "CrC", "CrN", "CsF", "CsI", "FeC", "FeN", "Ag", "AlAs", "AlN", "AlP", "Al", "Au", "BAs", "BN", "BP", "Ba", "C", "CaO", "Ca", "CoAl", "Cu", "FeAl", "Fe", "GaAs", "GaN", "GaP", "GaSb", "Ge", "HfC", "HfN", "InAs", "InP", "InSb", "Ir", "IrC", "IrN", "K", "KBr", "LaC", "LaN", "LiCl", "LiF",
+               "LiH", "LiI", "Li", "MgO", "MgS", "MnC", "MnN", "MnO", "MnS", "Mo", "MoC", "MoN", "NaCl", "NaF", "Na", "NbC", "NbN", "Nb", "NiAl", "Ni", "NiC", "NiN", "OsC", "OsN", "Pd", "PdC", "PdN", "Pt", "PtC", "PtN", "Rb", "RbI", "Rh", "RhC", "RhN", "RuC", "RuN", "ScC", "ScN", "SeAs", "SiC", "Si", "Sn", "Sr", "Ta", "TaC", "TaN", "TiC", "TiN", "VC", "VN", "V", "W", "WC", "WN", "ZnS", "ZnSe", "ZnTe", "ZrC", "ZrN"])
 
 
 class Datum(object):

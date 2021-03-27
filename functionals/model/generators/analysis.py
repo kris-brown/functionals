@@ -7,7 +7,7 @@ import numpy as np
 # Internal Modules
 from dbgen import (Model, Gen, Query, PyBlock, AND, Env, Import,
                    Literal as Lit, EQ, LEFT, One, SUM,
-                   CONCAT, AVG, LIKE, GROUP_CONCAT, ABS)
+                   CONCAT, AVG, LIKE, ABS, COUNT)
 
 from functionals.scripts.load.true_mag import true_mag
 
@@ -39,7 +39,7 @@ def analysis(mod: Model) -> None:
     xvq = Query(dict(b=Bulks.id(),
                      v=(Bulks['expt_lat']()**Lit(3) * Bulks['volrat']())))
     xvol = Gen('xvol', query=xvq, loads=[Bulks(bulks=xvq['b'],
-                                                 expt_vol=xvq['v'])])
+                                               expt_vol=xvq['v'])])
     ########################################################################
     ibq = Query(exprs=dict(c=Calc.id(),
                            b=EQ(LEFT(Calc['data'](), One), Lit('['))))
@@ -73,9 +73,9 @@ def analysis(mod: Model) -> None:
             desc='Populates expt_refs mapping table',
             query=erq, transforms=[erpb],
             loads=[Refs(insert=True,
-                          bulks=erq['b'],
-                          atoms=erq['a'],
-                          num=erpb['out'])])
+                        bulks=erq['b'],
+                        atoms=erq['a'],
+                        num=erpb['out'])])
 
     ########################################################################
     # Paths
@@ -106,33 +106,20 @@ def analysis(mod: Model) -> None:
     ########################################################################
 
     bpth = mod.make_path('bulks', [bulks__calc])
-    com = Lit(',')
-    bname, bce, bbm = [Bulks[x](bpth) for x in ['name', 'ce', 'bm']]
-    catargs = [bname, com, bce, com, bbm]
-    dq = Query(exprs=dict(c=Calc.id(), w=Calc['allmat'](),
-                          h=GROUP_CONCAT(CONCAT(catargs), delim=' ')),
-               basis=[Calc], aggcols=[Calc.id()], opt_attr=[bce, bbm])
-
-    def dfun(have_: str, want_: str) -> T[str, int, bool]:
-        wce, wbml = [set(x.split()) for x in want_.split('|')]
-
-        for name, ce, bm in [x.split(',') for x in have_.split()]:
-            if ce and name in wce:
-                wce.remove(name)
-            if bm and name in wbml:
-                wbml.remove(name)
-        missing = [x + '_ce' for x in wce] + [x + '_bml' for x in wbml]
-        n = len(missing)
-        return ' '.join(sorted(missing)), n, n == 0
-
-    dcols = ['missing', 'n_missing', 'done']
-    dqpb = PyBlock(dfun, args=[dq['h'], dq['w']], outnames=dcols)
+    bname, bce, bbm, bsucc = [Bulks[x](bpth)
+                              for x in ['name', 'ce', 'bm', 'success']]
+    n_present = COUNT(Lit(1))
+    l116 = Lit(116)
+    dq = Query(exprs=dict(c=Calc.id(),
+                          n=l116 - n_present,
+                          d=EQ(n_present, l116)),
+               basis=[Calc], aggcols=[Calc.id()], constr=bsucc)
 
     done =                                                                  \
         Gen(name='done',
             desc='Determines if calculator is ready for fitting (has data)',
-            query=dq, transforms=[dqpb],
-            loads=[Calc(calc=dq['c'], **{x: dqpb[x] for x in dcols})])
+            query=dq,
+            loads=[Calc(calc=dq['c'], done=dq['d'], n_missing=dq['n'])])
 
     ########################################################################
     refatom = mod.make_path('atoms', [refs__atoms])
@@ -148,14 +135,13 @@ def analysis(mod: Model) -> None:
         lambda c, n: dumps((n * np.array(loads(c))).tolist()) if c else None,
         args=[rcq[x] for x in 'cn'])
 
-    refcontribs =                                                   \
-        Gen(name='refcontribs',
-            desc='Takes atomic contribs and multiplies by stoichiometry',
-            query=rcq,
-            transforms=[rcpb],
-            loads=[Refs(refs=rcq['r'],
-                          energy=rcq['e'],
-                          contribs=rcpb['out'])])
+    refcontribs = Gen(name='refcontribs',
+                      desc='Takes atomic contribs and multiplies by stoich',
+                      query=rcq,
+                      transforms=[rcpb],
+                      loads=[Refs(refs=rcq['r'],
+                                  energy=rcq['e'],
+                                  contribs=rcpb['out'])])
 
     ########################################################################
     mets = ['ce', 'bm', 'lat', 'vol', 'mag']
@@ -164,7 +150,7 @@ def analysis(mod: Model) -> None:
         for k in mets}
     errq = Query(dict(bulks=Bulks.id(), **errcols),
                  opt_attr=[Bulks.get(x + k)() for x in ['', 'expt_']
-                 for k in mets])
+                           for k in mets])
 
     errs = Gen('errs', desc='Difference btw computed and expt',
                query=errq,
@@ -197,12 +183,12 @@ def analysis(mod: Model) -> None:
         return symb, chemical_symbols.index(symb)
 
     annpb = PyBlock(annfunc, args=[annq['s']], outnames=['n', 'm'])
-    atom_namenum =                                                       \
-        Gen(name='atom_namenum',
-            desc='populate atoms.name and atoms.num',
-            query=annq,
-            transforms=[annpb],
-            loads=[Atoms(atoms=annq['a'], name=annpb['n'], num=annpb['m'])])
+    atom_namenum = Gen(name='atom_namenum',
+                       desc='populate atoms.name and atoms.num',
+                       query=annq,
+                       transforms=[annpb],
+                       loads=[Atoms(atoms=annq['a'], name=annpb['n'],
+                                    num=annpb['m'])])
 
     ########################################################################
 
@@ -241,10 +227,9 @@ def analysis(mod: Model) -> None:
         else:
             return o - h
     sepb = PyBlock(sef, args=[seq[x] for x in 'moh'])
-    surfan = \
-        Gen(name='surferr',
-            query=seq, transforms=[sepb], tags=['surf'],
-            loads=[Surf(surf=seq['s'], err=sepb['out'])])
+    surfan = Gen(name='surferr',
+                 query=seq, transforms=[sepb], tags=['surf'],
+                 loads=[Surf(surf=seq['s'], err=sepb['out'])])
     ########################################################################
     ########################################################################
     ########################################################################

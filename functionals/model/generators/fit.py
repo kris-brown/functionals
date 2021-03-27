@@ -1,10 +1,9 @@
-from typing import Tuple as T
-from os.path import join
+from typing import List as L, Tuple as T
 
 # Internal Modules
 from dbgen import (Model, Gen, Query, PyBlock, Expr, Literal as Lit, COALESCE,
-                   Text, GROUP_CONCAT, MAX, AND, CONVERT, GT, LT, LEFT, ABS,
-                   EQ, Varchar, Const)
+                   Text, GROUP_CONCAT, CONCAT, MAX, AND, CONVERT, GT, LEFT,
+                   ABS, EQ, Varchar, Const)
 
 from functionals.scripts.fit.db_data import db_data
 from functionals.scripts.fit.a_ce import a_ce
@@ -14,11 +13,9 @@ from functionals.scripts.fit.runfit import runfit
 ############################################################################
 ############################################################################
 ############################################################################
-functionals_db = '/' + join(*__file__.split('/')[:-3], 'data/functionals.json')
 
 
 def fit(mod: Model) -> None:
-    # Extract tables
 
     # Extract tables
     tabs = ['fit', 'calc', 'fitparams', 'bulks', 'refs']
@@ -116,15 +113,6 @@ def fit(mod: Model) -> None:
             loads=[Bulks(bulks=vecq['b'], **{x: vecpb[x] for x in vecout})])
 
     ########################################################################
-    codeq = Query(exprs=dict(
-        f=Fit.id(),
-        c=LEFT(CONVERT(ABS(Fit.id()), Varchar()), Lit(4))))
-
-    code =                                                            \
-        Gen(name='code',
-            desc='Shorten ID',
-            query=codeq, tags=['fit'],
-            loads=[Fit(fit=codeq['f'], code=codeq['c'])])
 
     ########################################################################
 
@@ -165,24 +153,54 @@ def fit(mod: Model) -> None:
 
     rfq = Query(dict(c=Calc.id(), d=Calc['fitdata'](),
                      o=Calc['data'](),
+                     x=LEFT(CONVERT(ABS(Fit.id()), Varchar()), Lit(4)),
                      p=Fitparams.id(), e=Fitparams['ce_scale'](),
                      b=Fitparams['bm_scale'](), v=Fitparams['lc_scale']()),
                 basis=[Fitparams, Calc],
                 constr=AND([GT(Fitparams['ce_scale'](), Lit(0)),
-                            LT(Calc['n_missing'](), Lit(75)),
-                            EQ(Calc['name'](), Lit('7500'))]))
+                            EQ(Calc['n_missing'](), Lit(0))]))
 
     rfout = ['x', 'step', 'cv'] + funmetrics + ['bump', 'err']
     rfpb = PyBlock(runfit, args=[rfq[x] for x in 'debvo'], outnames=rfout)
     rfit = Gen(name='runfit',
                desc='', tags=['fit'],  # 'parallel'],
                query=rfq, transforms=[rfpb],
-               loads=[Fit(insert=True, calc=rfq['c'], fitparams=rfq['p'],
-                            **{x: rfpb[x] for x in rfout})])
+               loads=[Fit(insert=True, calc=rfq['c'], code=rfq['x'],
+                          fitparams=rfq['p'],
+                          **{x: rfpb[x] for x in rfout})])
     ########################################################################
 
+    fpq = Query(dict(d=GROUP_CONCAT(
+        CONCAT([Calc['name'](), Lit('$'),
+                CONVERT(Calc.id(), Varchar()), Lit('$'), Calc['data']()]),
+        delim='|'),
+        f=Fitparams.id()),
+        aggcols=[Fitparams.id()],
+        basis=[Calc, Fitparams], constr=EQ(Fitparams['ce_scale'](), Lit(0)))
+
+    def fpfn(rawdata: str, fpid: int
+             ) -> T[L[int], L[str], L[str], L[int], int]:
+        fxs = {}
+        for fx in rawdata.split('|'):
+            a, b, c = fx.split('$')
+            fxs[a] = (b, c)
+        pairs = [('ms2', 'ms2'), ('7500', 'ms2'), ('5558', '7500'),
+                 ('2751', '5558')]
+        steps = list(range(len(pairs)))  # identifying attr, so make different
+        names = ['{1} -> {0}'.format(y, x) for x, y in pairs]
+        xs = [fxs[x][1] for x, _ in pairs]
+        calcs = [int(fxs[x][0]) for _, x in pairs]
+        return steps, names, xs, calcs, fpid
+
+    fpout = ['step', 'name', 'x', 'calc', 'fitparams']
+    fppb = PyBlock(fpfn, args=[fpq['d'], fpq['f']], outnames=fpout)
+    fitpairs = Gen(
+        name='fitpairs',
+        desc='Inserts fits that declare one fx was derived from another',
+        query=fpq, tags=['fit'], transforms=[fppb],
+        loads=[Fit(insert=True, **{x: fppb[x] for x in fpout})])
     ########################################################################
     ########################################################################
     ########################################################################
-    gens = [ace, vecs, fitdata, rfit, code, ms2fit]
+    gens = [ace, vecs, fitdata, rfit, ms2fit, fitpairs]
     mod.add(gens)

@@ -11,7 +11,7 @@ def analyze_bulks(pth: str, mat: str
     try:
         struct = matdata[mat].struct
         try:
-            atoms = read(os.path.join(pth, 'eos2/strain_0/POSCAR'))
+            atoms = read(os.path.join(pth, 'eos/strain_0/POSCAR'))
         except Exception:
             atoms = read(os.path.join(pth, 'latopt/POSCAR'))
     except Exception:

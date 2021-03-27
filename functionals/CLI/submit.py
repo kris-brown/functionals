@@ -1,7 +1,7 @@
 from typing import Set, Dict, Any, Tuple, List, Optional
 import argparse
 import collections
-import copy
+# import copy
 import csv
 import json
 import math
@@ -235,9 +235,8 @@ def mk_kpts(a: ase.Atoms) -> Tuple[int, int, int]:
 
 def submit_atom(name: str, time: int, xc: str, retry: bool,
                 incar: Dict[str, Any],
-                curr: Set[str], orbitals: Optional[bool], sunc: str,
+                curr: Set[str], orbitals: Optional[bool],
                 beef: Optional[str]) -> None:
-    assert sunc == '3'
     elem = ase.data.chemical_symbols.index(name)
     atoms = ase.Atoms(numbers=[elem], positions=[[1., 2., 3.]], pbc=[0, 0, 0],
                       cell=[[13., 2., 1.], [2., 14, 1.], [5., 1, 15.]])
@@ -265,17 +264,17 @@ def submit_atom(name: str, time: int, xc: str, retry: bool,
               kpts=(1, 1, 1), beef=beef)
         bash = temp.jinja_env.get_template(
             'subVASP.jinja').render(gam='_gam', rm=True)
-        _sub(pth, bash, time, sunc)
+        _sub(pth, bash, time)
 
 
 def phonon(mat: Mat, time: int, xc: str,
-           retry: bool, incar: Dict[str, Any], curr: Set[str], sunc: str,
+           retry: bool, incar: Dict[str, Any], curr: Set[str],
            beef: Optional[str]) -> None:
     raise NotImplementedError
 
 
 def latopt(mat: Mat, time: int, xc: str,
-           retry: bool, incar: Dict[str, Any], curr: Set[str], sunc: str,
+           retry: bool, incar: Dict[str, Any], curr: Set[str],
            beef: Optional[str]) -> None:
     new = dict(ediff=1e-5, nsw=500, ediffg=-0.001, addgrid=True, algo='N',
                ismear=0, ivdw=0, lreal=False, ibrion=2, sigma=0.01,
@@ -288,71 +287,66 @@ def latopt(mat: Mat, time: int, xc: str,
               kpts=mk_kpts(atoms), beef=beef)
         bash = temp.jinja_env.get_template('subVASP.jinja'
                                            ).render(gam='', rm=False)
-        _sub(pth, bash, time, sunc)
+        _sub(pth, bash, time)
 
 
 def eos(mat: Mat, time: int, xc: str,
-        retry: bool, incar: Dict[str, Any], curr: Set[str], sunc: str,
-        beef: Optional[str], second: bool) -> None:
-    if second and only_ce(mat):
-        return print('No EOS round 2 on %s without bm/lat data' % mat.name)
+        retry: bool, incar: Dict[str, Any], curr: Set[str],
+        beef: Optional[str]) -> None:
     matpth = os.path.join(root, 'bulks', xc, snake(mat.name),
-                          'eos' + ('2' if second else ''))
+                          'eos')
     os.makedirs(matpth, exist_ok=True)
 
-    if not second:
-        outpth = matpth[:-3] + 'latopt'
-        if done(outpth):
-            return print('Cannot do EOS for %s - ' % matpth + done(outpth))
-        try:
-            orig_atoms = read_outcar(outpth)
-            strain_vols = [ase.cell.Cell(orig_atoms.get_cell() *
-                           get_strain(mat, i)).volume for i in range(-2, 3)]
+    outpth = matpth[:-3] + 'latopt'
+    if done(outpth):
+        return print('Cannot do EOS for %s - ' % matpth + done(outpth))
+    try:
+        orig_atoms = read_outcar(outpth)
+        strain_vols = [ase.cell.Cell(
+            orig_atoms.get_cell() * get_strain(mat, i)).volume
+            for i in range(-2, 3)]
 
-        except Exception:
-            return print('Cannot EOS for %s - ase parse error OUTCAR' % matpth)
-    else:
-        orig_atoms = copy.deepcopy(mk_traj(mat))
-        output = matpth[:-1] + '/strain_%d'
-        vols, engs = [], []
-        for strain_i in [-2, -1, 0, 1, 2]:
-            atoms = read_outcar((output % strain_i))
-            vols.append(atoms.get_volume())
-            engs.append(atoms.get_potential_energy())
-        dx = vols[1] - vols[0]
+    except Exception:
+        return print('Cannot EOS for %s - ase parse error OUTCAR' % matpth)
+    # else:
+    #     orig_atoms = copy.deepcopy(mk_traj(mat))
+    #     output = matpth[:-1] + '/strain_%d'
+    #     vols, engs = [], []
+    #     for strain_i in [-2, -1, 0, 1, 2]:
+    #         atoms = read_outcar((output % strain_i))
+    #         vols.append(atoms.get_volume())
+    #         engs.append(atoms.get_potential_energy())
+    #     dx = vols[1] - vols[0]
 
-        for i, j in [(0, 1), (1, 2), (3, 2), (4, 3)]:
-            if engs[i] < engs[j]:
-                print('BAD ENG ORDER: ',
-                      ','.join(['%.2f' % x for x in engs]))
-                return print('VOL ORDER: ',
-                             ','.join(['%.2f' % x for x in vols]))
-            if abs(abs(vols[i] - vols[j]) - dx) > .01:
-                return print("UNEQUAL SPACING",
-                             ','.join(['%.2f' % x for x in vols]))
+    #     for i, j in [(0, 1), (1, 2), (3, 2), (4, 3)]:
+    #         if engs[i] < engs[j]:
+    #             print('BAD ENG ORDER: ',
+    #                   ','.join(['%.2f' % x for x in engs]))
+    #             return print('VOL ORDER: ',
+    #                          ','.join(['%.2f' % x for x in vols]))
+    #         if abs(abs(vols[i] - vols[j]) - dx) > .01:
+    #             return print("UNEQUAL SPACING",
+    #                          ','.join(['%.2f' % x for x in vols]))
 
-        eos = ase.eos.EquationOfState(vols, engs)
-        optvol, _, eosbm = eos.fit()  # type: Tuple[float,float,float]
+    #     eos = ase.eos.EquationOfState(vols, engs)
+    #     optvol, _, eosbm = eos.fit()  # type: Tuple[float,float,float]
 
-        stencil = (-1 * engs[4] + 16 * engs[3] - 30 * engs[2] +
-                   16 * engs[1] - engs[0]) / (12 * dx**2)
-        ev_a3_to_gpa = (10**-9) * (1.602 * 10**-19) * (10**10)**3
+        # stencil = (-1 * engs[4] + 16 * engs[3] - 30 * engs[2] +
+        #            16 * engs[1] - engs[0]) / (12 * dx**2)
+        # ev_a3_to_gpa = (10**-9) * (1.602 * 10**-19) * (10**10)**3
 
-        bulkmod = stencil * vols[2] * ev_a3_to_gpa  # APPROXIMATE
-        eosbm = eosbm / ase.units.kJ * 1.0e24
-        err = abs(bulkmod - eosbm) / eosbm
-        # if err > 0.20:
-        #     return print(xc, mat.name, " Irregular!", bulkmod, eosbm)
+        # bulkmod = stencil * vols[2] * ev_a3_to_gpa  # APPROXIMATE
+        # eosbm = eosbm / ase.units.kJ * 1.0e24
 
-        r = opt.root_scalar(f=lambda x: ase.atoms.Cell(
-            orig_atoms.get_cell() * x).volume - optvol, x0=0.5, x1=2)
-        orig_atoms.set_cell(
-            orig_atoms.get_cell() * r.root, scale_atoms=True)
-        v = orig_atoms.get_volume()
-        assert round(v, 5) == round(optvol, 5), (output, v, optvol)
+        # r = opt.root_scalar(f=lambda x: ase.atoms.Cell(
+        #     orig_atoms.get_cell() * x).volume - optvol, x0=0.5, x1=2)
+        # orig_atoms.set_cell(
+        #     orig_atoms.get_cell() * r.root, scale_atoms=True)
+        # v = orig_atoms.get_volume()
+        # assert round(v, 5) == round(optvol, 5), (output, v, optvol)
 
-        shift = vols[2] - optvol
-        strain_vols = [v - shift for v in vols]
+        # shift = vols[2] - optvol
+        # strain_vols = [v - shift for v in vols]
 
     # Bulk-specific INCAR settings
     magcar = dict(sigma=0.01, ismear=0, **magdic(mat))
@@ -374,17 +368,16 @@ def eos(mat: Mat, time: int, xc: str,
     if dirs and attempt(retry, matpth, curr):
 
         bash = gt('subAll.jinja').render(gam='', dirs=dirs)
-        _sub(matpth, bash, time, sunc)
+        _sub(matpth, bash, time)
 
 
-def _sub(pth: str, bash: str, time: int, sunc: str) -> None:
+def _sub(pth: str, bash: str, time: int) -> None:
     bashpth = os.path.join(pth, 'subVASP.sh')
     with open(bashpth, 'w') as g:
         g.write(bash)
     os.chdir(pth)
     os.system('chmod 755 ' + bashpth)
-    args = [16 if sunc else 8, time, sunc, bashpth]
-    cmd = 'bsub -n {} -W{}:09 -q suncat{} {}'.format(*args)
+    cmd = 'bsub -n 16 -W{}:09 -q suncat3 {}'.format(time, bashpth)
     os.system(cmd)
 
 
@@ -427,7 +420,7 @@ def restrain(pth: str, xc: str, strains: List[float]) -> None:
             except OSError:
                 pass
     bash = gt('subAll.jinja').render(gam='', dirs=dirs)
-    _sub(pth, bash, 10, '3')
+    _sub(pth, bash, 10)
 
 
 #############################################################################
@@ -437,8 +430,6 @@ parser.add_argument('--time', default=10, type=int, help='Walltime')
 parser.add_argument('--orb', default=None, type=str2bool,
                     help='Use explicit orb occupations')
 parser.add_argument('--retry', default=False, type=bool, help='Redo jobs')
-parser.add_argument('--sunc', default='', type=str, help='Which cluster',
-                    choices=['', '3'])
 parser.add_argument('--type', help='What type of bulk operation',
                     choices=['latopt', 'eos', 'phonon'])
 
@@ -479,7 +470,7 @@ def main() -> None:
                      lcharg=False, lwave=True, prec='ACCURATE', **xcdict[xc])
 
         common = dict(incar=incar, time=args.time, xc=xc, curr=curr,
-                      retry=args.retry, sunc=args.sunc, beef=beef)
+                      retry=args.retry, beef=beef)
         if args.mat:
             assert (not args.elems) and args.type, args
             if args.strains:
@@ -491,22 +482,20 @@ def main() -> None:
                 restrain(eos, xc, list(map(int, args.strains.split())))
                 return None
             for m in args.mat:
-                if args.type == 'eos':
-                    matpth = os.path.join(root, 'bulks', xc, snake(m.name),
-                                          'eos/')
-                    second = os.path.exists(matpth)
-                    if second:
-                        for strain_i in [-2, -1, 0, 1, 2]:
-                            strainpth = matpth + ('strain_%d') % strain_i
-                            if done(strainpth):
-                                # print('Cant do eos2 b/c incomplete %s - %s' %
-                                #       (strainpth, done(strainpth)))
-                                second = False
-                                break
-                    sdic = dict(second=second)
-                else:
-                    sdic = dict()
-                typedict[args.type](mat=m, **sdic, **common)
+                # if args.type == 'eos':
+                #     matpth = os.path.join(root, 'bulks', xc, snake(m.name),
+                #                           'eos/')
+                #     second = os.path.exists(matpth)
+                #     if second:
+                #         for strain_i in [-2, -1, 0, 1, 2]:
+                #             strainpth = matpth + ('strain_%d') % strain_i
+                #             if done(strainpth):
+                #                 second = False
+                #                 break
+                #     sdic = dict(second=second)
+                # else:
+                #     sdic = dict()
+                typedict[args.type](mat=m, **common)
         else:
             assert args.elems
             for e in args.elems:
@@ -517,8 +506,3 @@ if __name__ == '__main__':
     main()
 
 # HCP: Be Cd Co Hf In Mg Os Re Ru Sc Tc Ti Tl Y Zn Zr
-# Ba_O Be Ca Ca_O Ca_S Ca_Se Cd Co Cr_C Cr_N Cs_F Fe_N Ga_N In_Sb Ir_C Ir_N K K_Br La_C La_N Li Mg Mg_O Mg_S Mn_C Mn_N Mn_O Mo Na Na_F Nb Nb_N Ni Ni_C Os_C Os_N Pd_C Pd_N Rb Rh Rh_N Ru_N Sc Sc_C Se_As Si_C Sn Ta_N Ti Ti_C Ti_N V V_N W W_C W_N Zn Zn_S Zn_Se Zn_Te Zr Zr_N
-# BaO Be Ca CaO CaS CaSe Cd Co CrC CrN CsF FeN GaN InSb IrC IrN K KBr LaC LaN Li Mg MgO MgS MnC MnN MnO Mo Na NaF Nb NbN Ni NiC OsC OsN PdC PdN Rb Rh RhN RuN Sc ScC SeAs SiC Sn TaN Ti TiC TiN V VN W WC WN Zn ZnS ZnSe ZnTe Zr ZrN
-
-# Pt LiH InP MoN Al NaCl ZrC Ge AgCl NiAl PtC CoN Sr AlAs FeC HfN CoAl RbI PtN BN GaAs Fe RhC FeAl HfC LiI NiN RuC MoC Ru CoC InAs BaSe GaP CdO BP TaC Si Pd GaSb LiF VC Ag Cu Au Ir NbC CsI Os Ta C MnS ScN LiCl BaO Be Ca CaO CaS CaSe Cd Co CrC CrN CsF FeN GaN InSb IrC IrN K KBr LaC LaN Li Mg MgO MgS MnC MnN MnO Mo Na NaF Nb NbN Ni NiC OsC OsN PdC PdN Rb Rh RhN RuN Sc ScC SeAs SiC Sn TaN Ti TiC TiN V VN W WC WN Zn ZnS ZnSe ZnTe Zr ZrN
-# Pt Li_H In_P Mo_N Al Na_Cl Zr_C Ge Ag_Cl Ni_Al Pt_C Co_N Sr Al_As Fe_C Hf_N Co_Al Rb_I Pt_N B_N Ga_As Fe Rh_C Fe_Al Hf_C Li_I Ni_N Ru_C Mo_C Ru Co_C In_As Ba_Se Ga_P Cd_O B_P Ta_C Si Pd Ga_Sb Li_F V_C Ag Cu Au Ir Nb_C Cs_I Os Ta C Mn_S Sc_N Li_Cl

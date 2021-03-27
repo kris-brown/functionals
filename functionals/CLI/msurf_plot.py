@@ -15,7 +15,7 @@ mCaml = FromMatrix.frompath('msurf')
 
 datapth = '/' + os.path.join(*__file__.split('/')[:-3], 'data/')
 
-bulks = ['SOL54_coh', 'BM32', 'SOL58_lp']
+bulks = ['COH53', 'BM32', 'LP57']
 gases = ['DBH24', 'RE42', 'S66x8']
 surfs = ['CHEMI26', 'DISP15']
 dsets = [bulks, gases, surfs]
@@ -24,23 +24,23 @@ fxs = [['mCAML', 'MS2', 'PBE', 'SCAN'],  # bulks
        ['mCAML', 'MS2', 'PBE', 'SCAN'],  # gases
        ['mCAML', 'PBE', 'SCAN', 'RPBE', 'MS2']]  # surfs
 
-units = dict(SOL54_coh='eV', BM32='100 GPa', SOL58_lp='0.1 Å', DBH24='eV',
+units = dict(COH53='eV', BM32='100 GPa', LP57='0.1 Å', DBH24='eV',
              CHEMI26='eV', RE42='eV', S66x8='0.1 eV', DISP15='eV')
 
-scale = dict(BM32=100, S66x8=0.1, SOL58_lp=.1)
+scale = dict(BM32=100, S66x8=0.1, LP57=.1)
 colors = dict(mCAML='red', MS2='green', SCAN='blue', PBE='black')
 # MAE raw data
 errs: D[str, D[str, float]] = dict(
-    PBE=dict(SOL54_coh=.2, BM32=11.55, SOL58_lp=.051, DBH24=.33, DISP15=.49,
+    PBE=dict(COH53=.2, BM32=11.55, LP57=.051, DBH24=.432, DISP15=.49,
              CHEMI26=.27, RE42=.298,
              S66x8=.065, CHEMI26_me=-.17, DISP15_me=.49),
-    mCAML=dict(SOL54_coh=.27, BM32=5.43, SOL58_lp=.032, DBH24=.5, DISP15=.16,
+    mCAML=dict(COH53=.27, BM32=5.43, LP57=.032, DBH24=.454, DISP15=.16,
                CHEMI26=.22, RE42=.28,
                S66x8=.023, CHEMI26_me=-.17, DISP15_me=.06),
-    MS2=dict(SOL54_coh=.23, BM32=4.34, SOL58_lp=.029, DBH24=.49, DISP15=.29,
+    MS2=dict(COH53=.23, BM32=4.34, LP57=.029, DBH24=.49, DISP15=.29,
              CHEMI26=.23, RE42=.42,
              S66x8=.052, CHEMI26_me=-.15, DISP15_me=.28),
-    SCAN=dict(SOL54_coh=.21, BM32=4.39, SOL58_lp=.031, DISP15=.24, CHEMI26=.4,
+    SCAN=dict(COH53=.21, BM32=4.39, LP57=.031, DISP15=.24, CHEMI26=.4,
               RE42=.338,
               S66x8=.0326, DBH24=.475, CHEMI26_me=-.4, DISP15_me=.04),
     RPBE=dict(CHEMI26=.17, DISP15=.72, RE42=.25, DBH24=.27, CHEMI26_me=.09,
@@ -70,7 +70,7 @@ def get_ab(dataset: str) -> T[Arr, Arr, Arr]:
             b.append(float(row[67]) - float(row[66]))
             c.append(float(row[68]) - float(row[66]))
 
-    if dataset == 'SOL58_lp':
+    if dataset == 'LP57':
         err = mae_msurf_lc
     elif dataset == 'BM32':
         err = mae_msurf_bm
@@ -98,8 +98,12 @@ def big_ab() -> T[Arr, Arr, Arr]:
     return A, b, c
 
 
+def coef() -> None:
+    mCaml.plot_coef().write_image("data/figs/coef.pdf")
+
+
 def bivariate() -> None:
-    fs = fxs[2]
+    fs = fxs[1]
 
     for mae in [True, False]:
         suf = '' if mae else '_me'
@@ -109,13 +113,14 @@ def bivariate() -> None:
              )**0.5
         dispe = [errs[fx]['DISP15' + suf] for fx in fs]
         chem = [errs[fx]['CHEMI26' + suf] for fx in fs]
+        colors = ['red', 'green', 'black', 'blue']
         fig = go.Scatter(x=dispe, y=chem, mode='markers',
-                         marker_size=16 if mae else 12)
+                         marker=dict(size=16 if mae else 12, color=colors))
         arc = np.linspace(0, np.pi * (0.5 if mae else 2))
         curve = go.Scatter(x=r * np.cos(arc), y=r * np.sin(arc), mode='lines',
                            opacity=0.5)
-        ax = dict(range=[0 if mae else -.75, .75 if mae else .8],
-                  tickmode='linear', titlefont=dict(size=24 if mae else 18),
+
+        ax = dict(tickmode='linear', titlefont=dict(size=24 if mae else 18),
                   tickfont=dict(size=20 if mae else 16),
                   tick0=0, dtick=0.2 if mae else 0.3, zeroline=True,
                   gridcolor='grey' if mae else None, gridwidth=0.5,
@@ -125,16 +130,17 @@ def bivariate() -> None:
             paper_bgcolor='white', plot_bgcolor='white',
             xaxis=dict(
                 title='Dispersion M%sE (eV)' % A,
-                side='bottom', **ax),
+                side='bottom', range=[0, .65], **ax),
             yaxis=dict(title='Chemisorption M%sE (eV)' % A,
-                       side='left', **ax)))
+                       side='left', range=[0 if mae else -.65, .65 if mae else 0],
+                       **ax)))
         wh = 600 if mae else 300
         fig_['layout'].update(width=wh, height=wh, autosize=False)
 
         off = dict(mCAML=(-.014, .05), MS2=(.055, .01), PBE=(.05, 0),
-                   RPBE=(-.06, 0), SCAN=(0, .03)) if mae else dict(
-                       mCAML=(-.35, 0), MS2=(0, -.17), PBE=(0.22, 0),
-                       RPBE=(0, 0.17), SCAN=(0.2, -.17))
+                   SCAN=(0, -.03)) if mae else dict(
+                       mCAML=(.07, -.08), MS2=(0, .1), PBE=(0, -.1),
+                       SCAN=(0.1, -.08))
         for f, x, y in zip(fs, dispe, chem):
             dx, dy = off[f]
             fig_.add_annotation(
@@ -148,7 +154,7 @@ def bivariate() -> None:
             with open('data/figs/bivariate.pdf', 'wb') as f3:
                 p1 = PyPDF2.PdfFileReader(f1).getPage(0)
                 p1.mergeTranslatedPage(PyPDF2.PdfFileReader(f2).getPage(0),
-                                       200, 200)
+                                       210, 210)
                 pdfWriter = PyPDF2.PdfFileWriter()
                 pdfWriter.addPage(p1)
                 pdfWriter.write(f3)
@@ -161,7 +167,8 @@ def err() -> None:
     a group of bars, one for each functional.
     '''
     fig = plotly.subplots.make_subplots(rows=2, cols=1, subplot_titles=(
-        "<b>Bulk properties</b>", "<b>Gas properties</b>"))
+        "<b>Bulk properties</b>", "<b>Gas properties</b>"),
+        vertical_spacing=.4)
 
     for i in range(2):
         dset = dsets[i]
@@ -185,14 +192,14 @@ def err() -> None:
     fig.write_image("data/figs/err.pdf")
 
 
-fsubx = '<i>f</i><sub>x</sub>'
-its = '<i>s</i>'
+fsubx = r'$F_{\rm x}'
 
 
 def fx() -> None:
     srange = np.linspace(0, 4, 500)
     arange = np.linspace(0, 4, 500)
-    fig = plotly.subplots.make_subplots(rows=2, cols=1)
+    fig = plotly.subplots.make_subplots(
+        rows=2, cols=2, vertical_spacing=.3, horizontal_spacing=.3)
 
     d1: D[Any, Any] = dict()  # xaxis=dict(title='s'))
     d2: D[Any, Any] = dict()  # xaxis=dict(title='α'))
@@ -200,25 +207,18 @@ def fx() -> None:
     for c, fx in zip(colors, [mCaml, SCAN, MS2]):
         fig.append_trace(go.Scatter(
             x=srange, y=[fx.apply(s, 0) for s in srange],
-            line=dict(color=c, dash='dash'),
+            line=dict(color=c),
             showlegend=False, **d1), 1, 1)
         fig.append_trace(go.Scatter(
             x=srange, y=[fx.apply(s, 1) for s in srange],
-            line_color=c, showlegend=False, **d1), 1, 1)
+            line_color=c, showlegend=False, **d1), 1, 2)
         fig.append_trace(go.Scatter(
             y=[fx.apply(0, a) for a in arange], x=arange,
-            line=dict(color=c, dash='dash'),
+            line=dict(color=c),
             showlegend=False, **d2), 2, 1)
         fig.append_trace(go.Scatter(
             y=[fx.apply(1, a) for a in arange], x=arange,
-            line_color=c, showlegend=False, **d2), 2, 1)
-
-    fig.append_trace(go.Scatter(
-        y=[0], x=[0], showlegend=True, visible='legendonly',
-        line=dict(color='black', dash='dash'), name='α = 0'), 1, 1)
-    fig.append_trace(go.Scatter(
-        y=[0], x=[0], showlegend=True, visible='legendonly',
-        line=dict(color='black', dash='solid'), name='α = 1'), 1, 1)
+            line_color=c, showlegend=False, **d2), 2, 2)
     fig.append_trace(go.Scatter(
         y=[0], x=[0], showlegend=True, visible='legendonly',
         line=dict(color='red', dash='solid'), name='mCAML'), 1, 1)
@@ -228,34 +228,21 @@ def fx() -> None:
     fig.append_trace(go.Scatter(
         y=[0], x=[0], showlegend=True, visible='legendonly',
         line=dict(color='blue', dash='solid'), name='SCAN'), 1, 1)
-    fig.append_trace(go.Scatter(
-        y=[0], x=[0], showlegend=True, visible='legendonly',
-        line=dict(color='white', dash='solid'), name='<br>' * 1), 1, 1)
 
-    fig.append_trace(go.Scatter(
-        y=[0], x=[0], showlegend=True, visible='legendonly',
-        line=dict(color='black', dash='dash'), name=its + ' = 0'), 2, 1)
-    fig.append_trace(go.Scatter(
-        y=[0], x=[0], showlegend=True, visible='legendonly',
-        line=dict(color='black', dash='solid'), name=its + ' = 1'), 2, 1)
-    fig.append_trace(go.Scatter(
-        y=[0], x=[0], showlegend=True, visible='legendonly',
-        line=dict(color='red', dash='solid'), name='mCAML'), 2, 1)
-    fig.append_trace(go.Scatter(
-        y=[0], x=[0], showlegend=True, visible='legendonly',
-        line=dict(color='green', dash='solid'), name='MS2'), 2, 1)
-    fig.append_trace(go.Scatter(
-        y=[0], x=[0], showlegend=True, visible='legendonly',
-        line=dict(color='blue', dash='solid'), name='SCAN'), 2, 1)
     ax = dict(gridcolor='grey', gridwidth=0.5,
               zerolinecolor='grey', zerolinewidth=1)
 
-    fig.update_yaxes(title_text=fsubx, row=1, col=1, **ax)
-    fig.update_yaxes(title_text=fsubx, row=2, col=1, **ax)
-    fig.update_xaxes(title_text=its, row=1, col=1, **ax)
-    fig.update_xaxes(title_text="α", row=2, col=1, **ax)
+    for r in [1, 2]:
+        for co in [1, 2]:
+            rng = dict(range=[0.82, 1.22] if r == 2 else [.95, 1.42])
+            fig.update_yaxes(title_text=fsubx + "$", row=r, col=co, **rng, **ax),
+            xvar, fixed = (r"\alpha", 's') if r == 2 else ("s", r"\alpha")
+            eq = '0' if co == 1 else '1'
+            xtitle = r'${}\ \ ({}={})$'.format(xvar, fixed, eq)
+            fig.update_xaxes(title_text=xtitle, row=r, col=co, **ax)
     fig['layout'].update(
         font=dict(size=24),
+        legend=dict(yanchor='bottom', xanchor='center', orientation='h', x=0.5, y=-.5),
         paper_bgcolor='rgba(0,0,0,0)',
         plot_bgcolor='rgba(0,0,0,0)')
     fig.write_image("data/figs/fx.pdf")
@@ -263,17 +250,17 @@ def fx() -> None:
 
 def spaghet() -> None:
     fig = plotly.subplots.make_subplots(rows=3, cols=1, shared_xaxes=True,
-                                        vertical_spacing=0.02)
+                                        vertical_spacing=0.1)
 
     x = json.load(open(datapth + 'ensemble.json'))
 
     s = np.array(x[0])
-    alphas = ['1', '0', '∞']
+    alphas = ['1', '0', r'\infty']
     fs = [np.array(x[i]) for i in [1, 3, 5]]
     ens = [np.array(x[i]) for i in [2, 4, 6]]
     for i, (alpha, f, en) in enumerate(zip(alphas, fs, ens)):
         fig.update_yaxes(
-            title_text=fsubx + "(α=%s)" % (alpha), tick0=1, dtick=0.2,
+            title_text=fsubx + r"(\alpha=%s)$" % (alpha), tick0=1, dtick=0.2,
             gridcolor='grey', row=i + 1, col=1)
         fig.update_xaxes(gridcolor='grey', row=i + 1, col=1)
 
@@ -286,7 +273,11 @@ def spaghet() -> None:
             x=s, y=f, line_color='black',
             showlegend=False), i + 1, 1)
 
-    fig.update_xaxes(title_text=its, row=3, col=1)
+    fig.update_xaxes(title_text=r'$s$', row=3, col=1)
+    fig['layout']['yaxis2']['range'] = [0.7, 1.45]
+    fig['layout']['yaxis']['range'] = [0.7, 1.45]
+    fig['layout']['yaxis3']['range'] = [0.7, 1.45]
+
     fig['layout'].update(font=dict(size=18),
                          paper_bgcolor='rgba(0,0,0,0)',
                          plot_bgcolor='rgba(0,0,0,0)')

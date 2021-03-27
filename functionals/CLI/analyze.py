@@ -3,7 +3,6 @@ from typing import Tuple as T, Any, Optional, Dict, List
 import ast
 import collections
 import csv
-import itertools
 import os
 import copy
 import json
@@ -13,13 +12,10 @@ import plotly
 import plotly.graph_objs as go
 import ase.units as units
 import ase.io as aseio
-import ase
-import subprocess as subp
 # Internal Modules
 import dbgen
 import functionals.fit.functional as fx
 import functionals.fit.data as fdata
-from functionals.CLI.submit import matdata
 from functionals.scripts.io.parse_job import parse_job
 from functionals.scripts.fit.pareto import pareto
 
@@ -69,7 +65,8 @@ def viz_plts(name: str, calc: str, v_: str, e_: str,
                  for r, g, b, s
                  in [(231, 99, 250, 20), (99, 231, 250, 5), (199, 231, 50, 5)]]
 
-    title = '''{} {}<br><b>EOS</b>: vol={:.1f} Å³,<br><b>Expt</b>: vol = {:.1f} Å³, bm = {:.1f}
+    title = '''{} {}<br><b>EOS</b>: vol={:.1f} Å³,<br><b>Expt</b>: vol = {:.1f} Å³,
+bm = {:.1f}
                 GPa<br><b>Stencil</b> bm: {:.1f} GPa,
                 <b>QuadFit</b> bm: {:.1f} GPa'''
     title = title.format(name, calc, vol, expt_vol or 0,
@@ -155,10 +152,10 @@ def reset() -> None:
     os.system('rm -r /Users/ksb/scp_tmp/fitplt/*')
 
 
-def mk_dataset(fx: str) -> fdata.Data:
+def mk_dataset(beefcalc_id: int) -> fdata.Data:
     q = '''SELECT name, expt_ce,expt_bm,expt_vol,ab_ce,ab_bm,ab_vol, ce, volrat
-           FROM bulks where calcname='{}' '''.format(fx)
-    assert fx in ['ms2', '7500']
+           FROM bulks where calc='{}' '''.format(beefcalc_id)
+
     datums = set()
     for (n, ce, bm, vol, abce_, abbm_, abvol_, ce_calc, volrat
          ) in dbgen.sqlselect(default.connect(), q):
@@ -227,15 +224,18 @@ def compare(fx: str, missing: bool = False) -> None:
 
 
 def errs(prop: str, rel: bool = True) -> None:
-    '''Need to run `ms2fit` generator first'''
+    '''
+    warning: Need to run `ms2fit` generator first to generate rows in fit
+    table corresponding to ms2 and pbesol
+    '''
     assert prop in ['ce', 'bm', 'vol', 'lat']
 
     conn = default.connect()
-    # dftval = dict(ce='ce',bm='bulkmod',l='lattice')[prop]
     relstr = 'rel' if rel else ''
-    q1 = '''SELECT CONCAT('fit: ', CASE WHEN fit_id=-6532743347055789102 THEN 'ms2'
-                                        WHEN fit_id=-505305133531848896 THEN 'pbesol'
-                                        ELSE fit_id::Text END), x from fit'''
+    q1 = '''SELECT CONCAT('fit: ',
+     CASE WHEN fit_id=-6532743347055789102 THEN 'ms2'
+          WHEN fit_id=-505305133531848896 THEN 'pbesol'
+          ELSE fit_id::Text END), calc, x from fit'''
     q2 = '''SELECT CONCAT('fx: ',calcname), CONCAT('[',string_agg(
                     CONCAT('("',name,'",' ,{0}err_{1},')'),','),']')
             FROM bulks
@@ -243,71 +243,80 @@ def errs(prop: str, rel: bool = True) -> None:
             GROUP BY calcname'''.format(relstr, prop)
     fitx_ = dbgen.sqlselect(conn, q1)
     calcdata_ = dbgen.sqlselect(conn, q2)
-    calcdata = []
-    for k, v in calcdata_:
-        mats, errs = zip(*ast.literal_eval(v))
-        calcdata.append((k, mats, errs))
+    calcdata = {}
+    for fxname, list_of_mat_err_pairs in calcdata_:
+        mats, errs = zip(*ast.literal_eval(list_of_mat_err_pairs))
+        calcdata[fxname] = (mats, errs)
+    fxdata = [go.Bar(name=k, x=mats, y=vals)
+              for k, (mats, vals) in calcdata.items()]
 
-    fitx = [(k, np.array(json.loads(v))) for k, v in fitx_]
+    fitx = [(k, cid, np.array(json.loads(v))) for k, cid, v in fitx_]
     key = dict(lat='lc', vol='lc')
-    dataset = getattr(mk_dataset('ms2'), key.get(prop, prop))
-    mats = [d.mat for d in dataset]
 
-    fxdata = [go.Bar(name=k, x=mats, y=vals) for k, mats, vals in calcdata]
+    def get_data(calcid: int) -> List[fdata.Datum]:
+        return getattr(mk_dataset(calcid), key.get(prop, prop))  # type: ignore
 
     fitdata = [go.Bar(name=n, x=mats,
                       y=[d.err(x, vol=prop == 'vol', rel=True)
-                         for d in dataset]) for n, x in fitx]
+                         for d in get_data(cid)]) for n, cid, x in fitx]
     data = fxdata + fitdata
 
-    fig = go.Figure(data=data, layout=go.Layout(barmode='group', title=prop,
-                                                xaxis=dict(title='Material'), yaxis=dict(title=relstr + ' Error',)))
+    fig = go.Figure(data=data,
+                    layout=go.Layout(barmode='group', title=prop,
+                                     xaxis=dict(title='Material'),
+                                     yaxis=dict(title=relstr + ' Error',)))
     plotly.offline.plot(fig, filename='temp0.html')
 
 
-def maes(use_pareto: str = '') -> None:
-    q = '''SELECT name, mae_ce,relmae_bm,relmae_lat FROM calc'''
+def maes(rel_bm: str = '', rel_lc: str = '', use_pareto: str = '') -> None:
+    rbm, rlc = rel_bm == '', rel_lc == ''
+    q = '''SELECT name, mae_ce,{}mae_bm,{}mae_lat FROM calc'''.format(
+        'rel' if rbm else '', 'rel' if rlc else '')
     con = default.connect()
     fxfns, fxces, fxbms, fxlats = map(list, zip(*dbgen.sqlselect(con, q)))
     fxbumps = [-5 for _ in range(len(fxfns))]
     fxdatas = [fxces, fxbms, fxlats]
 
-    dataset = mk_dataset('7500')
+    # dataset = mk_dataset('7500')
 
     fitfns, fitbumps, fitces, fitbms, fitlats = [], [], [], [], []
-    q = '''SELECT fit_id, x, bump FROM fit'''
-    for fitid, x_, bump in dbgen.sqlselect(con, q):
-        fitfns.append(str(fitid))  # type: ignore
+    q = '''SELECT fit_id, calc, x, bump FROM fit'''
+    for fitid, calc, x_, bump in dbgen.sqlselect(con, q):
+        dataset = mk_dataset(int(calc))
+        fitfns.append(str(fitid))
         fitbumps.append(bump or -5)
         x = json.loads(x_)
-        fitces.append(dataset.mae(x, 'ce', rel=False))  # type: ignore
-        fitbms.append(dataset.mae(x, 'bm', rel=True))  # type: ignore
-        fitlats.append(dataset.mae(x, 'lc', rel=True))  # type: ignore
+        fitces.append(dataset.mae(x, 'ce', rel=False))
+        fitbms.append(dataset.mae(x, 'bm', rel=rbm))
+        fitlats.append(dataset.mae(x, 'lc', rel=rlc))
     fitdatas = [fitces, fitbms, fitlats]
-    labs = [('' if x == 'CE' else "Relative")
-            + ' MAE %s error' % x for x in ['CE', 'BM', 'Lattice']]
+    labs = [('' if not rel else "Relative")
+            + ' MAE %s error' % x for x, rel in [
+                ('CE', False), ('BM', rbm), ('Lattice', rlc)]]
     pairs = [(0, 1), (0, 2)]
 
     data = []
     for x, y in pairs:
         dx, dy = copy.deepcopy(fitdatas[x]), copy.deepcopy(fitdatas[y])
         if use_pareto:
-            breakpoint()
             dx, dyfnbumps = map(list, pareto(
-                dx, list(zip(dy, copy.deepcopy(fitfns), copy.deepcopy(fitbumps)))))
+                dx, list(zip(dy, copy.deepcopy(fitfns),
+                             copy.deepcopy(fitbumps)))))
             dy, dfitfns, dfitbumps = map(list, zip(*dyfnbumps))
         else:
             dfitfns = fitfns
             dfitbumps = fitbumps
         data.append(go.Scatter(
-            x=dx + fxdatas[x], y=dy + fxdatas[y], mode='markers', text=dfitfns + fxfns,
-            marker=dict(color=dfitbumps+fxbumps, colorscale='Viridis', size=14,
-                        colorbar=dict(thickness=20)),
+            x=dx + fxdatas[x], y=dy + fxdatas[y], mode='markers',
+            text=dfitfns + fxfns,
+            marker=dict(color=dfitbumps + fxbumps, colorscale='Viridis',
+                        size=14, colorbar=dict(thickness=20),
+                        symbol=['x'] * len(dx) + ['circle'] * len(fxdatas[x])),
             hoverinfo='text'))
 
     fig = plotly.tools.make_subplots(rows=1, cols=2)
+
     for i, (x, y) in enumerate(pairs):
-        # ;breakpoint()
         fig.append_trace(data[i], 1, i + 1)
         fig['layout']['xaxis%d' % (i + 1)].update(title=labs[x], zeroline=True)
         fig['layout']['yaxis%d' % (i + 1)].update(title=labs[y], zeroline=True,
@@ -325,6 +334,7 @@ def mk_plt(retry: bool = False, fit_id: str = None) -> None:
     print('plotting fx2d')
     for name_, x_, _, _ in res:
         name = str(abs(name_))
+        print(name)
         d = '/Users/ksb/scp_tmp/fitplt/' + name
         if os.path.exists(os.path.join(d)) and not retry:
             print('skipping ', d)
@@ -443,74 +453,65 @@ def lattice() -> None:
 
 
 def expt() -> None:
-    '''Aggregates experimental data'''
+    '''
+    Aggregates experimental data
+        don't trust kubaschevski data
+    '''
     root = datapth + '%s.csv'
+
     kjmol_to_ev = units.kJ / units.mol
-    # mRyd_to_eV = 0.013605691455111256
-    # Parse data from individual csvs
-    # -------------------------------
-    # with open(root % 'atom_eform_coh', 'r') as f:
-    #     r = csv.reader(f)
-    #     next(r)
-    #     elem_form = {k: float(v) for k, v in r}
 
-    with open(root % 'keld', 'r') as f:
-        r = csv.reader(f)
-        next(r)
-        keld = {k: (mbfloat(e), mbfloat(b), float(l), mbfloat(m))
-                for k, s, e, b, l, m in r}
-
-    with open(root % 'scheff', 'r') as f:
-        r = csv.reader(f)
-        next(r)
-        scheff = {row[0]: tuple(map(float, row[1:]))
-                  for row in r}
-
-    # with open(root % 'kubaschewski', 'r') as f:
-    #     r = csv.reader(f)
-    #     next(r)
-    #     kub = {k: float(v) for k, _, v in r}
-
-    # with open(root % 'rungs_tran', 'r') as f:
-    #     r = csv.reader(f)
-    #     next(r)
-    #     tran = {k: (mbfloat(a), mbfloat(b), mbfloat(c)) for k, a, b, c in r}
-
-    # with open(root % 'errorestimate_lejaeghere', 'r') as f:
-    #     r = csv.reader(f)
-    #     next(r)
-    #     lej = {k: (float(a), float(b), float(c)) for k, a, b, c in r}
-
-    # with open(root % 'cohesive_guillermet', 'r') as f:
-    #     r = csv.reader(f)
-    #     next(r)
-    #     guil = {k: float(v) for k, v in r}
-
-    # with open(root % 'glasser_coh', 'r') as f:
-    #     r = csv.reader(f)
-    #     next(r)
-    #     glas = {k: float(v) for k, _, v in r}
-
-    # with open(root % 'hsesol_schimka', 'r') as f:
-    #     r = csv.reader(f)
-    #     next(r)
-    #     schim = {k: (float(bm), mbfloat(ce)) for k, _, bm, ce in r}
-
-    with open(root % 'sol58lp_54coh', 'r') as f:
-        r = csv.reader(f)
-        next(r)
-        sol = {k: (mbfloat(m), mbfloat(l), mbfloat(d), mbfloat(c),
-                   mbfloat(b), r, u)
-               for k, _, _, m, l, _, d, c, b, r, u in r}
-
-    dicts = [sol, keld, scheff  # kub, tran, lej, schim, glas, sol
-             ]  # type: List[Dict[str, Any]]
-    # Make list of mats
     Mat = collections.namedtuple(
         'Mat', ['ce', 'bm', 'lc', 'mag'])
+    mats: Dict[str, Mat] = {}
+    for mat in fdata.allmats:
 
-    mats = {k: Mat([], [], [], []) for k in itertools.chain(
-        *[x.keys() for x in dicts])}  # type: Dict[str, Mat]
+        with open(root % 'scheff', 'r') as f:
+            r = csv.reader(f)
+            for (m, lcu, lcc, _, _, lcx, bmu, bmc, _, _, bmx, ceu, cec, _, _,
+                 cex) in r:
+                if m == mat:  # u(c)=un(c)orrected, x=expt
+                    lu, lc, lx, bu, bc, bx, cu, cc, cx = map(
+                        float, [lcu, lcc, lcx, bmu, bmc, bmx, ceu, cec, cex])
+                    # account for ZPE correction (diff btw pbe uncorr and corr)
+                    ccorr, bcorr, lcorr = cc - cu, bc - bu, lc - lu
+                    mats[m] = Mat(-(cx + ccorr), bx - bcorr, lx - lcorr, None)
+                    print('\t{}=({},{},{}),'.format(m, *mats[m]))
+                    continue
+        if mat not in mats:
+
+            with open(root % 'sol58lp_54coh', 'r') as f:
+                r = csv.reader(f)
+                for k, _, _, mag, l, _, debye, ceng, b, corr, unit in r:
+                    if k == mat:
+                        # print('sol58 ', mat)
+                        if ceng:
+                            solce = float(ceng)
+                            if unit == 'kcal/mol':
+                                solce *= units.kcal / units.mol
+                            elif unit == 'kJ/mol':
+                                solce *= kjmol_to_ev
+                            elif unit == 'eV':
+                                pass
+                            else:
+                                raise ValueError((k, solce, unit))
+                            if corr.lower() == 'false':
+                                assert debye
+                                solce += (9. / 8.) * units.kB * float(debye)
+                        else:
+                            solce = None
+                        mats[mat] = Mat(solce, mbfloat(
+                            b), mbfloat(l), mbfloat(mag))
+        if mat not in mats:
+            with open(root % 'keld', 'r') as f:
+                r = csv.reader(f)
+                for name, _, ce, bm, lat, mag in r:
+                    if name == mat:
+                        # print('keld ', mat)
+                        mats[mat] = Mat(mbfloat(ce), mbfloat(
+                            bm), mbfloat(lat), mbfloat(mag))
+        if mat not in mats:
+            raise ValueError("Missing data for %d mat: " + mat)
 
     # for k, (ecoh, bm, vol) in lej.items():
     #     mats[k].ce.append(ecoh*kjmol_to_ev)
@@ -525,104 +526,19 @@ def expt() -> None:
     # for k, vs in tran.items():
     #     for key, val in zip(['lc', 'bm', 'ce'], vs):
     #         getattr(mats[k], key).append(val)
-
     # for k, ce in guil.items():
     #     mats[k].ce.append(mRyd_to_eV * ce)
-
     # for k, ce in glas.items():
     #     mats[k].ce.append(kjmol_to_ev * ce / 2)
-
     # for k, (bm, c) in schim.items():
     #     mats[k].ce.append(kjmol_to_ev * c if c else None)
     #     mats[k].bm.append(bm)
-    for k, (c, b, l, m) in keld.items():
-        mats[k].bm.append(b)
-        mats[k].ce.append(c)
-        mats[k].lc.append(l)
-        mats[k].mag.append(m)
 
-    for k, (m, lx, debye, c, b, corr, unit) in sol.items():
-        mats[k].mag.append(m)
-        mats[k].bm.append(b)
-        mats[k].lc.append(lx)
-        if c is not None:
-            if unit == 'kcal/mol':
-                solce = c * units.kcal / units.mol
-            elif unit == 'kJ/mol':
-                solce = c * kjmol_to_ev
-            elif unit == 'eV':
-                solce = c
-            else:
-                raise ValueError((k, c, unit))
-            if corr == 'False':
-                assert debye
-                solce += (9. / 8.) * units.kB * debye
-            mats[k].ce.append(solce)
-
-    for k, (l1, l2, _, _, l3, b1, b2, _, _, b3, c1, c2, _, _, c3
-            ) in scheff.items():
-        for z in ['lc', 'ce', 'bm']:
-            getattr(mats[k], z).clear()  # remove other datatpoints
-        mats[k].lc.append(l3 + l1 - l2)
-        mats[k].ce.append(-(c3 + c1 - c2))  # flip sign
-        mats[k].bm.append(b3 + b1 - b2)
-
-    # for k, ce in kub.items():
-    #     if not mats[k].ce:  # ONLY IF WE HAVE NO OTHER OPTION
-    #         elems = re.findall(r'[A - Z][^A-Z]*', k)
-    #         assert all([e in elem_form for e in elems]), elems
-    #         extra = sum(map(elem_form.get, elems))
-    #         assert extra
-    #         mats[k].ce.append(kjmol_to_ev * (ce+extra) / 2)
-
-    missingguess = set(mats.keys()) - set(matdata.keys())
-    assert not missingguess, sorted(missingguess)
-    missingdata = set(matdata.keys()) - set(mats.keys())
-    print("WARNING! Missing data for %d mats: %s" %
-          (len(missingdata), missingdata))
     # Write mats to expt csv
     with open(datapth + 'expt.csv', 'w') as f:
         w = csv.writer(f)
-        for k, mat in sorted(mats.items()):
-            w.writerow([k] + list(map(safeAvg, mat)))  # type: ignore
-
-#############################################################################
-
-
-def eos(calc: str, mat: str, e2: str = '') -> None:
-    '''Visualize the first EOS directly from suncat cluster'''
-    fst = ["ssh", "ksb@suncatls1.slac.stanford.edu"]
-    root = '/nfs/slac/g/suncatfs/ksb/beefjobs/bulks/%s/%s/eos%s/strain_*/' % (
-        calc, mat, e2)
-
-    def splt(z): return list(filter(None, z.decode().split('\n')))
-    vols = splt(subp.check_output(fst + ['grep "volume of" %sOUTCAR' % root]))
-    engs = splt(subp.check_output(fst + ['tail -n 1 %sOSZICAR' % root]))
-    volumes = []  # type: List[float]
-    for vstr in vols:
-        v = float(vstr.split()[-1])
-        if v not in volumes:
-            volumes.append(v)
-    energies = [float(v.split()[4]) for v in engs[1::2]]
-    vols, engs = zip(*sorted(zip(volumes, energies)))
-    eos = ase.eos.EquationOfState(volumes, energies)
-    _, _, eosbm = eos.fit()
-    # compare to 5 point stencil
-    dx = vols[1] - vols[0]
-    stencil = (-1 * engs[4] + 16 * engs[3] - 30 * engs[2] +
-               16 * engs[1] - engs[0]) / (12 * dx**2)
-    ev_a3_to_gpa = (10**-9) * (1.602 * 10**-19) * (10**10)**3
-
-    bulkmod = stencil * vols[2] * ev_a3_to_gpa  # APPROXIMATE
-    eosbm = eosbm / ase.units.kJ * 1.0e24
-    err = abs(bulkmod - eosbm) / eosbm
-    if err > 0.20:
-        print("Irregular!")
-    print('dx', dx, '\nnvols ', vols, '\nengs ', engs, '\nbms ', bulkmod,
-          eosbm)
-
-    eos.plot(show=True)
-
+        for k, matt in sorted(mats.items()):
+            w.writerow([k] + list(matt))
 #############################################################################
 
 

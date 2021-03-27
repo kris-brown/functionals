@@ -179,6 +179,19 @@ class FromMatrix(Functional):
             plotly.offline.plot(fig)
         return fig
 
+    def plot_coef(self, n: int = 15) -> go.Figure:
+        vals, names = map(list, zip(*reversed(sorted([
+            (abs(self.A[i, j]), str((i, j)))
+            for i in range(8) for j in range(8)]))))
+        data = [go.Bar(x=names[:n], y=vals[:n])]
+        fig = go.Figure(data=data, layout=dict(font=dict(size=24),
+                        paper_bgcolor='rgba(0,0,0,0)',
+                        plot_bgcolor='rgba(0,0,0,0)',
+                        xaxis=dict(title='(i, j)'),
+                        yaxis=dict(title='|c<sub>ij</sub>|')))
+        # fig.update_yaxes(type="log")
+        return fig
+
 
 def plots(ps: L['Functional'], plot: bool = False, long: bool = False
           ) -> go.Figure:
@@ -262,7 +275,6 @@ MS2 = FromFunc('MS2', fxMS2)
 # ---------
 BEEF = FromMatrix.frompath('mbeef')
 PBESOL = FromMatrix.frompath('pbesol')
-
 
 if __name__ == '__main__':
     '''Mbeef at s=0,alpha=1 is 1.03'''

@@ -44,7 +44,7 @@ def io(mod: Model) -> None:
             desc='populate Atoms', transforms=[papb, papb2], loads=[ia])
     #########################################################################
     pb_cols = ['stordir', 'name', 'calcname', 'eng', 'contrib',
-               'mag', 'volumes', 'energies', 'contribs', 'err']
+               'mag', 'volumes', 'energies', 'contribs', 'eos', 'err']
 
     pbpb = PyBlock(parse_bulks, args=[Const(root + 'bulks')], outnames=pb_cols)
     ibc = Calc(insert=True, name=pbpb['calcname'])
@@ -59,8 +59,8 @@ def io(mod: Model) -> None:
     xcols = ['expt_ce', 'expt_bm', 'expt_lat', 'expt_mag']
     ptq = Query(dict(b=Bulks.id(), n=Bulks['name']()))
 
-    def parse_csv(root: str, mat: str
-                  ) -> T[O[float], O[float], O[float], O[float]]:
+    def pop_exp(root: str, mat: str
+                ) -> T[O[float], O[float], O[float], O[float]]:
         import csv
         with open(root % 'expt', 'r') as f:
             r = csv.reader(f)
@@ -68,9 +68,9 @@ def io(mod: Model) -> None:
                 if ro[0] == mat:
                     x, b, z, m = [float(x) if x else None for x in ro[1:]]
                     return x, b, z, m
-        return None, None, None, None
+        raise ValueError("No Expt data!")
 
-    ptpb = PyBlock(parse_csv,
+    ptpb = PyBlock(pop_exp,
                    args=[Const(csvpth), ptq['n']],
                    outnames=xcols)
 
@@ -78,7 +78,7 @@ def io(mod: Model) -> None:
                    desc='tran https://aip.scitation.org/doi/10.1063/1.4948636',
                    query=ptq, transforms=[ptpb],
                    loads=[Bulks(bulks=ptq['b'],
-                                  **{x: ptpb[x] for x in xcols})])
+                                **{x: ptpb[x] for x in xcols})])
     ##########################################################################
 
     # pccols = ['name', 'abdata', 'kind', 'points', 'val', 'func']
@@ -96,15 +96,16 @@ def io(mod: Model) -> None:
     popfp = \
         Gen(name='popfp', tags=['fit'],
             transforms=[pfpb], loads=[Fitparams(insert=True,
-                                             **{x: pfpb[x] for x in pfcols})])
+                                                **{x: pfpb[x] for x in pfcols})])
 
-    amq = Query(dict(c=Calc.id()))
-    ampb = PyBlock(all_mats, args=[Const(csvpth)])
-    allmat =    \
-        Gen(name='allmat',
-            desc='Goes through CSV files to get list of all mats with data',
-            transforms=[ampb], query=amq,
-            loads=[Calc(calc=amq['c'], allmat=ampb['out'])])
+    # amq = Query(dict(c=Calc.id()))
+    # ampb = PyBlock(all_mats, args=[Const(csvpth)])
+    # allmat =    \
+    #     Gen(name='allmat',
+    #         desc='Goes through CSV files to get list of all mats with data',
+    #         transforms=[ampb], query=amq,
+    #         loads=[Calc(calc=amq['c'], allmat=ampb['out'])])
+
     #######################################################################
     surfcol = ['mat', 'xc', 'ontop', 'hollow']
     spb = PyBlock(pop_surf, outnames=surfcol)
@@ -138,11 +139,11 @@ def io(mod: Model) -> None:
                     outnames=scheffout)
     scheff = Gen(name='scheffdiff', query=schq, transforms=[schpb],
                  loads=[Bulks(bulks=schq['z'],
-                          **{x: schpb[x] for x in scheffout})])
+                              **{x: schpb[x] for x in scheffout})])
     #######################################################################
     #######################################################################
 
-    gens = [pop_atoms, pop_bulkjobs, pop_expt, popfp, allmat, surf, beef,
+    gens = [pop_atoms, pop_bulkjobs, pop_expt, popfp, surf, beef,
             scheff]
 
     mod.add(gens)

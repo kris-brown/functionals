@@ -1,0 +1,316 @@
+Dataset,System,mCAML prediction (eV or GPa or Å resp.),difference to target (eV or GPa or Å resp.)
+CHEMI26,C2H4+Pt(111) → CCH3/Pt(111)+H/Pt(111),-1.59,-0.23
+CHEMI26,CH2I2+Pt(111) → CH/Pt(111)+H/Pt(111)+2I/Pt(111),-4.63,0.09
+CHEMI26,CH3I+Pt(111) → CH3/Pt(111)+I/Pt(111),-1.75,0.42
+CHEMI26,CO+Co(001) → CO/Co(001),-1.59,-0.36
+CHEMI26,CO+Cu(111) → CO/Cu(111),-0.71,-0.12
+CHEMI26,CO+Ir(111) → CO/Ir(111),-1.79,-0.09
+CHEMI26,CO+Ni(111) → CO/Ni(111),-1.64,-0.35
+CHEMI26,CO+Pd(100) → CO/Pd(100),-1.76,-0.13
+CHEMI26,CO+Pd(111) → CO/Pd(111),-1.85,-0.36
+CHEMI26,CO+Pt(111) → CO/Pt(111),-1.54,-0.25
+CHEMI26,CO+Rh(111) → CO/Rh(111),-1.77,-0.3
+CHEMI26,CO+Ru(001) → CO/Ru(001),-1.76,-0.09
+CHEMI26,H2+Ni(100) → 2H/Ni(100),-1.09,-0.19
+CHEMI26,H2+Ni(111) → 2H/Ni(111),-1.31,-0.27
+CHEMI26,H2+Pd(111) → 2H/Pd(111),-1.08,-0.15
+CHEMI26,H2+Pt(111) → 2H/Pt(111),-0.83,-0.08
+CHEMI26,H2+Rh(111) → 2H/Rh(111),-0.94,-0.19
+CHEMI26,I2+Pt(111) → 2I/Pt(111),-3.29,-0.05
+CHEMI26,NO+Ni(100) → N/Ni(100)+O/Ni(100),-3.65,-0.55
+CHEMI26,NO+Pd(100) → NO/Pd(100),-1.87,-0.18
+CHEMI26,NO+Pd(111) → NO/Pd(111),-2.06,-0.17
+CHEMI26,NO+Pt(111) → NO/Pt(111),-1.56,-0.33
+CHEMI26,O2+Ni(100) → 2O/Ni(100),-5.4,0.09
+CHEMI26,O2+Ni(111) → 2O/Ni(111),-5.04,-0.01
+CHEMI26,O2+Pt(111) → 2O/Pt(111),-2.27,-0.11
+CHEMI26,O2+Rh(100) → 2O/Rh(100),-4.22,-0.54
+DISP15,C2H6+Pt(111) → C2H6/Pt(111),-0.14,0.14
+DISP15,C3H8+Pt(111) → C3H8/Pt(111),-0.2,0.2
+DISP15,C4H10+Pt(111) → C4H10/Pt(111),-0.28,0.22
+DISP15,C6H6+Ag(111) → C6H6/Ag(111),-0.87,-0.24
+DISP15,C6H6+Au(111) → C6H6/Au(111),-1.02,-0.29
+DISP15,C6H6+Cu(111) → C6H6/Cu(111),-0.42,0.26
+DISP15,C6H6+Pt(111) → C6H6/Pt(111),-1.56,0.12
+DISP15,C6H10+Pt(111) → C6H10/Pt(111),-1.12,0.15
+DISP15,C10H8+Pt(111) → C10H8/Pt(111),-2.91,-0.15
+DISP15,CH3I+Pt(111) → CH3I/Pt(111),-0.83,0.04
+DISP15,CH3OH+Pt(111) → CH3OH/Pt(111),-0.35,0.22
+DISP15,CH4+Pt(111) → CH4/Pt(111),-0.09,0.06
+DISP15,D2O+1/3[O/Pt(111)] → 2/3[(D2O..OD)/Pt(111)],-0.81,-0.13
+DISP15,D2O+Pt(111) → D2O/Pt(111),-0.39,0.18
+DISP15,NH3+Cu(100) → NH3/Cu(100),-0.56,0.06
+CE57,Ag_fcc,3.23,0.28
+CE57,Al_fcc,3.36,-0.04
+CE57,AlAs_zincblende,3.83,0.01
+CE57,AlN _zincblende,5.7,-0.15
+CE57,AlP _zincblende,4.12,-0.2
+CE57,Au_fcc,3.95,0.16
+CE57,Ba_bcc,1.98,0.11
+CE57,BN_zincblende,6.98,0.22
+CE57,BP _zincblende,5.38,0.24
+CE57,C_diamond,7.29,-0.08
+CE57,Ca_fcc,1.72,-0.12
+CE57,CaO_rocksalt,5.31,-0.16
+CE57,Cu_fcc,4.23,0.75
+CE57,Fe_bcc,4.74,0.45
+CE57,GaAs_zincblende,3.39,0.05
+CE57,GaN_zincblende,4.47,-0.08
+CE57,GaP_zincblende,3.58,-0.03
+CE57,Ge_diamond,3.91,0.08
+CE57,InAs_zincblende,3.09,0.01
+CE57,InP_zincblende,3.19,-0.28
+CE57,Ir_fcc,8.05,1.16
+CE57,K_bcc,0.89,-0.04
+CE57,Li_bcc,1.46,-0.17
+CE57,LiCl_rocksalt,3.29,-0.3
+CE57,LiF_rocksalt,4.11,-0.35
+CE57,LiH_rocksalt,2.36,-0.13
+CE57,MgO_rocksalt,5,-0.2
+CE57,MgS_rocksalt,3.74,-0.23
+CE57,Mo_bcc,6.6,-0.2
+CE57,Na_bcc,1.11,-0.01
+CE57,NaCl_rocksalt,3.15,-0.19
+CE57,NaF_rocksalt,3.76,-0.21
+CE57,Nb_bcc,7.13,-0.36
+CE57,NbC_rocksalt,7.73,-0.53
+CE57,NbN_rocksalt,6.92,-0.58
+CE57,Ni_fcc,4.72,0.29
+CE57,Pb_fcc,3.43,1.4
+CE57,Pd_fcc,4.61,0.7
+CE57,Pt_fcc,6.49,0.64
+CE57,Rb_bcc,0.81,-0.04
+CE57,Rh_fcc,5.9,0.14
+CE57,Si_diamond,4.49,-0.13
+CE57,SiC_zincblende,6.23,-0.25
+CE57,Sn_diamond,3.51,0.39
+CE57,Sr_fcc,1.73,0.03
+CE57,Ta_bcc,8.89,0.79
+CE57,TiC_rocksalt,6.94,-0.22
+CE57,TiN_rocksalt,6.64,-0.05
+CE57,V_bcc,5.13,-0.17
+CE57,VC_rocksalt,6.68,-0.26
+CE57,VN_rocksalt,6.06,-0.19
+CE57,W_bcc,9.62,0.83
+CE57,ZrC_rocksalt,7.61,-0.32
+CE57,ZrN_rocksalt,7.33,-0.19
+BM32,Ag_fcc,112.3,-0.3
+BM32,Al_fcc,82.6,1.6
+BM32,AlAs_zincblende,80.9,1.6
+BM32,AlN_zincblende,208.1,2.1
+BM32,AlP_zincblende,91.4,4.4
+BM32,Ba_bcc,4.3,-5.1
+BM32,BAs_zincblende,146.9,-4.1
+BM32,BN_zincblende,374.9,-13.6
+BM32,BP_zincblende,187.1,10.6
+BM32,C_diamond,452.4,-0.9
+BM32,Ca_fcc,16.3,-2.4
+BM32,Cu_fcc,197.1,52.2
+BM32,GaAs_zincblende,74.8,-3.3
+BM32,GaN_zincblende,191.2,-12.9
+BM32,GaP_zincblende,89.8,0
+BM32,Ge_diamond,72.1,-5.8
+BM32,InAs_zincblende,58.1,-0.4
+BM32,InP_zincblende,71.4,-2.1
+BM32,Li_bcc,20.5,7.1
+BM32,LiCl_rocksalt,33.8,-3.5
+BM32,LiF_rocksalt,76.9,1.5
+BM32,LiH_rocksalt,36.5,-3.6
+BM32,MgO_rocksalt,178.2,5.2
+BM32,Na_bcc,8.7,1
+BM32,NaCl_rocksalt,32.4,3.2
+BM32,NaF_rocksalt,72.5,18.4
+BM32,Pd_fcc,165.4,-32
+BM32,Rh_fcc,287.9,16.3
+BM32,Si_diamond,99.3,-1
+BM32,SiC_zincblende,228.7,-0.2
+BM32,Sn_diamond,38.6,-14.9
+BM32,Sr_fcc,10.6,-1.9
+LC57,Ag_fcc,4.144,0.081
+LC57,Al_fcc,3.995,-0.024
+LC57,AlAs_zincblende,5.76,0.113
+LC57,AlN_zincblende,4.368,0
+LC57,AlP_zincblende,5.502,0.054
+LC57,Au_fcc,4.142,0.081
+LC57,Ba_bcc,5.854,0.851
+LC57,BAs_zincblende,4.86,0.095
+LC57,BN_zincblende,3.629,0.036
+LC57,BP_zincblende,4.516,-0.009
+LC57,C_diamond,3.553,0
+LC57,Ca_fcc,5.887,0.333
+LC57,CaO_rocksalt,4.877,0.096
+LC57,CoAl_cesiumchloride,2.76,-0.094
+LC57,Cu_fcc,3.517,-0.079
+LC57,Fe_bcc,2.761,-0.097
+LC57,FeAl_cesiumchloride,2.757,-0.124
+LC57,GaAs_zincblende,5.804,0.169
+LC57,GaN_zincblende,4.644,0.135
+LC57,GaP_zincblende,5.597,0.163
+LC57,Ge_diamond,5.928,0.282
+LC57,InAs_zincblende,6.271,0.241
+LC57,InP_zincblende,6.145,0.293
+LC57,Ir_fcc,3.91,0.077
+LC57,K_bcc,5.781,0.573
+LC57,Li_bcc,3.265,-0.186
+LC57,LiCl_rocksalt,5.427,0.355
+LC57,LiF_rocksalt,4.251,0.278
+LC57,LiH_rocksalt,4.456,0.477
+LC57,MgO_rocksalt,4.273,0.084
+LC57,MgS_rocksalt,5.24,0.052
+LC57,Mo_bcc,3.122,-0.019
+LC57,Na_bcc,4.377,0.168
+LC57,NaCl_rocksalt,5.628,0.056
+LC57,NaF_rocksalt,4.385,-0.197
+LC57,Nb_bcc,3.359,0.066
+LC57,NbC_rocksalt,4.506,0.045
+LC57,NbN_rocksalt,4.677,0.306
+LC57,Ni_fcc,3.461,-0.046
+LC57,NiAl_cesiumchloride,2.806,-0.075
+LC57,Pd_fcc,4.109,0.233
+LC57,Pt_fcc,3.909,-0.004
+LC57,Rb_bcc,5.577,0
+LC57,Rh_fcc,3.775,-0.019
+LC57,Si_diamond,5.475,0.054
+LC57,SiC_zincblende,4.39,0.043
+LC57,Sn_diamond,6.862,0.388
+LC57,Sr_fcc,6.463,0.423
+LC57,Ta_bcc,3.263,-0.036
+LC57,TiC_rocksalt,4.219,-0.099
+LC57,TiN_rocksalt,4.313,0.085
+LC57,V_bcc,2.869,-0.154
+LC57,VC_rocksalt,4.315,0.166
+LC57,VN_rocksalt,4.04,-0.082
+LC57,W_bcc,3.16,0
+LC57,ZrC_rocksalt,4.631,-0.056
+LC57,ZrN_rocksalt,4.621,0.046
+DBH24,H + N2O <= OH + N2,3.131,2.276
+DBH24,H + N2O => OH + N2,0.434,0.256
+DBH24,H + ClH <= HCl + H ,0.56,0.373
+DBH24,H + ClH => HCl + H ,0.56,0.373
+DBH24,CH3 + FCl <= CH3F + Cl,1.921,1.299
+DBH24,CH3 + FCl => CH3F + Cl,-0.106,-0.176
+DBH24,Cl- ... CH3Cl <= ClCH3 ... Cl-,0.405,0.266
+DBH24,Cl- ... CH3Cl => ClCH3 ... Cl-,0.405,0.266
+DBH24,F- ... CH3Cl <= FCH3 ... Cl-,1.074,0.769
+DBH24,F- ... CH3Cl => FCH3 ... Cl-,0.01,-0.026
+DBH24,OH- + CH3F <= HOCH3 + F-,0.545,0.362
+DBH24,OH- + CH3F => HOCH3 + F-,-0.192,-0.167
+DBH24,H + N2 <= HN2 ,0.441,0.331
+DBH24,H + N2 => HN2 ,0.333,0.184
+DBH24,H + C2H4 <= CH3CH2 ,1.866,1.433
+DBH24,H + C2H4 => CH3CH2 ,0.011,-0.007
+DBH24,HCN <= HNC ,1.198,0.858
+DBH24,HCN => HNC ,1.814,1.316
+DBH24,OH + CH4 <= CH3 + H2O ,0.365,0.162
+DBH24,OH + CH4 => CH3 + H2O ,0.138,0.069
+DBH24,H + OH <= O + H2,0.093,-0.043
+DBH24,H + OH => O + H2,0.368,0.257
+DBH24,H + H2S <= H2 + HS,0.634,0.455
+DBH24,H + H2S => H2 + HS,0.043,0.006
+RE42,1-3-cyclohexadiene → 1-4-cyclohexadiene,0,0.02
+RE42,1-4-cyclohexadiene+2H2 → cyclohexane,-3.09,-0.15
+RE42,2CO+2NO → 2CO2+N2,-7.33,0.61
+RE42,2CO+O2 → 2CO2,-5.44,0.62
+RE42,2MeOH+O2 → 2CO2+4H2,-2.01,1.1
+RE42,2N2+O2 → 2N2O,1.49,-0.08
+RE42,2OH+H2 → 2H2O,-5.1,1.09
+RE42,3O2 → 2O3,2.96,0.04
+RE42,4CO+9H2 → transbutane+4H2O,-9.27,-0.27
+RE42,allene+2H2 → propane,-3.73,-0.09
+RE42,C6H6+H2 → 1-4-cyclohexadiene,0.02,0.03
+RE42,CH4+2Cl2 → CCl4+2H2,0.27,0.09
+RE42,CH4+2F2 → CF4+2H2,-7.05,1.55
+RE42,CH4+COH2 → EtOH,-1.2,-0.29
+RE42,CH4+CO2 → 2CO +2H2,3.23,0.12
+RE42,CH4+CO2 → acetic-acid,-0.02,-0.31
+RE42,CH4+H2O → MeOH+H2,1.12,-0.21
+RE42,CH4+NH3 → HCN +3H2,3.46,0.14
+RE42,CO+2H2 → EtOH,-1.72,-0.24
+RE42,CO+3H2 → CH4 H2O,-2.84,-0.04
+RE42,CO+H2O → CO2 H2,-0.39,-0.08
+RE42,CO+H2O → formic-acid,-0.73,-0.33
+RE42,CO2+3H2 → MeOH+H2O,-1.33,-0.16
+RE42,CO2+4H2 → CH4+2H2O,-2.45,0.05
+RE42,EtOH → dimethylether,0.43,-0.11
+RE42,ethyne+H2 → ethene,-2.35,-0.25
+RE42,H2+O2 → H2O2,-1.57,0.11
+RE42,isobutane → transbutane,0.06,-0.01
+RE42,ketene+2H2 → ethene+H2O,-1.74,0.18
+RE42,methylamine+H2 → CH4+NH3,-1.06,0.09
+RE42,N2+2H2 → N2H4,0.14,-0.27
+RE42,N2+2O2 → 2NO2,0.46,-0.17
+RE42,N2+3H2 → 2NH3,-1.75,-0.07
+RE42,N2+O2 → 2NO,1.89,0.01
+RE42,O2+2H2 → 2H2O,-4.67,0.78
+RE42,O2+4HCl → 2Cl2+2H2O,-1.28,0.23
+RE42,O2+H2 → 2OH,0.44,-0.3
+RE42,oxirane+H2 → ethene+H2O,-1.11,0.45
+RE42,propene+H2 → propane,-1.67,-0.09
+RE42,propyne+H2 → propene,-2.23,-0.23
+RE42,SO2+3H2 → H2S+2H2O,-2.1,0.52
+S66x8,MeNH2Pyridine,-0.147,0.025
+S66x8,AcNH2AcNH2,-0.676,0.029
+S66x8,BenzenePeptideNHpi,-0.198,0.031
+S66x8,BenzeneWaterOHpi,-0.173,-0.031
+S66x8,PyridineEthyne,-0.131,0.042
+S66x8,MeOHWater,-0.24,-0.023
+S66x8,BenzeneAcNH2NHpi,-0.173,0.016
+S66x8,EthynePentane,-0.069,0.007
+S66x8,AcOHUracil,-0.849,-0.004
+S66x8,MeNH2MeNH2,-0.146,0.034
+S66x8,EthyneWaterCHO,-0.119,0.005
+S66x8,BenzenePyridineTS,-0.105,0.039
+S66x8,CyclopentaneCyclopentane,-0.032,0.098
+S66x8,BenzeneAcOHOHpi,-0.224,-0.02
+S66x8,PeptideMeNH2,-0.276,0.047
+S66x8,PyridinePyridineTS,-0.107,0.046
+S66x8,WaterPeptide,-0.38,-0.03
+S66x8,WaterMeOH,-0.263,-0.021
+S66x8,EthenePentane,-0.044,0.042
+S66x8,BenzeneEthyneCHpi,-0.112,0.012
+S66x8,MeNH2Peptide,-0.207,0.028
+S66x8,NeopentaneNeopentane,-0.016,0.06
+S66x8,UracilEthyne,-0.186,-0.024
+S66x8,PeptideEthene,-0.109,0.021
+S66x8,PeptidePentane,-0.122,0.062
+S66x8,NeopentanePentane,-0.038,0.075
+S66x8,UracilPentane,-0.151,0.059
+S66x8,UracilUracilpipi,-0.419,0.007
+S66x8,BenzeneNeopentane,-0.087,0.038
+S66x8,BenzeneBenzenepipi,-0.11,0.009
+S66x8,BenzeneCyclopentane,-0.101,0.054
+S66x8,UracilEthene,-0.15,-0.003
+S66x8,PyridineEthene,-0.097,-0.016
+S66x8,WaterPyridine,-0.285,0.011
+S66x8,PyridinePyridineCHN,-0.1,0.08
+S66x8,MeNH2MeOH,-0.123,0.009
+S66x8,BenzeneMeOHOHpi,-0.194,-0.012
+S66x8,UracilUracilBP,-0.718,0.027
+S66x8,WaterWater,-0.239,-0.027
+S66x8,MeNH2Water,-0.315,-0.001
+S66x8,PentaneAcNH2,-0.111,0.041
+S66x8,MeOHMeNH2,-0.31,0.017
+S66x8,BenzeneEthene,-0.078,-0.017
+S66x8,BenzenePyridinepipi,-0.136,0.01
+S66x8,PentanePentane,-0.064,0.1
+S66x8,MeOHPyridine,-0.296,0.025
+S66x8,PyridinePyridinepipi,-0.156,0.01
+S66x8,PeptideWater,-0.221,0.001
+S66x8,BenzeneBenzeneTS,-0.087,0.038
+S66x8,UracilCyclopentane,-0.125,0.054
+S66x8,BenzeneMeNH2NHpi,-0.133,0.007
+S66x8,WaterMeNH2,-0.297,0.001
+S66x8,UracilNeopentane,-0.126,0.034
+S66x8,EthyneEthyneTS,-0.065,0.001
+S66x8,PentaneAcOH,-0.091,0.034
+S66x8,MeOHMeOH,-0.263,-0.014
+S66x8,AcNH2Uracil,-0.801,0.031
+S66x8,MeOHPeptide,-0.368,-0.011
+S66x8,CyclopentaneNeopentane,-0.026,0.08
+S66x8,BenzeneUracilpipi,-0.24,0.008
+S66x8,EthyneAcOHOHpi,-0.243,-0.032
+S66x8,PeptidePeptide,-0.345,0.029
+S66x8,PyridineUracilpipi,-0.285,0.01
+S66x8,PeptideMeOH,-0.251,0.017
+S66x8,AcOHAcOH,-0.87,-0.042
+S66x8,BenzeneAcOH,-0.154,0.011

@@ -51,4 +51,4 @@ def all_mats(root: str) -> str:
                     add(mat_, val, '', '')
 
     cc, bb = [' '.join(sorted(x)) for x in [ce, bml]]
-    return cc+"|"+bb
+    return cc + "|" + bb
